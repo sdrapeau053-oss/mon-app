@@ -3,124 +3,115 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-type Category = "freelance" | "bio" | "app" | "famille" | "menage" | "sante" | "autre";
-
 type DailyTask = {
   id: string;
   label: string;
   done: boolean;
-  category: Category;
-  time?: string;
 };
 
-type DailyNote = {
-  id: string;
-  content: string;
-  timestamp: string;
+type DailyState = {
+  hardDay: boolean;
+  note: string;
+  tasks: DailyTask[];
 };
 
-const TASKS_KEY = "sylvie_tasks";
-const NOTES_KEY = "sylvie_notes";
-const HARD_DAY_KEY = "sylvie_hard_day";
-const PROGRESSION_KEY = "sylvie_progression";
-const DAILY_KEY = "sylvie_daily";
-
-const categories: { id: Category; label: string }[] = [
-  { id: "freelance", label: "Freelance" },
-  { id: "bio", label: "Bio" },
-  { id: "app", label: "App" },
-  { id: "famille", label: "Famille" },
-  { id: "menage", label: "Ménage" },
-  { id: "sante", label: "Santé" },
-  { id: "autre", label: "Autre" },
+const normalTasks: DailyTask[] = [
+  { id: "daily-fille", label: "Fille / école", done: false },
+  { id: "daily-freelance", label: "Freelance (1 action)", done: false },
+  { id: "daily-manuscrit", label: "Manuscrit / écriture", done: false },
+  { id: "daily-maison", label: "Maison", done: false },
+  { id: "daily-sante", label: "Mouvement / santé", done: false },
 ];
 
-const starterTasks: DailyTask[] = [
-  { id: "daily-freelance", label: "Une action freelance utile", done: false, category: "freelance" },
-  { id: "daily-bio", label: "Écrire ou relire un fragment", done: false, category: "bio" },
-  { id: "daily-menage", label: "Un bloc maison réaliste", done: false, category: "menage" },
+const softModeTasks: DailyTask[] = [
+  { id: "soft-fille", label: "Fille / école", done: false },
+  { id: "soft-action", label: "Une action utile", done: false },
+  { id: "soft-soin", label: "Prendre soin de soi", done: false },
 ];
 
-function readLocal<T>(key: string, fallback: T): T {
+function todayKey() {
+  return `daily-system-${new Date().toLocaleDateString("fr-CA")}`;
+}
+
+function mergeTaskState(template: DailyTask[], savedTasks: DailyTask[] = []) {
+  return template.map((task) => ({
+    ...task,
+    done: savedTasks.find((saved) => saved.id === task.id)?.done || false,
+  }));
+}
+
+function readDailyState(): DailyState {
+  if (typeof window === "undefined") {
+    return {
+      hardDay: false,
+      note: "",
+      tasks: normalTasks,
+    };
+  }
+
   try {
-    const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : fallback;
+    const saved = localStorage.getItem(todayKey());
+    if (!saved) {
+      return {
+        hardDay: false,
+        note: "",
+        tasks: normalTasks,
+      };
+    }
+
+    const parsed = JSON.parse(saved) as Partial<DailyState>;
+    const hardDay = Boolean(parsed.hardDay);
+
+    return {
+      hardDay,
+      note: parsed.note || "",
+      tasks: mergeTaskState(hardDay ? softModeTasks : normalTasks, parsed.tasks || []),
+    };
   } catch {
-    return fallback;
+    return {
+      hardDay: false,
+      note: "",
+      tasks: normalTasks,
+    };
   }
 }
 
-function writeDailySnapshot(tasks: DailyTask[], notes: DailyNote[], hardDay: boolean) {
-  const done = tasks.filter((task) => task.done).length;
-  const progression = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
-
-  localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-  localStorage.setItem(HARD_DAY_KEY, JSON.stringify(hardDay));
-  localStorage.setItem(PROGRESSION_KEY, JSON.stringify(progression));
-  localStorage.setItem(
-    DAILY_KEY,
-    JSON.stringify({
-      date: new Date().toLocaleDateString("fr-CA"),
-      tasks,
-      notes,
-      hardDayMode: hardDay,
-      progression,
-    }),
-  );
+function saveDailyState(state: DailyState) {
+  localStorage.setItem(todayKey(), JSON.stringify(state));
 }
 
 export default function DailySystemPage() {
-  const [tasks, setTasks] = useState<DailyTask[]>([]);
-  const [notes, setNotes] = useState<DailyNote[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const [hardDay, setHardDay] = useState(false);
-  const [taskLabel, setTaskLabel] = useState("");
-  const [taskCategory, setTaskCategory] = useState<Category>("freelance");
-  const [taskTime, setTaskTime] = useState("");
-  const [noteInput, setNoteInput] = useState("");
+  const [tasks, setTasks] = useState<DailyTask[]>(normalTasks);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
-    const savedTasks = readLocal<DailyTask[]>(TASKS_KEY, starterTasks);
-    const savedNotes = readLocal<DailyNote[]>(NOTES_KEY, []);
-    const savedHardDay = readLocal<boolean>(HARD_DAY_KEY, false);
+    const savedState = readDailyState();
 
-    setTasks(savedTasks);
-    setNotes(savedNotes);
-    setHardDay(savedHardDay);
+    setHardDay(savedState.hardDay);
+    setTasks(savedState.tasks);
+    setNote(savedState.note);
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    writeDailySnapshot(tasks, notes, hardDay);
-  }, [tasks, notes, hardDay]);
+    if (!hydrated) return;
+    saveDailyState({ hardDay, note, tasks });
+  }, [hardDay, hydrated, note, tasks]);
 
   const doneCount = tasks.filter((task) => task.done).length;
-  const pendingCount = tasks.length - doneCount;
   const progression = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+  const progressText = `${progression}% — ${doneCount}/${tasks.length} tâches`;
 
-  const tasksByCategory = useMemo(() => {
-    return categories.map((category) => ({
-      ...category,
-      tasks: tasks.filter((task) => task.category === category.id),
-    }));
-  }, [tasks]);
+  const pageBackground = hardDay
+    ? "linear-gradient(180deg, rgba(198, 169, 126, 0.18), rgba(255, 250, 243, 0.7))"
+    : "transparent";
 
-  function addTask() {
-    const label = taskLabel.trim();
-    if (!label) return;
-
-    setTasks((current) => [
-      {
-        id: `task-${Date.now()}`,
-        label,
-        done: false,
-        category: taskCategory,
-        time: taskTime.trim(),
-      },
-      ...current,
-    ]);
-    setTaskLabel("");
-    setTaskTime("");
-  }
+  const taskListLabel = useMemo(
+    () => (hardDay ? "Mode doux activé" : "Liste des tâches essentielles"),
+    [hardDay],
+  );
 
   function toggleTask(id: string) {
     setTasks((current) =>
@@ -128,194 +119,167 @@ export default function DailySystemPage() {
     );
   }
 
-  function removeTask(id: string) {
-    setTasks((current) => current.filter((task) => task.id !== id));
-  }
-
-  function addNote() {
-    const content = noteInput.trim();
-    if (!content) return;
-
-    setNotes((current) => [
-      {
-        id: `note-${Date.now()}`,
-        content,
-        timestamp: new Date().toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }),
-      },
-      ...current,
-    ]);
-    setNoteInput("");
+  function toggleSoftMode() {
+    setHardDay((current) => {
+      const next = !current;
+      setTasks((currentTasks) => mergeTaskState(next ? softModeTasks : normalTasks, currentTasks));
+      return next;
+    });
   }
 
   return (
-    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "32px 24px 56px" }}>
-      <header style={{ marginBottom: 28 }}>
+    <main
+      style={{
+        background: pageBackground,
+        borderRadius: 18,
+        margin: "0 auto",
+        maxWidth: 560,
+        minHeight: "100svh",
+        padding: "16px 14px 24px",
+        transition: "background 0.2s ease",
+      }}
+    >
+      <header style={{ marginBottom: 14 }}>
         <Link href="/" style={{ color: "var(--text-muted)", fontSize: 11 }}>
           ← Tableau de bord
         </Link>
-        <p className="label-meta" style={{ marginTop: 18 }}>
-          Système quotidien
+        <p className="label-meta" style={{ margin: "18px 0 5px" }}>
+          Aujourd’hui
         </p>
-        <h1 style={{ color: "var(--primary)", fontSize: 32, fontStyle: "italic", margin: "8px 0 8px" }}>
+        <h1
+          style={{
+            color: "var(--primary)",
+            fontSize: 30,
+            fontStyle: "italic",
+            lineHeight: 1,
+            margin: 0,
+          }}
+        >
           Daily System
         </h1>
-        <p style={{ color: "var(--text-muted)", fontSize: 14, lineHeight: 1.7, maxWidth: 760 }}>
-          Un espace simple pour choisir les priorités du jour, suivre la progression, noter ce qui
-          compte et alimenter le contexte de l’agent.
-        </p>
       </header>
 
-      <section className="panel" style={{ marginBottom: 22 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <Metric label="Progression" value={`${progression}%`} />
-          <Metric label="Tâches faites" value={String(doneCount)} />
-          <Metric label="Restantes" value={String(pendingCount)} />
-          <button
-            className={hardDay ? "btn-primary" : "btn-ghost"}
-            type="button"
-            onClick={() => setHardDay((current) => !current)}
-            style={{ minHeight: 72, width: "100%" }}
-          >
-            {hardDay ? "Mode journée difficile actif" : "Activer journée difficile"}
-          </button>
-        </div>
-      </section>
-
-      <section className="panel" style={{ marginBottom: 22 }}>
-        <p className="label-meta">Ajouter une tâche</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-          <input
-            className="search-input"
-            value={taskLabel}
-            onChange={(event) => setTaskLabel(event.target.value)}
-            placeholder="Ex. relancer un client, écrire 20 minutes..."
-          />
-          <select
-            className="filter-select"
-            value={taskCategory}
-            onChange={(event) => setTaskCategory(event.target.value as Category)}
-          >
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-          <input
-            className="search-input"
-            value={taskTime}
-            onChange={(event) => setTaskTime(event.target.value)}
-            placeholder="Heure"
-          />
-          <button className="btn-primary" type="button" onClick={addTask}>
-            Ajouter
-          </button>
-        </div>
-      </section>
-
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
-        <div>
-          <p className="label-meta">Blocs du jour</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {tasksByCategory.map((category) => (
-              <article className="chapter-card" key={category.id}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                  <h2 className="tome-title" style={{ margin: 0 }}>
-                    {category.label}
-                  </h2>
-                  <span className="word-count">{category.tasks.filter((task) => task.done).length}/{category.tasks.length}</span>
-                </div>
-
-                {category.tasks.length === 0 ? (
-                  <p className="text-muted" style={{ marginBottom: 0 }}>
-                    Rien dans ce bloc pour l’instant.
-                  </p>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-                    {category.tasks.map((task) => (
-                      <div
-                        key={task.id}
-                        style={{
-                          alignItems: "center",
-                          background: task.done ? "rgba(122, 158, 122, 0.14)" : "var(--bg-main)",
-                          border: "1px solid var(--border-soft)",
-                          borderRadius: 10,
-                          display: "grid",
-                          gap: 10,
-                          gridTemplateColumns: "auto 1fr auto",
-                          padding: "10px 12px",
-                        }}
-                      >
-                        <input checked={task.done} onChange={() => toggleTask(task.id)} type="checkbox" />
-                        <div>
-                          <p style={{ margin: 0, color: "var(--text-main)", fontSize: 14 }}>
-                            {task.label}
-                          </p>
-                          {task.time && (
-                            <p className="word-count" style={{ margin: "4px 0 0" }}>
-                              {task.time}
-                            </p>
-                          )}
-                        </div>
-                        <button className="soft-button" type="button" onClick={() => removeTask(task.id)}>
-                          Retirer
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-            ))}
-          </div>
-        </div>
-
-        <aside>
-          <section className="panel" style={{ marginBottom: 16 }}>
-            <p className="label-meta">Note rapide</p>
-            <textarea
-              className="textarea-atelier"
-              value={noteInput}
-              onChange={(event) => setNoteInput(event.target.value)}
-              placeholder="Ce qui compte aujourd’hui, blocage, idée, rappel..."
-              style={{ minHeight: 120 }}
-            />
-            <button className="btn-primary" type="button" onClick={addNote} style={{ width: "100%" }}>
-              Ajouter la note
+      <section aria-label={taskListLabel} style={{ marginBottom: 16 }}>
+        <p className="label-meta" style={{ marginBottom: 8 }}>
+          {taskListLabel}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {tasks.map((task) => (
+            <button
+              key={task.id}
+              type="button"
+              onClick={() => toggleTask(task.id)}
+              style={{
+                alignItems: "center",
+                background: task.done ? "rgba(122, 158, 122, 0.16)" : "rgba(255, 250, 243, 0.94)",
+                border: task.done
+                  ? "1px solid rgba(122, 158, 122, 0.36)"
+                  : "1px solid rgba(198, 169, 126, 0.42)",
+                borderRadius: 14,
+                boxShadow: task.done ? "none" : "0 10px 26px rgba(46, 42, 39, 0.07)",
+                color: "var(--text-main)",
+                cursor: "pointer",
+                display: "grid",
+                font: "inherit",
+                gap: 12,
+                gridTemplateColumns: "24px 1fr",
+                opacity: task.done ? 0.62 : 1,
+                padding: "17px 16px",
+                textAlign: "left",
+                transition:
+                  "background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease",
+                width: "100%",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  alignItems: "center",
+                  background: task.done ? "rgba(122, 158, 122, 0.9)" : "transparent",
+                  border: task.done
+                    ? "1px solid rgba(122, 158, 122, 0.9)"
+                    : "1px solid rgba(46, 42, 39, 0.32)",
+                  borderRadius: 999,
+                  color: "#fff",
+                  display: "flex",
+                  fontSize: 14,
+                  height: 22,
+                  justifyContent: "center",
+                  transition: "all 0.2s ease",
+                  width: 22,
+                }}
+              >
+                {task.done ? "✓" : ""}
+              </span>
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 700,
+                  lineHeight: 1.25,
+                  textDecoration: task.done ? "line-through" : "none",
+                  transition: "opacity 0.2s ease, text-decoration-color 0.2s ease",
+                }}
+              >
+                {task.label}
+              </span>
             </button>
-          </section>
+          ))}
+        </div>
+      </section>
 
-          <section className="panel">
-            <p className="label-meta">Notes du jour</p>
-            {notes.length === 0 ? (
-              <p className="text-muted">Aucune note pour l’instant.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {notes.map((note) => (
-                  <article className="placement-cell" key={note.id}>
-                    <p className="word-count" style={{ marginTop: 0 }}>
-                      {note.timestamp}
-                    </p>
-                    <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                      {note.content}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </aside>
+      <section aria-label="Progression" style={{ marginBottom: 16 }}>
+        <p style={{ color: "var(--text-main)", fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>
+          {progressText}
+        </p>
+        <div
+          aria-hidden="true"
+          style={{
+            background: "rgba(46, 42, 39, 0.1)",
+            borderRadius: 999,
+            height: 6,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--accent)",
+              borderRadius: 999,
+              height: "100%",
+              transition: "width 0.2s ease",
+              width: `${progression}%`,
+            }}
+          />
+        </div>
+      </section>
+
+      <section aria-label="Mode doux" style={{ marginBottom: 18 }}>
+        <button
+          className={hardDay ? "btn-primary" : "btn-ghost"}
+          type="button"
+          onClick={toggleSoftMode}
+          style={{ minHeight: 46, width: "100%" }}
+        >
+          {hardDay ? "Mode doux activé" : "Activer le mode doux"}
+        </button>
+      </section>
+
+      <section aria-label="Note rapide">
+        <p className="label-meta" style={{ marginBottom: 8 }}>
+          Note rapide
+        </p>
+        <textarea
+          className="textarea-atelier"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Une note, un rappel, rien de plus..."
+          style={{
+            fontSize: 13,
+            minHeight: 74,
+            opacity: 0.86,
+            padding: 12,
+          }}
+        />
       </section>
     </main>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="placement-cell">
-      <p className="label-meta" style={{ marginBottom: 4 }}>
-        {label}
-      </p>
-      <p style={{ color: "var(--text-main)", fontSize: 22, fontWeight: 700, margin: 0 }}>{value}</p>
-    </div>
   );
 }
