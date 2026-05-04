@@ -17,6 +17,7 @@ export default function HomePage() {
         </h1>
         <p className="mb-9 text-base leading-7 text-[#c8b898]">{t.subtitle}</p>
         <div className="space-y-3">
+          <SecondaryButton href="/daily-system">Daily System</SecondaryButton>
           <SecondaryButton href="/autre-rive">L’autre rive</SecondaryButton>
           <PrimaryButton href="/analyze">{t.primary}</PrimaryButton>
           <SecondaryButton href="/candidate">{t.secondary}</SecondaryButton>
