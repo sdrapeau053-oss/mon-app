@@ -29,16 +29,17 @@ export interface Message {
 }
 
 export interface AgentRequest {
+  message?: string;
   messages: Message[];
   appContext?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as AgentRequest;
-    const { messages, appContext } = body;
+    const body = (await req.json()) as Partial<AgentRequest>;
+    const { appContext, message, messages } = body;
 
-    if (!messages || messages.length === 0) {
+    if ((!messages || messages.length === 0) && !message?.trim()) {
       return NextResponse.json({ error: "Messages requis" }, { status: 400 });
     }
 
@@ -54,7 +55,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isSimpleMessage = Boolean(message?.trim());
     const systemWithContext = appContext ? `${SYSTEM_PROMPT}\n\n${appContext}` : SYSTEM_PROMPT;
+    const anthropicMessages = isSimpleMessage
+      ? [
+          {
+            role: "user",
+            content: message,
+          },
+        ]
+      : messages?.map((item) => ({
+          role: item.role,
+          content: item.content,
+        })) || [];
 
     const response = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
@@ -64,13 +77,10 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system: systemWithContext,
-        messages: messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
+        model: isSimpleMessage ? "claude-3-haiku-20240307" : "claude-sonnet-4-20250514",
+        max_tokens: isSimpleMessage ? 800 : 1024,
+        ...(!isSimpleMessage ? { system: systemWithContext } : {}),
+        messages: anthropicMessages,
       }),
     });
 
@@ -86,7 +96,7 @@ export async function POST(req: NextRequest) {
     const data = await response.json();
     const reply = data.content?.[0]?.text ?? "Pas de réponse.";
 
-    return NextResponse.json({ reply });
+    return NextResponse.json({ reply, result: reply });
   } catch (err) {
     console.error("Agent route error:", err);
     return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 });

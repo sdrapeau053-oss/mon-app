@@ -225,6 +225,84 @@ type AnalyseResult = {
   fragment: string;
 };
 
+type StructureMapping = {
+  chapitre: number | null;
+  bloc: number | null;
+  type: string | null;
+  "cohérent": boolean;
+};
+
+type ChapitreMapping = {
+  keywords: string[];
+  chapitre: number;
+  bloc: number;
+  type: string;
+};
+
+const chapitreMapping: ChapitreMapping[] = [
+  {
+    keywords: ["poule", "hache", "sang"],
+    chapitre: 5,
+    bloc: 2,
+    type: "sévère",
+  },
+  {
+    keywords: ["violence", "frapper", "peur"],
+    chapitre: 5,
+    bloc: 2,
+    type: "sévère",
+  },
+  {
+    keywords: ["silence", "table", "regards"],
+    chapitre: 7,
+    bloc: 3,
+    type: "charnière",
+  },
+];
+
+function normalizeText(text: string) {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function mapToStructure(text: string): StructureMapping {
+  const normalizedText = normalizeText(text);
+
+  const matches = chapitreMapping
+    .map((mapping) => {
+      const score = mapping.keywords.filter((keyword) =>
+        normalizedText.includes(normalizeText(keyword))
+      ).length;
+
+      return {
+        ...mapping,
+        score,
+      };
+    })
+    .filter((mapping) => mapping.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const bestMatch = matches[0];
+
+  if (!bestMatch) {
+    return {
+      chapitre: null,
+      bloc: null,
+      type: null,
+      "cohérent": false,
+    };
+  }
+
+  return {
+    chapitre: bestMatch.chapitre,
+    bloc: bestMatch.bloc,
+    type: bestMatch.type,
+    "cohérent": bestMatch.score >= 2,
+  };
+}
+
 function extractJson(raw: string): AnalyseResult {
   const clean = raw.replace(/```json|```/g, "").trim();
   const start = clean.indexOf("{");
@@ -304,7 +382,10 @@ SOUVENIR: ${text}`,
       throw new Error("Réponse Claude vide ou inattendue.");
     }
 
-    const result = extractJson(firstBlock.text);
+    const result = {
+      ...extractJson(firstBlock.text),
+      structure: mapToStructure(text),
+    };
 
     return NextResponse.json({ result });
   } catch (error) {

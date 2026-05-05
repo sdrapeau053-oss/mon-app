@@ -36,26 +36,26 @@ body {
 }
 
 :where(button, a, [role="button"], .clickable, .interactive, .action-link):hover:not(:disabled) {
-  background-color: rgba(0, 255, 178, 0.08);
+  background-color: rgba(214, 178, 94, 0.08);
   box-shadow:
-    0 0 0 1px rgba(0, 255, 178, 0.25),
-    0 8px 24px rgba(0, 255, 178, 0.12);
-  filter: brightness(1.12);
+    0 0 0 1px rgba(214, 178, 94, 0.22),
+    0 8px 24px rgba(214, 178, 94, 0.1);
+  filter: brightness(1.06);
   transform: translateY(-1px);
 }
 
 :where(.module-card, .hub-card, .card, .panel):hover {
-  background-color: rgba(0, 255, 178, 0.06);
-  border-color: rgba(0, 255, 178, 0.35);
+  background-color: rgba(214, 178, 94, 0.06);
+  border-color: rgba(214, 178, 94, 0.35);
   box-shadow:
-    0 0 0 1px rgba(0, 255, 178, 0.22),
-    0 10px 28px rgba(0, 255, 178, 0.12);
+    0 0 0 1px rgba(214, 178, 94, 0.2),
+    0 10px 28px rgba(214, 178, 94, 0.1);
 }
 
 :where(button, a, [role="button"], .clickable, .interactive, .action-link):focus-visible {
-  outline: 2px solid #00ffb2;
+  outline: 2px solid #d6b25e;
   outline-offset: 3px;
-  box-shadow: 0 0 0 4px rgba(0, 255, 178, 0.16);
+  box-shadow: 0 0 0 4px rgba(214, 178, 94, 0.16);
 }
 
 :where(button:disabled, [aria-disabled="true"]) {

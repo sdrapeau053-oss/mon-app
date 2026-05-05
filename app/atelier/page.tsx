@@ -3,12 +3,80 @@
 import { useState } from "react";
 import Link from "next/link";
 
+const NARRATIVE_TYPES_KEY = "atelier-narrative-types";
+
+function readNarrativeTypes() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const saved = localStorage.getItem(NARRATIVE_TYPES_KEY);
+    return saved ? JSON.parse(saved) as string[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function checkNarrativeBalance(types: string[]) {
+  const lastFive = types.slice(-5);
+  const lastThree = types.slice(-3);
+
+  if (lastThree.length === 3 && lastThree.every((type) => type === "sévère")) {
+    return {
+      status: "warning" as const,
+      message: "⚠️ Trop de tension. Ajouter respiration.",
+    };
+  }
+
+  if (lastFive.length === 5 && !lastFive.includes("doux")) {
+    return {
+      status: "warning" as const,
+      message: "⚠️ Aucun chapitre doux dans les 5 derniers. Prévoir une respiration.",
+    };
+  }
+
+  return {
+    status: "ok" as const,
+    message: "✔ Équilibre narratif acceptable.",
+  };
+}
+
+function checkWritingProtocol(text: string) {
+  const violations: string[] = [];
+  const lowerText = text.toLowerCase();
+  const explanatoryPhrases = [
+    "je comprenais",
+    "je réalisais",
+    "cela signifiait",
+    "je savais que",
+  ];
+  const forbiddenWords = ["trauma", "résilience", "peur", "tristesse"];
+  const sentences = text
+    .split(/[.!?]+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  if (explanatoryPhrases.some((phrase) => lowerText.includes(phrase))) {
+    violations.push("Explication au lieu de montrer");
+  }
+
+  if (forbiddenWords.some((word) => lowerText.includes(word))) {
+    violations.push("Mot abstrait interdit");
+  }
+
+  if (sentences.some((sentence) => sentence.split(/\s+/).filter(Boolean).length > 25)) {
+    violations.push("Phrase trop longue (rythme)");
+  }
+
+  return { violations };
+}
+
 export default function Atelier() {
   const [text, setText] = useState("");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [narrativeTypes, setNarrativeTypes] = useState<string[]>(readNarrativeTypes);
 
   async function analyser() {
     if (!text.trim()) return;
@@ -27,7 +95,25 @@ export default function Atelier() {
         setError(data.error ?? "Une erreur est survenue lors de l'analyse.");
         return;
       }
-      setResult(data.result);
+      const protocolCheck = checkWritingProtocol(text);
+      const mergedViolations = Array.from(
+        new Set([...(data.result?.violations ?? []), ...protocolCheck.violations]),
+      );
+      const resultWithProtocolCheck = {
+        ...data.result,
+        violations: mergedViolations,
+      };
+
+      setResult(resultWithProtocolCheck);
+
+      const structureType = resultWithProtocolCheck?.structure?.type;
+      if (typeof structureType === "string" && structureType.trim()) {
+        setNarrativeTypes((current) => {
+          const next = [...current, structureType.trim().toLowerCase()].slice(-5);
+          localStorage.setItem(NARRATIVE_TYPES_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
     } catch {
       setError("Impossible de contacter le serveur. Vérifie ta connexion.");
     } finally {
@@ -62,6 +148,7 @@ export default function Atelier() {
   }
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const narrativeBalance = checkNarrativeBalance(narrativeTypes);
 
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
@@ -133,6 +220,70 @@ export default function Atelier() {
               </div>
             </div>
           </div>
+
+          {result.structure && (
+            <div className="panel">
+              <p className="label-meta">Structure narrative détectée</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                <div className="placement-cell">
+                  <p className="label-meta" style={{ marginBottom: 4 }}>Chapitre suggéré</p>
+                  <p style={{ fontWeight: 600, color: "var(--text-main)", fontSize: 14 }}>
+                    {result.structure.chapitre ?? "Non détecté"}
+                  </p>
+                </div>
+                <div className="placement-cell">
+                  <p className="label-meta" style={{ marginBottom: 4 }}>Bloc narratif</p>
+                  <p style={{ fontWeight: 600, color: "var(--text-main)", fontSize: 14 }}>
+                    {result.structure.bloc ?? "Non détecté"}
+                  </p>
+                </div>
+                <div className="placement-cell">
+                  <p className="label-meta" style={{ marginBottom: 4 }}>Type émotionnel</p>
+                  <p style={{ fontWeight: 600, color: "var(--text-main)", fontSize: 14 }}>
+                    {result.structure.type ?? "Non détecté"}
+                  </p>
+                </div>
+                <div className="placement-cell">
+                  <p className="label-meta" style={{ marginBottom: 4 }}>Cohérence</p>
+                  <p style={{ fontWeight: 600, color: result.structure["cohérent"] ? "var(--primary)" : "var(--text-muted)", fontSize: 14 }}>
+                    {result.structure["cohérent"] ? "Oui" : "Non"}
+                  </p>
+                </div>
+              </div>
+              <p
+                style={{
+                  background: result.structure["cohérent"] ? "#F0FDF4" : "#FFF7ED",
+                  border: `1px solid ${result.structure["cohérent"] ? "#86EFAC" : "#FDBA74"}`,
+                  borderRadius: 10,
+                  color: result.structure["cohérent"] ? "#166534" : "#9A3412",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  lineHeight: 1.5,
+                  margin: "12px 0 0",
+                  padding: "10px 12px",
+                }}
+              >
+                {result.structure["cohérent"]
+                  ? "✔ Placement cohérent dans la structure du tome"
+                  : "⚠️ Placement incertain — vérifier le chapitre ou affiner le souvenir"}
+              </p>
+              <p
+                style={{
+                  background: narrativeBalance.status === "ok" ? "#F0FDF4" : "#FFF7ED",
+                  border: `1px solid ${narrativeBalance.status === "ok" ? "#86EFAC" : "#FDBA74"}`,
+                  borderRadius: 10,
+                  color: narrativeBalance.status === "ok" ? "#166534" : "#9A3412",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  lineHeight: 1.5,
+                  margin: "8px 0 0",
+                  padding: "10px 12px",
+                }}
+              >
+                {narrativeBalance.message}
+              </p>
+            </div>
+          )}
 
           {result.fragment && (
             <div className="chapter-card" style={{ padding: "20px 22px" }}>
