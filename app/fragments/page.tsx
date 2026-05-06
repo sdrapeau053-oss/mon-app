@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
+import { loadCloudFragments, saveCloudFragments } from "@/lib/cloud-sync";
 
 const TOMES = [
   { id: 1, titre: "Tome 1 — Enfance", chapitres: ["La maison", "Les adultes", "L'école", "La nature", "Les silences", "Les punitions", "Les jeux"] },
@@ -22,6 +23,8 @@ function parseTomeId(tomeStr: string): number | null {
 
 export default function Fragments() {
   const [fragments, setFragments] = useState<any[]>([]);
+  const [cloudLoading, setCloudLoading] = useState(true);
+  const [cloudStatus, setCloudStatus] = useState("");
   const [recherche, setRecherche] = useState("");
   const [editing, setEditing] = useState<{ id: number; texte: string } | null>(null);
   const [tagEditingId, setTagEditingId] = useState<number | null>(null);
@@ -53,68 +56,93 @@ export default function Fragments() {
   }, []);
 
   useEffect(() => {
-    const saved: any[] = JSON.parse(localStorage.getItem("fragments") || "[]");
+    let cancelled = false;
 
-    // Passe 1 — corriger les noms de tomes libres + ajouter tomeId si absent
-    const CORRECTIONS_TOME: Record<string, string> = {
-      "Tome 3 - Vie adulte":    "Tome 3 — Mariage violent",
-      "T1 · Enfance":           "Tome 1 — Enfance",
-      "T2 · Adolescence":       "Tome 2 — Adolescence",
-      "T3 · Mariage violent":   "Tome 3 — Mariage violent",
-      "T4 · Procès":            "Tome 4 — Procès",
-    };
-    let fragmentsChanges = false;
-    const migres = saved.map((f) => {
-      let updated = { ...f };
-      if (f.tome && CORRECTIONS_TOME[f.tome]) {
-        updated.tome = CORRECTIONS_TOME[f.tome];
-        fragmentsChanges = true;
-      }
-      if (!updated.tomeId) {
-        const tomeId = parseTomeId(updated.tome);
-        if (tomeId) { updated.tomeId = tomeId; fragmentsChanges = true; }
-      }
-      if (!updated.tags) { updated.tags = []; fragmentsChanges = true; }
-      if (!("age" in updated)) { updated.age = null; fragmentsChanges = true; }
-      if (!("periode" in updated)) { updated.periode = null; fragmentsChanges = true; }
-      if (!("anneeApprox" in updated)) { updated.anneeApprox = null; fragmentsChanges = true; }
-      if (!("violations" in updated)) { updated.violations = []; fragmentsChanges = true; }
-      if (!("versions" in updated)) { updated.versions = []; fragmentsChanges = true; }
-      return updated;
-    });
-    if (fragmentsChanges) localStorage.setItem("fragments", JSON.stringify(migres));
+    async function chargerFragments() {
+      setCloudLoading(true);
 
-    // Passe 2 — créer les chapitres manquants uniquement pour les fragments dans le manuscrit
-    const defaultChapitres = Object.fromEntries(TOMES.map((t) => [t.id, [...t.chapitres]]));
-    const chapitres: Record<number, string[]> = JSON.parse(
-      localStorage.getItem("structure-chapitres") || JSON.stringify(defaultChapitres)
-    );
-    let structureChangee = false;
-    migres.forEach((f) => {
-      if (!f.manuscrit || !f.tomeId || !f.chapitre) return;
-      if (!(chapitres[f.tomeId] || []).includes(f.chapitre)) {
-        chapitres[f.tomeId] = [...(chapitres[f.tomeId] || []), f.chapitre];
-        structureChangee = true;
-      }
-    });
-    if (structureChangee) localStorage.setItem("structure-chapitres", JSON.stringify(chapitres));
+      const cloudResult = await loadCloudFragments();
+      const saved: any[] = cloudResult.data?.length
+        ? cloudResult.data
+        : JSON.parse(localStorage.getItem("fragments") || "[]");
 
-    // Passe 3 — nettoyer les chapitres IA sans fragment manuscrit
-    const chapitresApresNettoyage: Record<number, string[]> = {};
-    let nettoyageEffectue = false;
-    TOMES.forEach((t) => {
-      const defaut = t.chapitres;
-      const actuels = chapitres[t.id] || [];
-      const filtres = actuels.filter((c) => {
-        if (defaut.includes(c)) return true;
-        return migres.some((f) => f.manuscrit && f.tomeId === t.id && f.chapitre === c);
+      // Passe 1 — corriger les noms de tomes libres + ajouter tomeId si absent
+      const CORRECTIONS_TOME: Record<string, string> = {
+        "Tome 3 - Vie adulte":    "Tome 3 — Mariage violent",
+        "T1 · Enfance":           "Tome 1 — Enfance",
+        "T2 · Adolescence":       "Tome 2 — Adolescence",
+        "T3 · Mariage violent":   "Tome 3 — Mariage violent",
+        "T4 · Procès":            "Tome 4 — Procès",
+      };
+      let fragmentsChanges = false;
+      const migres = saved.map((f) => {
+        let updated = { ...f };
+        if (f.tome && CORRECTIONS_TOME[f.tome]) {
+          updated.tome = CORRECTIONS_TOME[f.tome];
+          fragmentsChanges = true;
+        }
+        if (!updated.tomeId) {
+          const tomeId = parseTomeId(updated.tome);
+          if (tomeId) { updated.tomeId = tomeId; fragmentsChanges = true; }
+        }
+        if (!updated.tags) { updated.tags = []; fragmentsChanges = true; }
+        if (!("age" in updated)) { updated.age = null; fragmentsChanges = true; }
+        if (!("periode" in updated)) { updated.periode = null; fragmentsChanges = true; }
+        if (!("anneeApprox" in updated)) { updated.anneeApprox = null; fragmentsChanges = true; }
+        if (!("violations" in updated)) { updated.violations = []; fragmentsChanges = true; }
+        if (!("versions" in updated)) { updated.versions = []; fragmentsChanges = true; }
+        return updated;
       });
-      chapitresApresNettoyage[t.id] = filtres;
-      if (filtres.length !== actuels.length) nettoyageEffectue = true;
-    });
-    if (nettoyageEffectue) localStorage.setItem("structure-chapitres", JSON.stringify(chapitresApresNettoyage));
+      if (fragmentsChanges) localStorage.setItem("fragments", JSON.stringify(migres));
 
-    setFragments(migres);
+      // Passe 2 — créer les chapitres manquants uniquement pour les fragments dans le manuscrit
+      const defaultChapitres = Object.fromEntries(TOMES.map((t) => [t.id, [...t.chapitres]]));
+      const chapitres: Record<number, string[]> = JSON.parse(
+        localStorage.getItem("structure-chapitres") || JSON.stringify(defaultChapitres)
+      );
+      let structureChangee = false;
+      migres.forEach((f) => {
+        if (!f.manuscrit || !f.tomeId || !f.chapitre) return;
+        if (!(chapitres[f.tomeId] || []).includes(f.chapitre)) {
+          chapitres[f.tomeId] = [...(chapitres[f.tomeId] || []), f.chapitre];
+          structureChangee = true;
+        }
+      });
+      if (structureChangee) localStorage.setItem("structure-chapitres", JSON.stringify(chapitres));
+
+      // Passe 3 — nettoyer les chapitres IA sans fragment manuscrit
+      const chapitresApresNettoyage: Record<number, string[]> = {};
+      let nettoyageEffectue = false;
+      TOMES.forEach((t) => {
+        const defaut = t.chapitres;
+        const actuels = chapitres[t.id] || [];
+        const filtres = actuels.filter((c) => {
+          if (defaut.includes(c)) return true;
+          return migres.some((f) => f.manuscrit && f.tomeId === t.id && f.chapitre === c);
+        });
+        chapitresApresNettoyage[t.id] = filtres;
+        if (filtres.length !== actuels.length) nettoyageEffectue = true;
+      });
+      if (nettoyageEffectue) localStorage.setItem("structure-chapitres", JSON.stringify(chapitresApresNettoyage));
+
+      if (cancelled) return;
+
+      setFragments(migres);
+      setCloudStatus(
+        cloudResult.data?.length
+          ? "Fragments cloud chargés."
+          : cloudResult.error
+            ? "Mode local actif."
+            : "Aucun fragment cloud.",
+      );
+      setCloudLoading(false);
+    }
+
+    chargerFragments();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const tousLesTags = [...new Set(fragments.flatMap((f) => f.tags ?? []))].sort() as string[];
@@ -346,6 +374,14 @@ export default function Fragments() {
     reader.readAsText(file);
   }
 
+  async function sauvegarderFragmentsCloud() {
+    setCloudStatus("Sauvegarde cloud...");
+
+    const result = await saveCloudFragments(fragments);
+
+    setCloudStatus(result.error ? result.error : "Sauvegarde cloud effectuée.");
+  }
+
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
 
@@ -381,11 +417,17 @@ export default function Fragments() {
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <button onClick={exporterWord} className="btn-sm">Word</button>
             <button onClick={exporterJSON} className="soft-button" style={{ fontSize: 12 }}>JSON</button>
+            <button onClick={sauvegarderFragmentsCloud} className="soft-button" style={{ fontSize: 12 }}>
+              Cloud
+            </button>
             <label className="soft-button" style={{ fontSize: 12 }}>
               Restaurer
               <input type="file" accept=".json" onChange={importerJSON} style={{ display: "none" }} />
             </label>
           </div>
+          <small style={{ color: "var(--text-muted)", fontSize: 11 }}>
+            {cloudLoading ? "Chargement cloud..." : cloudStatus}
+          </small>
         </div>
       </div>
       <div style={{ borderTop: "1px solid var(--border-soft)", marginBottom: 20 }} />
