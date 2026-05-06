@@ -4,22 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { analyserTruthMode, type TruthModeResult, TRUTH_VIDE } from "@/app/lib/truth-mode";
 import { lireFragments, type Fragment } from "@/lib/fragments";
+import {
+  CHAPITRES_DEFAUT,
+  TOMES_DEFAUT,
+  lireChapitres,
+  lireTomes,
+  type ManuscriptTome,
+} from "@/lib/manuscript-structure";
 
-type Tome = { id: number; titre: string; color: string };
-
-const TOMES_DEFAUT: Tome[] = [
-  { id: 1, titre: "Tome 1 — Enfance",          color: "#8B7355" },
-  { id: 2, titre: "Tome 2 — Adolescence",       color: "#6B7A8B" },
-  { id: 3, titre: "Tome 3 — Mariage violent",   color: "#8B6B6B" },
-  { id: 4, titre: "Tome 4 — Procès",            color: "#7B8B6B" },
-];
-
-const CHAPITRES_DEFAUT: Record<number, string[]> = {
-  1: ["La maison", "Les adultes", "L'école", "La nature", "Les silences", "Les punitions", "Les jeux"],
-  2: ["Le corps qui change", "Les amis", "Le premier amour", "Partir", "La rupture"],
-  3: ["Le début", "La maison fermée", "Les coups", "L'isolement", "Résister", "Les enfants"],
-  4: ["La plainte", "Le tribunal", "La liberté retrouvée", "Reconstruire", "La transmission"],
-};
+type Tome = ManuscriptTome;
 
 function cleEcriture(tomeId: number, chapitre: string) {
   return `ecriture_${tomeId}_${encodeURIComponent(chapitre)}`;
@@ -56,10 +49,8 @@ export default function VueDouble() {
 
   useEffect(() => {
     try {
-      const savedTomes = localStorage.getItem("structure-tomes");
-      if (savedTomes) setTomes(JSON.parse(savedTomes));
-      const savedChapitres = localStorage.getItem("structure-chapitres");
-      if (savedChapitres) setChapitresParTome(JSON.parse(savedChapitres));
+      setTomes(lireTomes());
+      setChapitresParTome(lireChapitres());
 
       const fragments: Fragment[] = lireFragments();
       const compte: Record<string, number> = {};
