@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { lireFragments, type Fragment } from "@/lib/fragments";
 
 const TOMES_DEFAUT = [
   { id: 1, titre: "Tome 1 — Enfance", color: "#8B7355" },
@@ -18,7 +19,7 @@ const CHAPITRES_DEFAUT: Record<number, string[]> = {
 };
 
 type Tome = { id: number; titre: string; color: string };
-type Section = { titre: string; fragments: any[] };
+type Section = { titre: string; fragments: Fragment[] };
 
 // ─── Helpers export ────────────────────────────────────────────────────────
 
@@ -35,6 +36,11 @@ function telecharger(contenu: string, nom: string) {
   const a = document.createElement("a");
   a.href = url; a.download = nom; a.click();
   URL.revokeObjectURL(url);
+}
+
+function fragmentSortValue(fragment: Fragment): number {
+  const numericId = Number(fragment.id);
+  return Number.isFinite(numericId) ? numericId : 0;
 }
 
 function buildTxt(titre: string, sections: Section[]): string {
@@ -88,12 +94,12 @@ function BtnExport({ label, onClick }: { label: string; onClick: () => void }) {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function Tableau() {
-  const [fragments, setFragments] = useState<any[]>([]);
+  const [fragments, setFragments] = useState<Fragment[]>([]);
   const [tomes, setTomes] = useState<Tome[]>(TOMES_DEFAUT);
   const [chapitresParTome, setChapitresParTome] = useState<Record<number, string[]>>(CHAPITRES_DEFAUT);
 
   useEffect(() => {
-    setFragments(JSON.parse(localStorage.getItem("fragments") || "[]"));
+    setFragments(lireFragments());
     const savedTomes = localStorage.getItem("structure-tomes");
     if (savedTomes) setTomes(JSON.parse(savedTomes));
     const savedChapitres = localStorage.getItem("structure-chapitres");
@@ -113,7 +119,9 @@ export default function Tableau() {
   const pctManuscrit = totalCoffre > 0 ? Math.round((totalManuscrit / totalCoffre) * 100) : 0;
 
   // Derniers fragments
-  const derniersFragments = [...fragments].sort((a, b) => b.id - a.id).slice(0, 5);
+  const derniersFragments = [...fragments]
+    .sort((a, b) => fragmentSortValue(b) - fragmentSortValue(a))
+    .slice(0, 5);
 
   // Fonctions export
   function exporterTout(format: "txt" | "md") {
