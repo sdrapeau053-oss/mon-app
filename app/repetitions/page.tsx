@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { lireFragments, type Fragment } from "@/lib/fragments";
 
 // ── Analyse textuelle ─────────────────────────────────────────────────────────
 
@@ -50,18 +51,18 @@ function BarreFreq({ valeur, max, rouge }: { valeur: number; max: number; rouge:
 }
 
 export default function Repetitions() {
-  const [fragments, setFragments] = useState<any[]>([]);
+  const [fragments, setFragments] = useState<Fragment[]>([]);
   const [seuil, setSeuil] = useState(0.22);
   const [pairOuverte, setPairOuverte] = useState<string | null>(null);
 
   useEffect(() => {
-    setFragments(JSON.parse(localStorage.getItem("fragments") || "[]"));
+    setFragments(lireFragments());
   }, []);
 
   const n = fragments.length;
 
   // ── 1. Fréquence lexicale ─────────────────────────────────────────────────
-  const wordFrags = new Map<string, Set<number>>();
+  const wordFrags = new Map<string, Set<Fragment["id"]>>();
   fragments.forEach((f) => {
     if (!f.texte) return;
     for (const w of new Set(tokenize(f.texte))) {
@@ -91,7 +92,7 @@ export default function Repetitions() {
     .filter((f) => f.texte && tokenize(f.texte).length >= 8)
     .map((f) => ({ f, tokens: new Set(tokenize(f.texte)) }));
 
-  const paires: { f1: any; f2: any; score: number; communs: string[] }[] = [];
+  const paires: { f1: Fragment; f2: Fragment; score: number; communs: string[] }[] = [];
   for (let i = 0; i < tokenisés.length; i++) {
     for (let j = i + 1; j < tokenisés.length; j++) {
       const score = jaccard(tokenisés[i].tokens, tokenisés[j].tokens);
