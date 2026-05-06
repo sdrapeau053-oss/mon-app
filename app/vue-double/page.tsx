@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { analyserTruthMode, type TruthModeResult, TRUTH_VIDE } from "@/app/lib/truth-mode";
+import { lireFragments, type Fragment } from "@/lib/fragments";
 
 type Tome = { id: number; titre: string; color: string };
 
@@ -60,10 +61,11 @@ export default function VueDouble() {
       const savedChapitres = localStorage.getItem("structure-chapitres");
       if (savedChapitres) setChapitresParTome(JSON.parse(savedChapitres));
 
-      const fragments: { tome: number; chapitre: string }[] = JSON.parse(localStorage.getItem("fragments") || "[]");
+      const fragments: Fragment[] = lireFragments();
       const compte: Record<string, number> = {};
       for (const f of fragments) {
-        const cle = `${f.tome}__${f.chapitre}`;
+        if (f.tomeId == null || !f.chapitre) continue;
+        const cle = `${f.tomeId}__${f.chapitre}`;
         compte[cle] = (compte[cle] ?? 0) + 1;
       }
       setFragmentsParChapitre(compte);
