@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 type ChapterType = "severe" | "doux" | "respiration" | "charniere" | "fin" | "mixte";
 type ChapterStatus = "a-ecrire" | "ecrit" | "scelle";
@@ -31,6 +32,15 @@ interface StoredChapter {
   statut: StoredChapterStatus;
   contenu: string;
 }
+
+type SupabaseStoredChapter = {
+  id: string;
+  titre: string | null;
+  bloc: number | null;
+  type: string | null;
+  statut: string | null;
+  contenu: string | null;
+};
 
 const CHAPITRES_TOME_1_KEY = "chapitres-tome-1";
 
@@ -194,6 +204,30 @@ function chargerChapitresTome1() {
   }
 }
 
+async function chargerChapitresTome1DepuisSupabase() {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("chapitres_tome1")
+    .select("id,titre,bloc,type,statut,contenu")
+    .order("id", { ascending: true });
+
+  if (error || !data?.length) {
+    return [];
+  }
+
+  return (data as SupabaseStoredChapter[]).map((chapitre) => ({
+    id: chapitre.id,
+    titre: chapitre.titre || TITRES_OFFICIELS_CHAPITRES_1_6[chapitre.id] || chapitre.id,
+    bloc: chapitre.bloc || 1,
+    type: chapitre.type || "fondation",
+    statut: chapitre.statut === "scellé" || chapitre.statut === "écrit" ? chapitre.statut : "à écrire",
+    contenu: chapitre.contenu || "",
+  })) satisfies StoredChapter[];
+}
+
 type ChapterStorageState = "vide" | "rempli" | "scellé";
 
 function getStoredChapterEffectiveStatus(chapitre?: StoredChapter): ChapterStatus {
@@ -322,7 +356,17 @@ export default function StructureTome1() {
   const [draftContent, setDraftContent] = useState("");
 
   useEffect(() => {
-    const chapitresCharges = chargerChapitresTome1();
+    let actif = true;
+
+    async function chargerDonnees() {
+      const chapitresLocaux = chargerChapitresTome1();
+      const chapitresCloud = await chargerChapitresTome1DepuisSupabase();
+      const chapitresCharges = chapitresCloud.length > 0
+        ? reconcilerChapitresTome1(chapitresCloud)
+        : chapitresLocaux;
+
+      if (!actif) return;
+
     const statutsDepuisChapitres = chapitresCharges.reduce<Record<number, ChapterStatus>>(
       (acc, chapitre) => {
         const numero = Number(chapitre.id.replace("chapitre-", ""));
@@ -351,6 +395,13 @@ export default function StructureTome1() {
       setStatuts(statutsSynchronises);
       localStorage.setItem("tome1-statuts", JSON.stringify(statutsSynchronises));
     }
+    }
+
+    chargerDonnees();
+
+    return () => {
+      actif = false;
+    };
   }, []);
 
   const saveStatut = (num: number, status: ChapterStatus) => {
