@@ -23,7 +23,7 @@ export type CloudDailySystemState = {
 type FragmentRecord = Record<string, unknown> & {
   id: string | number;
   titre?: string;
-  tomeId?: number;
+  tomeId?: number | null;
   tome?: string;
   chapitre?: string;
   texte?: string;

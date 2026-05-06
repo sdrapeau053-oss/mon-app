@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ajouterFragment } from "@/lib/fragments";
 
 const NARRATIVE_TYPES_KEY = "atelier-narrative-types";
 
@@ -124,9 +125,7 @@ export default function Atelier() {
   function sauvegarder() {
     if (!result) return;
     try {
-      const existing = localStorage.getItem("fragments");
-      const fragments = existing ? JSON.parse(existing) : [];
-      fragments.unshift({
+      ajouterFragment({
         id: Date.now(),
         source: text,
         texte: result.fragment,
@@ -140,7 +139,6 @@ export default function Atelier() {
         periode: null,
         anneeApprox: null,
       });
-      localStorage.setItem("fragments", JSON.stringify(fragments));
       setSaved(true);
     } catch(e) {
       console.error("Erreur sauvegarde", e);

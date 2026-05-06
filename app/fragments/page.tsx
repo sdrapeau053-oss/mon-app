@@ -5,6 +5,12 @@ import Link from "next/link";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import { loadCloudFragments, saveCloudFragments } from "@/lib/cloud-sync";
+import {
+  lireFragments,
+  sauvegarderFragments,
+  supprimerFragment,
+  type Fragment,
+} from "@/lib/fragments";
 
 const TOMES = [
   { id: 1, titre: "Tome 1 — Enfance", chapitres: ["La maison", "Les adultes", "L'école", "La nature", "Les silences", "Les punitions", "Les jeux"] },
@@ -21,19 +27,27 @@ function parseTomeId(tomeStr: string): number | null {
   return n && n >= 1 ? n : null;
 }
 
+function sameFragmentId(a: Fragment["id"], b: Fragment["id"]) {
+  return String(a) === String(b);
+}
+
+function fragmentKey(id: Fragment["id"]) {
+  return String(id);
+}
+
 export default function Fragments() {
-  const [fragments, setFragments] = useState<any[]>([]);
+  const [fragments, setFragments] = useState<Fragment[]>([]);
   const [cloudLoading, setCloudLoading] = useState(true);
   const [cloudStatus, setCloudStatus] = useState("");
   const [recherche, setRecherche] = useState("");
-  const [editing, setEditing] = useState<{ id: number; texte: string } | null>(null);
-  const [tagEditingId, setTagEditingId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<{ id: Fragment["id"]; texte: string } | null>(null);
+  const [tagEditingId, setTagEditingId] = useState<Fragment["id"] | null>(null);
   const [tagInput, setTagInput] = useState("");
   const [filtreTome, setFiltreTome] = useState<number | null>(null);
   const [filtreChapitre, setFiltreChapitre] = useState("");
   const [filtreManuscrit, setFiltreManuscrit] = useState<"all" | "manuscrit" | "coffre">("all");
   const [filtreTag, setFiltreTag] = useState("");
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailId, setDetailId] = useState<Fragment["id"] | null>(null);
 
   type FaiblesseItem = { extrait: string; type: string; probleme: string; action: string };
   type FaiblesseState = {
@@ -42,9 +56,9 @@ export default function Fragments() {
     error: string | null;
     ouvert: boolean;
   };
-  const [faiblesseStates, setFaiblesseStates] = useState<Record<number, FaiblesseState>>({});
-  const [avantApresId, setAvantApresId] = useState<number | null>(null);
-  const [versionSelectee, setVersionSelectee] = useState<Record<number, number>>({});
+  const [faiblesseStates, setFaiblesseStates] = useState<Record<string, FaiblesseState>>({});
+  const [avantApresId, setAvantApresId] = useState<Fragment["id"] | null>(null);
+  const [versionSelectee, setVersionSelectee] = useState<Record<string, number>>({});
   const [copieStates, setCopieStates] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -62,9 +76,9 @@ export default function Fragments() {
       setCloudLoading(true);
 
       const cloudResult = await loadCloudFragments();
-      const saved: any[] = cloudResult.data?.length
-        ? cloudResult.data
-        : JSON.parse(localStorage.getItem("fragments") || "[]");
+      const saved: Fragment[] = cloudResult.data?.length
+        ? sauvegarderFragments(cloudResult.data)
+        : lireFragments();
 
       // Passe 1 — corriger les noms de tomes libres + ajouter tomeId si absent
       const CORRECTIONS_TOME: Record<string, string> = {
@@ -82,18 +96,12 @@ export default function Fragments() {
           fragmentsChanges = true;
         }
         if (!updated.tomeId) {
-          const tomeId = parseTomeId(updated.tome);
+          const tomeId = updated.tome ? parseTomeId(updated.tome) : null;
           if (tomeId) { updated.tomeId = tomeId; fragmentsChanges = true; }
         }
-        if (!updated.tags) { updated.tags = []; fragmentsChanges = true; }
-        if (!("age" in updated)) { updated.age = null; fragmentsChanges = true; }
-        if (!("periode" in updated)) { updated.periode = null; fragmentsChanges = true; }
-        if (!("anneeApprox" in updated)) { updated.anneeApprox = null; fragmentsChanges = true; }
-        if (!("violations" in updated)) { updated.violations = []; fragmentsChanges = true; }
-        if (!("versions" in updated)) { updated.versions = []; fragmentsChanges = true; }
         return updated;
       });
-      if (fragmentsChanges) localStorage.setItem("fragments", JSON.stringify(migres));
+      if (fragmentsChanges) sauvegarderFragments(migres);
 
       // Passe 2 — créer les chapitres manquants uniquement pour les fragments dans le manuscrit
       const defaultChapitres = Object.fromEntries(TOMES.map((t) => [t.id, [...t.chapitres]]));
@@ -173,68 +181,61 @@ export default function Fragments() {
     setFiltreTag("");
   }
 
-  function supprimer(id: number) {
-    const updated = fragments.filter((f) => f.id !== id);
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+  function supprimer(id: Fragment["id"]) {
+    setFragments(supprimerFragment(id));
   }
 
-  function deplacer(id: number, tome: string, chapitre: string) {
+  function deplacer(id: Fragment["id"], tome: string, chapitre: string) {
     const tomeId = parseTomeId(tome);
     const updated = fragments.map((f) =>
-      f.id === id ? { ...f, tome, chapitre, ...(tomeId ? { tomeId } : {}) } : f
+      sameFragmentId(f.id, id) ? { ...f, tome, chapitre, ...(tomeId ? { tomeId } : {}) } : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
   }
 
-  function sauvegarderNote(id: number, note: string) {
+  function sauvegarderNote(id: Fragment["id"], note: string) {
     const updated = fragments.map((f) =>
-      f.id === id ? { ...f, note } : f
+      sameFragmentId(f.id, id) ? { ...f, note } : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
   }
 
-  function sauvegarderChamp(id: number, champ: "age" | "periode" | "anneeApprox", valeur: string) {
+  function sauvegarderChamp(id: Fragment["id"], champ: "age" | "periode" | "anneeApprox", valeur: string) {
     const parse: number | string | null = champ === "periode"
       ? (valeur.trim() || null)
       : (valeur.trim() ? parseInt(valeur.trim()) : null);
-    const updated = fragments.map((f) => f.id === id ? { ...f, [champ]: parse } : f);
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    const updated = fragments.map((f) => sameFragmentId(f.id, id) ? { ...f, [champ]: parse } : f);
+    setFragments(sauvegarderFragments(updated));
   }
 
   function enregistrerModification() {
     if (!editing) return;
     const updated = fragments.map((f) => {
-      if (f.id !== editing.id) return f;
+      if (!sameFragmentId(f.id, editing.id)) return f;
       const snapshot = { date: new Date().toLocaleDateString("fr-CA"), texte: f.texte };
       return { ...f, texte: editing.texte, versions: [...(f.versions ?? []), snapshot] };
     });
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
     setEditing(null);
   }
 
-  function restaurerVersion(id: number, texte: string) {
-    const fragment = fragments.find((f) => f.id === id);
+  function restaurerVersion(id: Fragment["id"], texte: string) {
+    const fragment = fragments.find((f) => sameFragmentId(f.id, id));
     if (!fragment) return;
     const snapshot = { date: new Date().toLocaleDateString("fr-CA"), texte: fragment.texte };
     const updated = fragments.map((f) =>
-      f.id === id
+      sameFragmentId(f.id, id)
         ? { ...f, texte, versions: [...(f.versions ?? []), snapshot] }
         : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
   }
 
-  function envoyerAuManuscrit(id: number) {
-    const fragment = fragments.find((f) => f.id === id);
+  function envoyerAuManuscrit(id: Fragment["id"]) {
+    const fragment = fragments.find((f) => sameFragmentId(f.id, id));
     if (!fragment) return;
 
-    const tomeId = fragment.tomeId ?? parseTomeId(fragment.tome);
+    const tomeId = fragment.tomeId ?? (fragment.tome ? parseTomeId(fragment.tome) : null);
 
     // 1. Charger la structure
     const defaultChapitres = Object.fromEntries(TOMES.map((t) => [t.id, [...t.chapitres]]));
@@ -246,7 +247,7 @@ export default function Fragments() {
     const chapitresDuTome = tomeId ? (structure[tomeId] ?? []) : [];
 
     // 3. Vérifier si le chapitre existe
-    const existe = chapitresDuTome.includes(fragment.chapitre);
+    const existe = fragment.chapitre ? chapitresDuTome.includes(fragment.chapitre) : false;
 
     // 4. Si non → l'ajouter
     if (!existe && tomeId && fragment.chapitre) {
@@ -255,43 +256,40 @@ export default function Fragments() {
     }
 
     const updated = fragments.map((f) =>
-      f.id === id ? { ...f, manuscrit: true, tomeId: tomeId ?? f.tomeId } : f
+      sameFragmentId(f.id, id) ? { ...f, manuscrit: true, tomeId: tomeId ?? f.tomeId } : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
   }
 
-  function retirerDuManuscrit(id: number) {
+  function retirerDuManuscrit(id: Fragment["id"]) {
     const updated = fragments.map((f) =>
-      f.id === id ? { ...f, manuscrit: false } : f
+      sameFragmentId(f.id, id) ? { ...f, manuscrit: false } : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
   }
 
-  function ajouterTag(id: number, tag: string) {
+  function ajouterTag(id: Fragment["id"], tag: string) {
     const t = tag.trim().toLowerCase();
     if (!t) return;
     const updated = fragments.map((f) =>
-      f.id === id && !(f.tags ?? []).includes(t)
+      sameFragmentId(f.id, id) && !(f.tags ?? []).includes(t)
         ? { ...f, tags: [...(f.tags ?? []), t] }
         : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
     setTagInput("");
   }
 
-  function supprimerTag(id: number, tag: string) {
+  function supprimerTag(id: Fragment["id"], tag: string) {
     const updated = fragments.map((f) =>
-      f.id === id ? { ...f, tags: (f.tags ?? []).filter((t: string) => t !== tag) } : f
+      sameFragmentId(f.id, id) ? { ...f, tags: (f.tags ?? []).filter((t: string) => t !== tag) } : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
   }
 
-  async function detecerFaiblesses(id: number, texte: string) {
-    setFaiblesseStates((prev) => ({ ...prev, [id]: { loading: true, result: null, error: null, ouvert: true } }));
+  async function detecerFaiblesses(id: Fragment["id"], texte: string) {
+    const key = fragmentKey(id);
+    setFaiblesseStates((prev) => ({ ...prev, [key]: { loading: true, result: null, error: null, ouvert: true } }));
     try {
       const res = await fetch("/api/faiblesses", {
         method: "POST",
@@ -300,25 +298,26 @@ export default function Fragments() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setFaiblesseStates((prev) => ({ ...prev, [id]: { loading: false, result: null, error: data.error ?? "Erreur inconnue.", ouvert: true } }));
+        setFaiblesseStates((prev) => ({ ...prev, [key]: { loading: false, result: null, error: data.error ?? "Erreur inconnue.", ouvert: true } }));
         return;
       }
-      setFaiblesseStates((prev) => ({ ...prev, [id]: { loading: false, result: data.result, error: null, ouvert: true } }));
+      setFaiblesseStates((prev) => ({ ...prev, [key]: { loading: false, result: data.result, error: null, ouvert: true } }));
     } catch {
-      setFaiblesseStates((prev) => ({ ...prev, [id]: { loading: false, result: null, error: "Impossible de contacter le serveur.", ouvert: true } }));
+      setFaiblesseStates((prev) => ({ ...prev, [key]: { loading: false, result: null, error: "Impossible de contacter le serveur.", ouvert: true } }));
     }
   }
 
-  function toggleFaiblesse(id: number) {
-    setFaiblesseStates((prev) => prev[id] ? { ...prev, [id]: { ...prev[id], ouvert: !prev[id].ouvert } } : prev);
+  function toggleFaiblesse(id: Fragment["id"]) {
+    const key = fragmentKey(id);
+    setFaiblesseStates((prev) => prev[key] ? { ...prev, [key]: { ...prev[key], ouvert: !prev[key].ouvert } } : prev);
   }
 
-  async function copierPrompt(id: number, texte: string, type: "correction" | "renforcement") {
+  async function copierPrompt(id: Fragment["id"], texte: string, type: "correction" | "renforcement") {
     const prompt = type === "correction"
       ? `Corrige ce passage en respectant ces règles :\n\n- corps avant idée\n- concret avant abstraction\n- aucune sur-explication\n- aucune psychologie explicite\n- pas de phrases décoratives\n- tension implicite constante\n\nCorrige uniquement les parties faibles.\n\nDonne 2 versions maximum.\n\nTexte :\n${texte}`
       : `Renforce ce passage :\n\n- plus de concret\n- plus de sensation\n- moins d'explication\n- tension plus forte\n- pas de phrases inutiles\n\nDonne 1 version améliorée.\n\nTexte :\n${texte}`;
 
-    const cle = `${id}-${type}`;
+    const cle = `${fragmentKey(id)}-${type}`;
     try {
       await navigator.clipboard.writeText(prompt);
       setCopieStates((prev) => ({ ...prev, [cle]: true }));
@@ -364,8 +363,7 @@ export default function Fragments() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
-        setFragments(data);
-        localStorage.setItem("fragments", JSON.stringify(data));
+        setFragments(sauvegarderFragments(data));
         alert("Fragments restaurés avec succès !");
       } catch {
         alert("Erreur — fichier JSON invalide.");
@@ -516,7 +514,7 @@ export default function Fragments() {
               <button onClick={() => setDetailId(f.id)} className="soft-button" style={{ fontSize: 11 }}>Détail</button>
               <button onClick={() => setEditing({ id: f.id, texte: f.texte })} className="soft-button" style={{ fontSize: 11, color: "var(--primary)" }}>Modifier</button>
               {(() => {
-                const fs = faiblesseStates[f.id];
+                const fs = faiblesseStates[fragmentKey(f.id)];
                 return (
                   <button
                     onClick={() => fs?.result || fs?.error ? toggleFaiblesse(f.id) : detecerFaiblesses(f.id, f.texte)}
@@ -530,9 +528,9 @@ export default function Fragments() {
               })()}
               {(f.versions ?? []).length > 0 && (
                 <button
-                  onClick={() => setAvantApresId(avantApresId === f.id ? null : f.id)}
+                  onClick={() => setAvantApresId(sameFragmentId(avantApresId ?? "", f.id) ? null : f.id)}
                   className="soft-button"
-                  style={{ fontSize: 11, color: avantApresId === f.id ? "var(--primary)" : "var(--text-muted)" }}
+                  style={{ fontSize: 11, color: sameFragmentId(avantApresId ?? "", f.id) ? "var(--primary)" : "var(--text-muted)" }}
                 >
                   Avant / Après
                 </button>
@@ -542,7 +540,7 @@ export default function Fragments() {
           </div>
 
           {/* Texte / mode édition */}
-          {editing !== null && editing.id === f.id ? (
+          {editing !== null && sameFragmentId(editing.id, f.id) ? (
             <div style={{ marginBottom: 12 }}>
               <textarea
                 className="textarea-atelier"
@@ -564,10 +562,10 @@ export default function Fragments() {
           )}
 
           {/* Panneau avant / après */}
-          {avantApresId === f.id && (f.versions ?? []).length > 0 && (() => {
+          {avantApresId !== null && sameFragmentId(avantApresId, f.id) && (f.versions ?? []).length > 0 && (() => {
             const versions = f.versions as { date: string; texte: string }[];
             const idxDefaut = versions.length - 1;
-            const idx = versionSelectee[f.id] ?? idxDefaut;
+            const idx = versionSelectee[fragmentKey(f.id)] ?? idxDefaut;
             const versionChoisie = versions[idx];
             return (
               <div className="avant-apres-panel">
@@ -581,7 +579,7 @@ export default function Fragments() {
                     <select
                       className="filter-select"
                       value={idx}
-                      onChange={(e) => setVersionSelectee((prev) => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                      onChange={(e) => setVersionSelectee((prev) => ({ ...prev, [fragmentKey(f.id)]: Number(e.target.value) }))}
                     >
                       {versions.map((v, i) => (
                         <option key={i} value={i}>
@@ -621,7 +619,7 @@ export default function Fragments() {
 
           {/* Panneau faiblesses */}
           {(() => {
-            const fs = faiblesseStates[f.id];
+            const fs = faiblesseStates[fragmentKey(f.id)];
             if (!fs || fs.loading || !fs.ouvert || (!fs.result && !fs.error)) return null;
             const VERDICT_COLOR: Record<string, string> = { faible: "#b04040", moyen: "#b89060", fort: "#5a8f6a" };
             return (
@@ -698,7 +696,7 @@ export default function Fragments() {
                   <button onClick={() => supprimerTag(f.id, tag)} className="soft-button" style={{ fontSize: 13, lineHeight: 1, padding: 0, color: "var(--text-muted)" }}>×</button>
                 </span>
               ))}
-              {tagEditingId === f.id ? (
+              {tagEditingId !== null && sameFragmentId(tagEditingId, f.id) ? (
                 <>
                   <input
                     autoFocus
@@ -834,7 +832,7 @@ export default function Fragments() {
 
       {/* ── Modal détail ─────────────────────────────────────────────────── */}
       {detailId !== null && (() => {
-        const fd = fragments.find((f) => f.id === detailId);
+        const fd = fragments.find((f) => sameFragmentId(f.id, detailId));
         if (!fd) return null;
         return (
           <div className="modal-overlay" onClick={() => setDetailId(null)}>
