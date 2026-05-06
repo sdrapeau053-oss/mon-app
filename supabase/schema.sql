@@ -19,6 +19,7 @@ create table if not exists public.fragments (
   contenu text,
   type text,
   statut text,
+  data jsonb default '{}'::jsonb,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
@@ -29,6 +30,7 @@ create table if not exists public.daily_system_entries (
   hard_day boolean default false,
   note text,
   tasks jsonb default '[]'::jsonb,
+  data jsonb default '{}'::jsonb,
   updated_at timestamp with time zone default now()
 );
 
