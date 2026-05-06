@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { lireFragments, sauvegarderFragments, type Fragment } from "@/lib/fragments";
 
 const TOMES_DEFAUT = [
   { id: 1, titre: "Tome 1 — Enfance", color: "#8B7355" },
@@ -43,18 +44,22 @@ type AnalyseState = {
   error: string | null;
 };
 
+function sameFragmentId(a: Fragment["id"], b: Fragment["id"]) {
+  return String(a) === String(b);
+}
+
 export default function Structure() {
-  const [fragments, setFragments] = useState<any[]>([]);
+  const [fragments, setFragments] = useState<Fragment[]>([]);
   const [tomes, setTomes] = useState<Tome[]>(TOMES_DEFAUT);
   const [chapitresParTome, setChapitresParTome] = useState<Record<number, string[]>>(CHAPITRES_DEFAUT);
   const [nouveauChapitreInput, setNouveauChapitreInput] = useState<{ tomeId: number; nom: string } | null>(null);
   const [tomeOuverts, setTomeOuverts] = useState<number[]>([1, 2, 3, 4]);
   const [chapitreOuverts, setChapitreOuverts] = useState<string[]>([]);
-  const [fragmentOuvert, setFragmentOuvert] = useState<number | null>(null);
-  const [deplacerOuvert, setDeplacerOuvert] = useState<number | null>(null);
+  const [fragmentOuvert, setFragmentOuvert] = useState<Fragment["id"] | null>(null);
+  const [deplacerOuvert, setDeplacerOuvert] = useState<Fragment["id"] | null>(null);
   const [renommerInput, setRenommerInput] = useState<{ tomeId: number; ancienNom: string; nouveauNom: string } | null>(null);
   const [supprimerConfirm, setSupprimerConfirm] = useState<{ tomeId: number; chapitre: string } | null>(null);
-  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<Fragment["id"] | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [renommerTomeInput, setRenommerTomeInput] = useState<{ id: number; titre: string } | null>(null);
   const [supprimerTomeConfirm, setSupprimerTomeConfirm] = useState<number | null>(null);
@@ -63,8 +68,7 @@ export default function Structure() {
   const [detailsOuverts, setDetailsOuverts] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("fragments") || "[]");
-    setFragments(saved);
+    setFragments(lireFragments());
     const savedChapitres = localStorage.getItem("structure-chapitres");
     if (savedChapitres) setChapitresParTome(JSON.parse(savedChapitres));
     const savedTomes = localStorage.getItem("structure-tomes");
@@ -97,8 +101,8 @@ export default function Structure() {
     );
   }
 
-  function toggleFragment(id: number) {
-    setFragmentOuvert((prev) => (prev === id ? null : id));
+  function toggleFragment(id: Fragment["id"]) {
+    setFragmentOuvert((prev) => (prev !== null && sameFragmentId(prev, id) ? null : id));
   }
 
   function ajouterChapitre(tomeId: number, nom: string) {
@@ -118,8 +122,7 @@ export default function Structure() {
     const updatedFragments = fragments.map((f) =>
       f.tomeId === tomeId && f.chapitre === ancienNom ? { ...f, chapitre: trimmed } : f
     );
-    setFragments(updatedFragments);
-    localStorage.setItem("fragments", JSON.stringify(updatedFragments));
+    setFragments(sauvegarderFragments(updatedFragments));
     setRenommerInput(null);
   }
 
@@ -131,13 +134,12 @@ export default function Structure() {
     setSupprimerConfirm(null);
   }
 
-  function deplacerFragment(id: number, tomeId: number, nouvChapitre: string, chapKey?: string) {
+  function deplacerFragment(id: Fragment["id"], tomeId: number, nouvChapitre: string, chapKey?: string) {
     const tome = tomes.find((t) => t.id === tomeId);
     const updated = fragments.map((f) =>
-      f.id === id ? { ...f, tome: tome?.titre ?? f.tome, tomeId, chapitre: nouvChapitre } : f
+      sameFragmentId(f.id, id) ? { ...f, tome: tome?.titre ?? f.tome, tomeId, chapitre: nouvChapitre } : f
     );
-    setFragments(updated);
-    localStorage.setItem("fragments", JSON.stringify(updated));
+    setFragments(sauvegarderFragments(updated));
     setDeplacerOuvert(null);
     setFragmentOuvert(null);
     setDraggingId(null);
@@ -165,8 +167,7 @@ export default function Structure() {
     const updatedFragments = fragments.map((f) =>
       f.tomeId === id ? { ...f, tome: trimmed } : f
     );
-    setFragments(updatedFragments);
-    localStorage.setItem("fragments", JSON.stringify(updatedFragments));
+    setFragments(sauvegarderFragments(updatedFragments));
     setRenommerTomeInput(null);
   }
 
@@ -183,7 +184,7 @@ export default function Structure() {
         body: JSON.stringify({
           tome: tome.titre,
           chapitre,
-          fragments: fragsduChapitre.map((f: any) => f.texte),
+          fragments: fragsduChapitre.map((f) => f.texte),
         }),
       });
       const data = await res.json();
@@ -349,7 +350,7 @@ export default function Structure() {
                       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverKey(null); }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        const id = parseInt(e.dataTransfer.getData("fragmentId"));
+                        const id = e.dataTransfer.getData("fragmentId");
                         if (id) deplacerFragment(id, tome.id, chapitre, key);
                       }}
                     >
@@ -584,8 +585,8 @@ export default function Structure() {
                       {!vide && chapOuvert && (
                         <div style={{ paddingLeft: 16, paddingTop: 4 }}>
                           {fragsduChapitre.map((f) => {
-                            const fragOuvert = fragmentOuvert === f.id;
-                            const estEnDrag = draggingId === f.id;
+                            const fragOuvert = fragmentOuvert !== null && sameFragmentId(fragmentOuvert, f.id);
+                            const estEnDrag = draggingId !== null && sameFragmentId(draggingId, f.id);
                             return (
                               <div
                                 key={f.id}
@@ -625,7 +626,7 @@ export default function Structure() {
                                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: 12, whiteSpace: "nowrap" }}>
                                     <span style={{ fontSize: 11, color: "#bbb" }}>{f.date ?? ""}</span>
                                     <button
-                                      onClick={() => setDeplacerOuvert(deplacerOuvert === f.id ? null : f.id)}
+                                      onClick={() => setDeplacerOuvert(deplacerOuvert !== null && sameFragmentId(deplacerOuvert, f.id) ? null : f.id)}
                                       style={{ fontSize: 11, color: tome.color, background: "none", border: `1px solid ${tome.color}66`, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontFamily: "Georgia, serif" }}
                                     >
                                       Déplacer
@@ -636,7 +637,7 @@ export default function Structure() {
                                   </div>
                                 </div>
 
-                                {deplacerOuvert === f.id && (
+                                {deplacerOuvert !== null && sameFragmentId(deplacerOuvert, f.id) && (
                                   <div style={{ padding: "10px 14px", borderTop: `1px solid ${tome.color}22`, background: "#fafafa", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                                     <span style={{ fontSize: 11, color: "#999" }}>Déplacer vers :</span>
                                     <select
