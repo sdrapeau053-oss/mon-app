@@ -4,7 +4,7 @@ export const STRUCTURE_CHAPITRES_STORAGE_KEY = "structure-chapitres";
 export type ManuscriptTome = {
   id: number;
   titre: string;
-  color?: string;
+  color: string;
 };
 
 export type ManuscriptChapitres = Record<number, string[]>;
@@ -36,7 +36,7 @@ function normalizeTome(tome: unknown, fallback?: ManuscriptTome): ManuscriptTome
   return {
     id,
     titre: typeof tome.titre === "string" && tome.titre.trim() ? tome.titre : fallback?.titre || `Tome ${id}`,
-    color: typeof tome.color === "string" && tome.color.trim() ? tome.color : fallback?.color,
+    color: typeof tome.color === "string" && tome.color.trim() ? tome.color : fallback?.color || "#8B7355",
   };
 }
 

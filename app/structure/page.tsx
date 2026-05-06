@@ -3,20 +3,15 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { lireFragments, sauvegarderFragments, type Fragment } from "@/lib/fragments";
-
-const TOMES_DEFAUT = [
-  { id: 1, titre: "Tome 1 — Enfance", color: "#8B7355" },
-  { id: 2, titre: "Tome 2 — Adolescence", color: "#6B7A8B" },
-  { id: 3, titre: "Tome 3 — Mariage violent", color: "#8B6B6B" },
-  { id: 4, titre: "Tome 4 — Procès", color: "#7B8B6B" },
-];
-
-const CHAPITRES_DEFAUT: Record<number, string[]> = {
-  1: ["La maison", "Les adultes", "L'école", "La nature", "Les silences", "Les punitions", "Les jeux"],
-  2: ["Le corps qui change", "Les amis", "Le premier amour", "Partir", "La rupture"],
-  3: ["Le début", "La maison fermée", "Les coups", "L'isolement", "Résister", "Les enfants"],
-  4: ["La plainte", "Le tribunal", "La liberté retrouvée", "Reconstruire", "La transmission"],
-};
+import {
+  CHAPITRES_DEFAUT,
+  TOMES_DEFAUT,
+  lireChapitres,
+  lireTomes,
+  sauvegarderChapitres as persisterChapitres,
+  sauvegarderTomes as persisterTomes,
+  type ManuscriptTome,
+} from "@/lib/manuscript-structure";
 
 const COULEURS_DISPONIBLES = [
   "#8B7355", "#6B7A8B", "#8B6B6B", "#7B8B6B",
@@ -24,7 +19,7 @@ const COULEURS_DISPONIBLES = [
   "#6B6B8B", "#8B6B7A",
 ];
 
-type Tome = { id: number; titre: string; color: string };
+type Tome = ManuscriptTome & { color: string };
 
 type DecisionChapitre = {
   loi: string;
@@ -69,24 +64,20 @@ export default function Structure() {
 
   useEffect(() => {
     setFragments(lireFragments());
-    const savedChapitres = localStorage.getItem("structure-chapitres");
-    if (savedChapitres) setChapitresParTome(JSON.parse(savedChapitres));
-    const savedTomes = localStorage.getItem("structure-tomes");
-    if (savedTomes) {
-      const parsed: Tome[] = JSON.parse(savedTomes);
-      setTomes(parsed);
-      setTomeOuverts(parsed.map((t) => t.id));
-    }
+    const chapitres = lireChapitres();
+    const tomesLus = lireTomes() as Tome[];
+
+    setChapitresParTome(chapitres);
+    setTomes(tomesLus);
+    setTomeOuverts(tomesLus.map((tome) => tome.id));
   }, []);
 
   function sauvegarderTomes(updated: Tome[]) {
-    setTomes(updated);
-    localStorage.setItem("structure-tomes", JSON.stringify(updated));
+    setTomes(persisterTomes(updated) as Tome[]);
   }
 
   function sauvegarderChapitres(updated: Record<number, string[]>) {
-    setChapitresParTome(updated);
-    localStorage.setItem("structure-chapitres", JSON.stringify(updated));
+    setChapitresParTome(persisterChapitres(updated));
   }
 
   function toggleTome(id: number) {
