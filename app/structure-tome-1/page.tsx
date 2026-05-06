@@ -354,6 +354,7 @@ export default function StructureTome1() {
   const [chapitresStockes, setChapitresStockes] = useState<StoredChapter[]>([]);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [draftContent, setDraftContent] = useState("");
+  const [cloudStatus, setCloudStatus] = useState("");
 
   useEffect(() => {
     let actif = true;
@@ -457,6 +458,29 @@ export default function StructureTome1() {
     return updatedChapter;
   };
 
+  const sauvegarderChapitresDansCloud = async () => {
+    if (!supabase) {
+      setCloudStatus("Supabase non configuré. Ajoute la clé publishable dans .env.local.");
+      return;
+    }
+
+    const payload = chapitresStockes.map((chapitre) => ({
+      id: chapitre.id,
+      titre: chapitre.titre,
+      bloc: chapitre.bloc,
+      type: chapitre.type,
+      statut: chapitre.statut,
+      contenu: chapitre.contenu,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase
+      .from("chapitres_tome1")
+      .upsert(payload, { onConflict: "id" });
+
+    setCloudStatus(error ? `Erreur cloud : ${error.message}` : "Sauvegarde cloud effectuée");
+  };
+
   const startEditingChapter = (chapter: Chapter) => {
     const storedChapter = getStoredChapter(chapter.num) || createStoredChapter(chapter);
 
@@ -549,8 +573,31 @@ export default function StructureTome1() {
               </div>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "flex-end" }}>
-              <div style={{ width: 120, height: 4, background: "#44403C", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{ width: `${Math.round((totalEcrit / 30) * 100)}%`, height: "100%", background: "#22C55E", borderRadius: 2, transition: "width 0.5s" }} />
+              <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
+                <button
+                  onClick={sauvegarderChapitresDansCloud}
+                  style={{
+                    border: "1px solid rgba(245, 240, 232, 0.28)",
+                    borderRadius: 999,
+                    background: "rgba(245, 240, 232, 0.08)",
+                    color: "#F5F0E8",
+                    cursor: "pointer",
+                    fontFamily: "system-ui, sans-serif",
+                    fontSize: 12,
+                    padding: "7px 12px",
+                  }}
+                  type="button"
+                >
+                  Sauvegarder dans le cloud
+                </button>
+                {cloudStatus && (
+                  <p style={{ color: "#D6D3D1", fontFamily: "system-ui, sans-serif", fontSize: 11, margin: 0 }}>
+                    {cloudStatus}
+                  </p>
+                )}
+                <div style={{ width: 120, height: 4, background: "#44403C", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${Math.round((totalEcrit / 30) * 100)}%`, height: "100%", background: "#22C55E", borderRadius: 2, transition: "width 0.5s" }} />
+                </div>
               </div>
             </div>
           </div>
