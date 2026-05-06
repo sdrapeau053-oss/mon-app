@@ -15,10 +15,20 @@ type DailyTask = {
 };
 
 type DailyState = {
+  energie: string;
   hardDay: boolean;
   note: string;
+  priorite: string;
   tasks: DailyTask[];
 };
+
+type SystemState = {
+  manuscrit: string;
+  energie: string;
+  priorite: string;
+};
+
+const SYSTEM_STATE_KEY = "system-state";
 
 const normalTasks: DailyTask[] = [
   { id: "daily-fille", label: "Fille / école", done: false },
@@ -33,6 +43,12 @@ const softModeTasks: DailyTask[] = [
   { id: "soft-action", label: "Une action utile", done: false },
   { id: "soft-soin", label: "Prendre soin de soi", done: false },
 ];
+
+const defaultSystemState: SystemState = {
+  manuscrit: "chapitre-5",
+  energie: "",
+  priorite: "",
+};
 
 function todayKey() {
   return `daily-system-${new Date().toLocaleDateString("fr-CA")}`;
@@ -63,8 +79,10 @@ function normalizeTasks(tasks: unknown): DailyTask[] {
 function readDailyState(): DailyState {
   if (typeof window === "undefined") {
     return {
+      energie: "",
       hardDay: false,
       note: "",
+      priorite: "",
       tasks: normalTasks,
     };
   }
@@ -73,8 +91,10 @@ function readDailyState(): DailyState {
     const saved = localStorage.getItem(todayKey());
     if (!saved) {
       return {
+        energie: "",
         hardDay: false,
         note: "",
+        priorite: "",
         tasks: normalTasks,
       };
     }
@@ -83,14 +103,18 @@ function readDailyState(): DailyState {
     const hardDay = Boolean(parsed.hardDay);
 
     return {
+      energie: parsed.energie || "",
       hardDay,
       note: parsed.note || "",
+      priorite: parsed.priorite || "",
       tasks: mergeTaskState(hardDay ? softModeTasks : normalTasks, parsed.tasks || []),
     };
   } catch {
     return {
+      energie: "",
       hardDay: false,
       note: "",
+      priorite: "",
       tasks: normalTasks,
     };
   }
@@ -100,8 +124,10 @@ function normalizeDailyState(state: Partial<CloudDailySystemState> | null | unde
   const hardDay = Boolean(state?.hardDay);
 
   return {
+    energie: "",
     hardDay,
     note: state?.note || "",
+    priorite: "",
     tasks: mergeTaskState(hardDay ? softModeTasks : normalTasks, normalizeTasks(state?.tasks)),
   };
 }
@@ -110,13 +136,39 @@ function saveDailyState(state: DailyState) {
   localStorage.setItem(todayKey(), JSON.stringify(state));
 }
 
+function readSystemState(): SystemState {
+  try {
+    const saved = localStorage.getItem(SYSTEM_STATE_KEY);
+    return saved ? { ...defaultSystemState, ...JSON.parse(saved) } : defaultSystemState;
+  } catch {
+    return defaultSystemState;
+  }
+}
+
+function saveSystemStateFromDaily(energie: string, priorite: string) {
+  if (!energie && !priorite) return;
+
+  const current = readSystemState();
+
+  localStorage.setItem(
+    SYSTEM_STATE_KEY,
+    JSON.stringify({
+      ...current,
+      ...(energie ? { energie } : {}),
+      ...(priorite ? { priorite } : {}),
+    }),
+  );
+}
+
 export default function DailySystemPage() {
   const [hydrated, setHydrated] = useState(false);
   const [cloudLoading, setCloudLoading] = useState(true);
   const [cloudStatus, setCloudStatus] = useState("");
+  const [energie, setEnergie] = useState("");
   const [hardDay, setHardDay] = useState(false);
   const [tasks, setTasks] = useState<DailyTask[]>(normalTasks);
   const [note, setNote] = useState("");
+  const [priorite, setPriorite] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +184,8 @@ export default function DailySystemPage() {
       setHardDay(savedState.hardDay);
       setTasks(savedState.tasks);
       setNote(savedState.note);
+      setEnergie(savedState.energie);
+      setPriorite(savedState.priorite);
       setCloudStatus(
         cloudResult.data
           ? "Données cloud chargées."
@@ -152,8 +206,9 @@ export default function DailySystemPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    saveDailyState({ hardDay, note, tasks });
-  }, [hardDay, hydrated, note, tasks]);
+    saveDailyState({ energie, hardDay, note, priorite, tasks });
+    saveSystemStateFromDaily(energie, priorite);
+  }, [energie, hardDay, hydrated, note, priorite, tasks]);
 
   const doneCount = tasks.filter((task) => task.done).length;
   const progression = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
@@ -178,6 +233,8 @@ export default function DailySystemPage() {
     setHardDay((current) => {
       const next = !current;
       setTasks((currentTasks) => mergeTaskState(next ? softModeTasks : normalTasks, currentTasks));
+      setEnergie(next ? "fatigue" : "neutre");
+      setPriorite(next ? "repos" : "ecrire");
       return next;
     });
   }
@@ -344,6 +401,42 @@ export default function DailySystemPage() {
         >
           {hardDay ? "Mode doux activé" : "Activer le mode doux"}
         </button>
+      </section>
+
+      <section aria-label="État du jour" style={{ marginBottom: 18 }}>
+        <p className="label-meta" style={{ marginBottom: 8 }}>
+          État du jour
+        </p>
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+          <label style={{ color: "var(--text-muted)", fontSize: 11 }}>
+            Énergie
+            <select
+              className="filter-select"
+              value={energie}
+              onChange={(event) => setEnergie(event.target.value)}
+              style={{ marginTop: 6, width: "100%" }}
+            >
+              <option value="">À définir</option>
+              <option value="fatigue">Fatigue</option>
+              <option value="neutre">Neutre</option>
+              <option value="haute">Haute</option>
+            </select>
+          </label>
+          <label style={{ color: "var(--text-muted)", fontSize: 11 }}>
+            Priorité
+            <select
+              className="filter-select"
+              value={priorite}
+              onChange={(event) => setPriorite(event.target.value)}
+              style={{ marginTop: 6, width: "100%" }}
+            >
+              <option value="">Choisir</option>
+              <option value="ecrire">Écrire</option>
+              <option value="freelance">Freelance</option>
+              <option value="repos">Repos</option>
+            </select>
+          </label>
+        </div>
       </section>
 
       <section aria-label="Note rapide">
