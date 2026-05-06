@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { lireFragments, type Fragment } from "@/lib/fragments";
 
 const TOMES_DEFAUT = [
   { id: 1, titre: "Tome 1 — Enfance" },
@@ -79,13 +80,12 @@ const styles = {
 };
 
 export default function Lecture() {
-  const [fragments, setFragments] = useState<any[]>([]);
+  const [fragments, setFragments] = useState<Fragment[]>([]);
   const [tomes, setTomes] = useState(TOMES_DEFAUT);
   const [chapitresParTome, setChapitresParTome] = useState<Record<number, string[]>>(CHAPITRES_DEFAUT);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("fragments") || "[]");
-    setFragments(saved.filter((f: any) => f.manuscrit));
+    setFragments(lireFragments().filter((f) => f.manuscrit));
 
     const savedTomes = localStorage.getItem("structure-tomes");
     if (savedTomes) setTomes(JSON.parse(savedTomes));
