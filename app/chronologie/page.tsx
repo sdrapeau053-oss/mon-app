@@ -2,18 +2,19 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { lireFragments, type Fragment } from "@/lib/fragments";
 
 type VueMode = "age" | "periode" | "annee";
 
 type AgeRow =
-  | { type: "point"; age: number; frags: any[]; last: boolean }
+  | { type: "point"; age: number; frags: Fragment[]; last: boolean }
   | { type: "gap"; from: number; to: number; years: number };
 
 type AnneeRow =
-  | { type: "point"; annee: number; frags: any[]; last: boolean }
+  | { type: "point"; annee: number; frags: Fragment[]; last: boolean }
   | { type: "gap"; from: number; to: number; years: number };
 
-function FragCard({ f, expanded, onToggle }: { f: any; expanded: boolean; onToggle: () => void }) {
+function FragCard({ f, expanded, onToggle }: { f: Fragment; expanded: boolean; onToggle: () => void }) {
   return (
     <div
       className="chapter-card"
@@ -74,20 +75,20 @@ function PillYear({ label }: { label: string }) {
 }
 
 export default function Chronologie() {
-  const [fragments, setFragments] = useState<any[]>([]);
+  const [fragments, setFragments] = useState<Fragment[]>([]);
   const [vue, setVue] = useState<VueMode>("age");
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<Fragment["id"] | null>(null);
 
   useEffect(() => {
-    setFragments(JSON.parse(localStorage.getItem("fragments") || "[]"));
+    setFragments(lireFragments());
   }, []);
 
-  function toggleExpand(id: number) {
-    setExpandedId((prev) => (prev === id ? null : id));
+  function toggleExpand(id: Fragment["id"]) {
+    setExpandedId((prev) => (String(prev) === String(id) ? null : id));
   }
 
   // ── Age ──────────────────────────────────────────────────────────────────
-  const ageMap = new Map<number, any[]>();
+  const ageMap = new Map<number, Fragment[]>();
   fragments.forEach((f) => {
     if (f.age == null) return;
     if (!ageMap.has(f.age)) ageMap.set(f.age, []);
@@ -105,7 +106,7 @@ export default function Chronologie() {
   const sansAge = fragments.filter((f) => f.age == null);
 
   // ── Période ───────────────────────────────────────────────────────────────
-  const periodeMap = new Map<string, any[]>();
+  const periodeMap = new Map<string, Fragment[]>();
   fragments.forEach((f) => {
     if (!f.periode) return;
     if (!periodeMap.has(f.periode)) periodeMap.set(f.periode, []);
@@ -113,7 +114,7 @@ export default function Chronologie() {
   });
   const groupesPeriode = [...periodeMap.entries()]
     .map(([periode, frags]) => {
-      const ages = frags.map((f) => f.age).filter((a: any) => a != null) as number[];
+      const ages = frags.map((f) => f.age).filter((a): a is number => a != null);
       return { periode, frags, minAge: ages.length ? Math.min(...ages) : null };
     })
     .sort((a, b) => {
@@ -125,7 +126,7 @@ export default function Chronologie() {
   const sansPeriode = fragments.filter((f) => !f.periode);
 
   // ── Année ─────────────────────────────────────────────────────────────────
-  const anneeMap = new Map<number, any[]>();
+  const anneeMap = new Map<number, Fragment[]>();
   fragments.forEach((f) => {
     if (f.anneeApprox == null) return;
     if (!anneeMap.has(f.anneeApprox)) anneeMap.set(f.anneeApprox, []);
@@ -225,7 +226,7 @@ export default function Chronologie() {
                     {row.age} an{row.age > 1 ? "s" : ""} · {row.frags.length} fragment{row.frags.length > 1 ? "s" : ""}
                   </p>
                   {row.frags.map((f) => (
-                    <FragCard key={f.id} f={f} expanded={expandedId === f.id} onToggle={() => toggleExpand(f.id)} />
+                    <FragCard key={f.id} f={f} expanded={String(expandedId) === String(f.id)} onToggle={() => toggleExpand(f.id)} />
                   ))}
                 </div>
               </div>
@@ -237,7 +238,7 @@ export default function Chronologie() {
                 Sans repère d'âge · {sansAge.length} fragment{sansAge.length > 1 ? "s" : ""}
               </p>
               {sansAge.map((f) => (
-                <FragCard key={f.id} f={f} expanded={expandedId === f.id} onToggle={() => toggleExpand(f.id)} />
+                <FragCard key={f.id} f={f} expanded={String(expandedId) === String(f.id)} onToggle={() => toggleExpand(f.id)} />
               ))}
             </div>
           )}
@@ -267,7 +268,7 @@ export default function Chronologie() {
                   {g.minAge != null && ` · à partir de ${g.minAge} ans`}
                 </p>
                 {g.frags.map((f) => (
-                  <FragCard key={f.id} f={f} expanded={expandedId === f.id} onToggle={() => toggleExpand(f.id)} />
+                  <FragCard key={f.id} f={f} expanded={String(expandedId) === String(f.id)} onToggle={() => toggleExpand(f.id)} />
                 ))}
               </div>
             </div>
@@ -278,7 +279,7 @@ export default function Chronologie() {
                 Sans période · {sansPeriode.length} fragment{sansPeriode.length > 1 ? "s" : ""}
               </p>
               {sansPeriode.map((f) => (
-                <FragCard key={f.id} f={f} expanded={expandedId === f.id} onToggle={() => toggleExpand(f.id)} />
+                <FragCard key={f.id} f={f} expanded={String(expandedId) === String(f.id)} onToggle={() => toggleExpand(f.id)} />
               ))}
             </div>
           )}
@@ -321,7 +322,7 @@ export default function Chronologie() {
                     {row.annee} · {row.frags.length} fragment{row.frags.length > 1 ? "s" : ""}
                   </p>
                   {row.frags.map((f) => (
-                    <FragCard key={f.id} f={f} expanded={expandedId === f.id} onToggle={() => toggleExpand(f.id)} />
+                    <FragCard key={f.id} f={f} expanded={String(expandedId) === String(f.id)} onToggle={() => toggleExpand(f.id)} />
                   ))}
                 </div>
               </div>
@@ -333,7 +334,7 @@ export default function Chronologie() {
                 Sans année · {sansAnnee.length} fragment{sansAnnee.length > 1 ? "s" : ""}
               </p>
               {sansAnnee.map((f) => (
-                <FragCard key={f.id} f={f} expanded={expandedId === f.id} onToggle={() => toggleExpand(f.id)} />
+                <FragCard key={f.id} f={f} expanded={String(expandedId) === String(f.id)} onToggle={() => toggleExpand(f.id)} />
               ))}
             </div>
           )}
