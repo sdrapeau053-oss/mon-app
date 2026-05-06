@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  loadCloudDailySystemEntry,
+  saveCloudDailySystemEntry,
+  type CloudDailySystemState,
+} from "@/lib/cloud-sync";
 
 type DailyTask = {
   id: string;
@@ -33,11 +38,26 @@ function todayKey() {
   return `daily-system-${new Date().toLocaleDateString("fr-CA")}`;
 }
 
+function todayDate() {
+  return new Date().toLocaleDateString("fr-CA");
+}
+
 function mergeTaskState(template: DailyTask[], savedTasks: DailyTask[] = []) {
   return template.map((task) => ({
     ...task,
     done: savedTasks.find((saved) => saved.id === task.id)?.done || false,
   }));
+}
+
+function normalizeTasks(tasks: unknown): DailyTask[] {
+  if (!Array.isArray(tasks)) return [];
+
+  return tasks.filter((task): task is DailyTask => {
+    if (!task || typeof task !== "object") return false;
+
+    const candidate = task as Partial<DailyTask>;
+    return typeof candidate.id === "string" && typeof candidate.label === "string";
+  });
 }
 
 function readDailyState(): DailyState {
@@ -76,23 +96,58 @@ function readDailyState(): DailyState {
   }
 }
 
+function normalizeDailyState(state: Partial<CloudDailySystemState> | null | undefined): DailyState {
+  const hardDay = Boolean(state?.hardDay);
+
+  return {
+    hardDay,
+    note: state?.note || "",
+    tasks: mergeTaskState(hardDay ? softModeTasks : normalTasks, normalizeTasks(state?.tasks)),
+  };
+}
+
 function saveDailyState(state: DailyState) {
   localStorage.setItem(todayKey(), JSON.stringify(state));
 }
 
 export default function DailySystemPage() {
   const [hydrated, setHydrated] = useState(false);
+  const [cloudLoading, setCloudLoading] = useState(true);
+  const [cloudStatus, setCloudStatus] = useState("");
   const [hardDay, setHardDay] = useState(false);
   const [tasks, setTasks] = useState<DailyTask[]>(normalTasks);
   const [note, setNote] = useState("");
 
   useEffect(() => {
-    const savedState = readDailyState();
+    let cancelled = false;
 
-    setHardDay(savedState.hardDay);
-    setTasks(savedState.tasks);
-    setNote(savedState.note);
-    setHydrated(true);
+    async function loadDailyState() {
+      setCloudLoading(true);
+
+      const cloudResult = await loadCloudDailySystemEntry(todayDate());
+      const savedState = cloudResult.data ? normalizeDailyState(cloudResult.data) : readDailyState();
+
+      if (cancelled) return;
+
+      setHardDay(savedState.hardDay);
+      setTasks(savedState.tasks);
+      setNote(savedState.note);
+      setCloudStatus(
+        cloudResult.data
+          ? "Données cloud chargées."
+          : cloudResult.error
+            ? "Mode local actif."
+            : "Aucune donnée cloud pour aujourd’hui.",
+      );
+      setCloudLoading(false);
+      setHydrated(true);
+    }
+
+    loadDailyState();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -125,6 +180,18 @@ export default function DailySystemPage() {
       setTasks((currentTasks) => mergeTaskState(next ? softModeTasks : normalTasks, currentTasks));
       return next;
     });
+  }
+
+  async function handleCloudSave() {
+    setCloudStatus("Sauvegarde cloud...");
+
+    const result = await saveCloudDailySystemEntry(todayDate(), {
+      hardDay,
+      note,
+      tasks,
+    });
+
+    setCloudStatus(result.error ? result.error : "Sauvegarde cloud effectuée.");
   }
 
   return (
@@ -249,6 +316,22 @@ export default function DailySystemPage() {
               width: `${progression}%`,
             }}
           />
+        </div>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: 10,
+            justifyContent: "space-between",
+            marginTop: 10,
+          }}
+        >
+          <small style={{ color: "var(--text-muted)", fontSize: 11 }}>
+            {cloudLoading ? "Chargement cloud..." : cloudStatus}
+          </small>
+          <button className="btn-ghost" type="button" onClick={handleCloudSave}>
+            Sauvegarder cloud
+          </button>
         </div>
       </section>
 
