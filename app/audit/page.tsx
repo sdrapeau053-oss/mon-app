@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { lireFragments, type Fragment } from "@/lib/fragments";
 
 // ── Constantes lexicales ──────────────────────────────────────────────────
 
@@ -74,15 +75,6 @@ type AuditResult = {
   directives: Finding[];
 };
 
-type Fragment = {
-  id: number;
-  texte: string;
-  tome: string;
-  tomeId: number;
-  chapitre: string;
-  manuscrit: boolean;
-};
-
 type Tome = { id: number; titre: string };
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -129,6 +121,10 @@ function refLabel(tomes: Tome[], tomeId: number, chapitre?: string): string {
   return chapitre ? `${tStr} › ${chapitre}` : tStr;
 }
 
+function fragmentRefLabel(tomes: Tome[], fragment: Fragment): string {
+  return refLabel(tomes, fragment.tomeId ?? 0, fragment.chapitre);
+}
+
 // ── Audit ────────────────────────────────────────────────────────────────
 
 function lancerAudit(
@@ -148,7 +144,7 @@ function lancerAudit(
   const freqBigrammes: Record<string, { count: number; chapitres: Set<string> }> = {};
 
   for (const f of fragments) {
-    const ref = refLabel(tomes, f.tomeId, f.chapitre);
+    const ref = fragmentRefLabel(tomes, f);
     const mots = tokeniser(f.texte);
     for (const m of mots) {
       if (!freqMots[m]) freqMots[m] = { count: 0, chapitres: new Set() };
@@ -202,7 +198,7 @@ function lancerAudit(
       structurel.push({
         niveau: frags.length >= 3 ? "fort" : "moyen",
         texte: `${frags.length} fragments commencent par "${debut}…"`,
-        reference: [...new Set(frags.map((f) => refLabel(tomes, f.tomeId, f.chapitre)))].join(", "),
+        reference: [...new Set(frags.map((f) => fragmentRefLabel(tomes, f)))].join(", "),
       });
     });
 
@@ -219,7 +215,7 @@ function lancerAudit(
       structurel.push({
         niveau: "moyen",
         texte: `${frags.length} fragments se terminent par "…${fin}"`,
-        reference: [...new Set(frags.map((f) => refLabel(tomes, f.tomeId, f.chapitre)))].join(", "),
+        reference: [...new Set(frags.map((f) => fragmentRefLabel(tomes, f)))].join(", "),
       });
     });
 
@@ -251,7 +247,7 @@ function lancerAudit(
         voix.push({
           niveau: "fort",
           texte: `Formule interdite détectée : "${formule}"`,
-          reference: refLabel(tomes, f.tomeId, f.chapitre),
+          reference: fragmentRefLabel(tomes, f),
         });
       }
     }
@@ -363,7 +359,7 @@ function lancerAudit(
         directives.push({
           niveau: nbMots > 70 ? "fort" : "moyen",
           texte: `Phrase de ${nbMots} mots — sur-explication probable`,
-          reference: refLabel(tomes, f.tomeId, f.chapitre),
+          reference: fragmentRefLabel(tomes, f),
         });
         break;
       }
@@ -594,8 +590,7 @@ export default function Audit() {
   const [apercu, setApercu] = useState(false);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("fragments") || "[]");
-    setFragments(saved.filter((f: any) => f.manuscrit));
+    setFragments(lireFragments().filter((fragment) => fragment.manuscrit));
     const savedTomes = localStorage.getItem("structure-tomes");
     setTomes(savedTomes ? JSON.parse(savedTomes) : [
       { id: 1, titre: "Tome 1 — Enfance" },
