@@ -19,6 +19,13 @@ const modules = [
     accent: "#c89454",
   },
   {
+    title: "Détecteur de voix",
+    description: "Repérer les traces IA, la perte de corps et les formulations trop lisses.",
+    href: "/detecteur-voix",
+    icon: "◌",
+    accent: "#c9a84c",
+  },
+  {
     title: "Daily System",
     description: "Revenir au corps, aux priorités et à l’énergie du jour.",
     href: "/daily-system",
