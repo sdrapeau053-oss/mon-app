@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import { loadCloudFragments, saveCloudFragments } from "@/lib/cloud-sync";
@@ -403,7 +404,7 @@ export default function Fragments() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
           <nav style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Link href="/" style={{ fontSize: 12, color: "var(--primary)" }}>← Atelier</Link>
+            <BackLink label="Système" />
             <Link href="/structure" style={{ fontSize: 12, color: "var(--primary)" }}>Structure →</Link>
             <Link href="/tableau" style={{ fontSize: 12, color: "var(--primary)" }}>Tableau →</Link>
             <Link href="/chronologie" style={{ fontSize: 12, color: "var(--primary)" }}>Chronologie →</Link>

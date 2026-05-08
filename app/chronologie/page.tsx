@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 
 type VueMode = "age" | "periode" | "annee";
@@ -164,7 +165,7 @@ export default function Chronologie() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Link href="/" style={{ fontSize: 12, color: "#8B7355" }}>← Atelier</Link>
+          <BackLink label="Système" />
           <Link href="/fragments" style={{ fontSize: 12, color: "#8B7355" }}>Coffre →</Link>
           <Link href="/structure" style={{ fontSize: 12, color: "#8B7355" }}>Structure →</Link>
           <Link href="/tableau" style={{ fontSize: 12, color: "#8B7355" }}>Tableau →</Link>

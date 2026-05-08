@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 
 type OptionGroup = "objectifs" | "tons" | "longueurs";
 
@@ -182,9 +182,7 @@ Génère un texte humain, émotionnel et fluide.
   return (
     <main style={{ margin: "0 auto", maxWidth: 620, padding: "18px 14px 28px" }}>
       <header style={{ marginBottom: 18 }}>
-        <Link href="/" style={{ color: "var(--text-muted)", fontSize: 11 }}>
-          ← Tableau de bord
-        </Link>
+        <BackLink label="Système" />
         <p className="label-meta" style={{ margin: "18px 0 6px" }}>
           MVP service
         </p>

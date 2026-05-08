@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 
 const TOMES_DEFAUT = [
@@ -103,7 +103,7 @@ export default function Lecture() {
 
       {/* Navigation fixe */}
       <div style={styles.fixedNav}>
-        <Link href="/structure" style={styles.quitter}>← Quitter</Link>
+        <BackLink label="Système" />
       </div>
 
       <div style={styles.colonne}>

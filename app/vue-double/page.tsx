@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { analyserTruthMode, type TruthModeResult, TRUTH_VIDE } from "@/app/lib/truth-mode";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 import {
@@ -115,7 +116,7 @@ export default function VueDouble() {
         background: "var(--bg-panel)", flexShrink: 0,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link href="/" style={{ fontSize: 12, color: "var(--primary)" }}>← Accueil</Link>
+          <BackLink label="Système" />
           <Link href="/atelier" style={{ fontSize: 12, color: "var(--primary)" }}>Atelier IA</Link>
           <span style={{ color: "var(--border-soft)" }}>|</span>
           <span style={{ fontSize: 13, color: "var(--text-soft)" }}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 
 export type ModuleField = {
   key: string;
@@ -154,7 +154,7 @@ export function SystemModulePage({ config }: { config: SystemModuleConfig }) {
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: "32px 24px 56px" }}>
       <header style={{ marginBottom: 28 }}>
-        <Link href="/" style={{ fontSize: 11, color: "var(--text-muted)" }}>← Tableau de bord</Link>
+        <BackLink label="Système" />
         <h1 style={{ fontSize: 28, fontStyle: "italic", color: "var(--primary)", margin: "8px 0 6px" }}>
           {config.title}
         </h1>

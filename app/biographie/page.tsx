@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import {
   type ProjetNarratif,
   type Tome,
@@ -69,7 +70,8 @@ export default function BiographiePage() {
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+      <BackLink label="Système" />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: 16, marginBottom: 20 }}>
         <div>
           {titreEditable ? (
             <input
@@ -96,7 +98,6 @@ export default function BiographiePage() {
               : `${prog.total} chapitre${prog.total > 1 ? "s" : ""} · ${prog.analyses} analysé${prog.analyses > 1 ? "s" : ""}`}
           </p>
         </div>
-        <Link href="/" style={{ fontSize: 12, color: "var(--primary)" }}>← Accueil</Link>
       </div>
 
       <div style={{ borderTop: "1px solid var(--border-soft)", marginBottom: 24 }} />

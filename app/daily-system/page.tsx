@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import {
   loadCloudDailySystemEntry,
   saveCloudDailySystemEntry,
@@ -264,9 +264,7 @@ export default function DailySystemPage() {
       }}
     >
       <header style={{ marginBottom: 14 }}>
-        <Link href="/" style={{ color: "var(--text-muted)", fontSize: 11 }}>
-          ← Tableau de bord
-        </Link>
+        <BackLink label="Système" />
         <p className="label-meta" style={{ margin: "18px 0 5px" }}>
           Aujourd’hui
         </p>

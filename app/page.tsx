@@ -7,51 +7,83 @@ const modules = [
   {
     title: "Écrire",
     description: "Travailler les souvenirs, les fragments et le manuscrit.",
+    short: "Souvenirs",
     href: "/atelier",
     icon: "✍",
     accent: "#d6b25e",
+    hover: "hover:border-[#d6b25e]/40 hover:bg-[#d6b25e]/10",
   },
   {
     title: "Tome 1",
     description: "Voir la structure, les blocs, les chapitres et la tension narrative.",
+    short: "Structure",
     href: "/structure-tome-1",
-    icon: "◇",
+    icon: "▱",
     accent: "#c89454",
+    hover: "hover:border-[#6f86a8]/45 hover:bg-[#6f86a8]/12",
+  },
+  {
+    title: "Manuscrit",
+    description: "Lire le livre comme un objet imprimé, avec pages et marges éditoriales.",
+    short: "Lecture",
+    href: "/manuscrit",
+    icon: "□",
+    accent: "#d6b25e",
+    hover: "hover:border-[#f5efe3]/45 hover:bg-[#f5efe3]/10",
+  },
+  {
+    title: "Scènes",
+    description: "Suivre les scènes, leur intensité et leur fonction narrative.",
+    short: "Architecture",
+    href: "/scenes",
+    icon: "▦",
+    accent: "#b8a8c8",
+    hover: "hover:border-[#b8a8c8]/45 hover:bg-[#b8a8c8]/12",
   },
   {
     title: "Détecteur de voix",
     description: "Repérer les traces IA, la perte de corps et les formulations trop lisses.",
+    short: "Justesse",
     href: "/detecteur-voix",
-    icon: "◌",
+    icon: "◎",
     accent: "#c9a84c",
+    hover: "hover:border-[#b8a4d9]/45 hover:bg-[#b8a4d9]/12",
   },
   {
     title: "Daily System",
     description: "Revenir au corps, aux priorités et à l’énergie du jour.",
+    short: "Aujourd’hui",
     href: "/daily-system",
     icon: "☉",
     accent: "#d6b25e",
+    hover: "hover:border-[#e5c86f]/45 hover:bg-[#e5c86f]/12",
   },
   {
     title: "L’autre rive",
     description: "Lire une situation relationnelle avec clarté.",
+    short: "Clarté",
     href: "/autre-rive",
     icon: "〰",
     accent: "#b8a06a",
+    hover: "hover:border-[#7fb0c8]/45 hover:bg-[#7fb0c8]/12",
   },
   {
     title: "Freelance",
     description: "Analyser une demande client, estimer un prix, répondre.",
+    short: "Clients",
     href: "/freelance",
     icon: "✦",
     accent: "#d6b25e",
+    hover: "hover:border-[#9caf88]/45 hover:bg-[#9caf88]/12",
   },
   {
     title: "Maison",
     description: "Organisation familiale, tâches et cadre quotidien.",
+    short: "Cadre",
     href: "/taches-menageres",
     icon: "⌂",
     accent: "#aa8f55",
+    hover: "hover:border-[#c98768]/45 hover:bg-[#c98768]/12",
   },
 ];
 
@@ -152,84 +184,80 @@ export default function HomePage() {
   );
 
   return (
-    <main className="min-h-screen bg-[#0f0d0a] pb-24 text-[#f5efe3]">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(214,178,94,0.16),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(245,239,227,0.08),transparent_28%)]" />
+    <main className="min-h-screen bg-[#0f0d0a] pb-14 text-[#f5efe3]">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(214,178,94,0.08),transparent_30%)]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex items-start justify-between gap-5 border-b border-[rgba(214,178,94,0.18)] pb-5">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-3 sm:px-5">
+        <header className="flex items-start justify-between gap-5 border-b border-[rgba(214,178,94,0.14)] pb-3">
           <div>
             <p className="text-sm font-semibold tracking-[0.08em] text-[#d6b25e]">✦ Mon Système</p>
             <p className="mt-1 text-xs text-[#b8aa91]">Espace personnel de Sylvie</p>
           </div>
-          <div className="rounded-full border border-[rgba(214,178,94,0.28)] bg-[#1b1712]/80 px-4 py-2 text-xs font-medium text-[#d6b25e] shadow-[0_18px_50px_rgba(0,0,0,0.25)]">
+          <div className="rounded-full border border-[rgba(214,178,94,0.18)] bg-[#15120e] px-3 py-1 text-[11px] font-medium text-[#c7ad6d]">
             Aujourd’hui
           </div>
         </header>
 
-        <section className="mt-7 overflow-hidden rounded-[28px] border border-[rgba(214,178,94,0.25)] bg-[#f5efe3] p-6 text-[#1b1712] shadow-[0_28px_90px_rgba(0,0,0,0.28)] sm:p-8 lg:p-10">
-          <div className="max-w-3xl">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#9a7b35]">
+        <section className="mt-3 overflow-hidden rounded-xl border border-[rgba(214,178,94,0.12)] bg-[#f5efe3] px-4 py-2.5 text-[#1b1712]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[#9a7b35]">
               Cockpit privé
-            </p>
-            <h1 className="text-4xl font-semibold leading-[0.96] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
-              Bonjour, Sylvie
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-[#6f6049] sm:text-lg">
-              Choisis l’espace dont tu as besoin aujourd’hui.
+              </p>
+              <h1 className="text-lg font-semibold leading-none tracking-[-0.03em] sm:text-xl">
+                Bonjour, Sylvie
+              </h1>
+            </div>
+            <p className="max-w-sm text-[11px] leading-4 text-[#6f6049]">
+              Choisis l’espace utile maintenant.
             </p>
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {modules.map((module) => (
             <Link
-              className={`group flex min-h-[190px] flex-col justify-between rounded-2xl border bg-[#0e0e0e] p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-yellow-500/60 hover:shadow-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d6b25e] ${
+              className={`group flex aspect-square flex-col items-center justify-center rounded-xl border bg-[#0e0e0e] p-3 text-center transition-all duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#d6b25e] ${module.hover} ${
                 module.title === "Écrire"
-                  ? "border-yellow-500/80 shadow-[0_0_25px_rgba(212,175,55,0.15)]"
-                  : "border-yellow-500/20 shadow-[0_20px_60px_rgba(0,0,0,0.22)]"
+                  ? "border-yellow-500/28"
+                  : "border-yellow-500/10"
               }`}
               href={module.href}
               key={module.title}
             >
-              <div>
-                <div
-                  className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border text-xl"
-                  style={{
-                    borderColor: "rgba(214,178,94,0.28)",
-                    color: module.accent,
-                    background: "rgba(214,178,94,0.08)",
-                  }}
-                >
-                  {module.icon}
-                </div>
-                <h2 className="text-xl font-semibold tracking-[-0.03em] text-[#f5efe3]">
-                  {module.title}
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-[#b8aa91]">{module.description}</p>
+              <div
+                className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border text-base transition-colors duration-200 group-hover:bg-[#0f0d0a]/25"
+                style={{
+                  borderColor: "rgba(214,178,94,0.16)",
+                  color: module.accent,
+                  background: "rgba(214,178,94,0.04)",
+                }}
+              >
+                {module.icon}
               </div>
-              <span className="mt-6 inline-flex items-center text-sm font-semibold text-[#d6b25e]">
-                Ouvrir
-                <span className="ml-2 transition group-hover:translate-x-1">→</span>
-              </span>
+              <h2 className="max-w-full truncate text-sm font-semibold tracking-[-0.015em] text-[#f5efe3]">
+                {module.title}
+              </h2>
+              <p className="mt-1 text-[10px] leading-4 text-[#9f927d]">{module.short}</p>
             </Link>
           ))}
         </section>
 
-        <section className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.72fr]">
-          <div className="rounded-[24px] border border-[rgba(214,178,94,0.22)] bg-[#1b1712] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#d6b25e]">
+        <section className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.34fr]">
+          <div className="rounded-xl border border-[rgba(214,178,94,0.14)] bg-[#15120e] p-2.5">
+            <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#c7ad6d]">
               État du système
             </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
               {dynamicSystemState.map((item) => (
                 <Link
-                  className="group rounded-2xl border border-[rgba(214,178,94,0.18)] bg-[#0f0d0a]/70 p-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-yellow-500/60 hover:shadow-[0_18px_44px_rgba(214,178,94,0.08)]"
+                  className="group rounded-lg border border-[rgba(214,178,94,0.12)] bg-[#0f0d0a]/70 px-2.5 py-2 transition-all duration-200 ease-out hover:border-yellow-500/30 hover:bg-[#14110d]"
                   href={item.href}
                   key={item.label}
                 >
-                  <p className="text-xs text-[#8d806b]">{item.label}</p>
-                  <p className="mt-2 text-sm font-semibold leading-5 text-[#f5efe3]">{item.value}</p>
-                  <p className="mt-3 text-[11px] font-semibold text-[#d6b25e]">
+                  <p className="text-[10px] text-[#8d806b]">{item.label}</p>
+                  <p className="mt-0.5 truncate text-[12px] font-semibold leading-4 text-[#f5efe3]">{item.value}</p>
+                  <p className="mt-1 line-clamp-1 text-[9px] font-semibold text-[#c7ad6d]">
                     {item.action}
                     <span className="ml-1 transition group-hover:translate-x-1">→</span>
                   </p>
@@ -238,14 +266,14 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-dashed border-[rgba(214,178,94,0.26)] bg-[#15120e] p-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#d6b25e]">
+          <div className="rounded-xl border border-dashed border-[rgba(214,178,94,0.16)] bg-[#12100d] p-2.5">
+            <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#c7ad6d]">
               Ressources Québec
             </p>
-            <p className="mt-3 text-sm leading-6 text-[#b8aa91]">
+            <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-[#9f927d]">
               Espace à connecter pour regrouper les liens, contacts et repères utiles.
             </p>
-            <span className="mt-5 inline-flex rounded-full border border-[rgba(214,178,94,0.25)] px-4 py-2 text-xs text-[#b8aa91]">
+            <span className="mt-1.5 inline-flex rounded-full border border-[rgba(214,178,94,0.16)] px-2 py-0.5 text-[10px] text-[#9f927d]">
               Module à venir
             </span>
           </div>

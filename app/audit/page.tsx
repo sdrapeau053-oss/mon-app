@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 
 // ── Constantes lexicales ──────────────────────────────────────────────────
@@ -641,7 +642,7 @@ export default function Audit() {
           </p>
         </div>
         <nav style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Link href="/" style={{ fontSize: 12, color: "var(--primary)" }}>← Atelier</Link>
+          <BackLink label="Système" />
           <Link href="/fragments" style={{ fontSize: 12, color: "var(--primary)" }}>Coffre →</Link>
           <Link href="/structure" style={{ fontSize: 12, color: "var(--primary)" }}>Structure →</Link>
           <Link href="/lecture" style={{ fontSize: 12, color: "var(--primary)" }}>Lecture →</Link>

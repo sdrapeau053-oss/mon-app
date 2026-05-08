@@ -1,3 +1,4 @@
+import { BackLink } from "@/components/ui/back-link";
 import Link from "next/link";
 
 const hubCards = [
@@ -37,19 +38,14 @@ export default function AutreRiveHubPage() {
   return (
     <main className="min-h-screen bg-[#14110f] px-4 py-5 text-[#f7efe4]">
       <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-4xl flex-col">
-        <header className="mb-8 flex items-center justify-between gap-4">
+        <header className="mb-8">
+          <BackLink label="Système" />
           <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-[#c6a96b]">
+            <p className="mb-2 mt-5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#c6a96b]">
               Hub relationnel
             </p>
             <h1 className="text-3xl font-semibold tracking-[-0.04em]">L’autre rive</h1>
           </div>
-          <Link
-            className="rounded-full border border-[#4a4038] bg-[#211c18] px-4 py-2 text-sm font-semibold text-[#f7efe4]"
-            href="/"
-          >
-            Retour
-          </Link>
         </header>
 
         <section className="mb-7 rounded-[28px] border border-[#3d342e] bg-[#1b1613] p-6 shadow-2xl shadow-black/20">

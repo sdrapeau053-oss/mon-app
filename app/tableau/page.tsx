@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 
 const TOMES_DEFAUT = [
@@ -168,7 +169,7 @@ export default function Tableau() {
           <p style={{ fontSize: 12, color: "#999" }}>Tableau de bord</p>
         </div>
         <div style={{ display: "flex", gap: 16 }}>
-          <Link href="/" style={{ fontSize: 12, color: "#8B7355" }}>← Atelier</Link>
+          <BackLink label="Système" />
           <Link href="/fragments" style={{ fontSize: 12, color: "#8B7355" }}>Coffre →</Link>
           <Link href="/structure" style={{ fontSize: 12, color: "#8B7355" }}>Structure →</Link>
           <Link href="/chronologie" style={{ fontSize: 12, color: "#8B7355" }}>Chronologie →</Link>
