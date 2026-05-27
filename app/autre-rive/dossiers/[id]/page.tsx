@@ -1865,7 +1865,24 @@ export default function RelationDossierDetailPage() {
           <>
         <SystemPanel ariaLabel="Synthèse relationnelle globale" compact>
           <div style={{ border: "1px solid rgba(201,168,92,.38)", borderRadius: 18, display: "grid", gap: 14, padding: 16 }}>
-            <SystemSectionHeader eyebrow="Vue d'ensemble" title="Synthèse relationnelle" />
+            <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <SystemSectionHeader eyebrow="Vue d'ensemble" title="Synthèse relationnelle" />
+              <Link
+                href={`/autre-rive/dossiers/${dossier.id}/timeline`}
+                style={{
+                  background: "rgba(201,168,92,.15)",
+                  border: "1px solid rgba(201,168,92,.4)",
+                  borderRadius: 999,
+                  color: "var(--accent-gold, #c9a85c)",
+                  fontSize: 12,
+                  padding: "6px 14px",
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Voir la chronologie
+              </Link>
+            </div>
             <p className="editorial-body" style={{ margin: 0 }}>
               Vue d&apos;ensemble de cette relation.
             </p>
