@@ -17,18 +17,21 @@ type GhostwritingState = { clientText: string; objectifs: string[]; tons: string
 type CalcState = { offre: string; prix: number; taux: number; objectif: number; jours: number; };
 type Mode500State = { objectif: number; jours: number; competences: string; tempsParJour: string; contexte: string; };
 type PlanHistorique = { id: string; date: string; resume: string; contenu: string; };
+type Offre = { id: string; nom: string; prix: number; description: string; canal: string; ventes: number; actif: boolean; };
 
 const FL_SPRINT = "strate_fl_sprint";
 const FL_PROSPECTS = "strate_fl_prospects";
 const FL_CALC = "strate_fl_calc";
 const FL_MODE500 = "strate_fl_mode500";
 const FL_HISTORY = "freelance-mode-500-history";
+const FL_OFFERS = "strate_fl_offers";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 const defaultSprint: SprintActif = { objectif: 500, dateDebut: new Date().toISOString().split("T")[0], revenusEncaisses: 0, revenusAttente: 0, prospectsContactes: 0, clientsObtenus: 0 };
 const defaultState: GhostwritingState = { clientText: "", objectifs: [], tons: [], longueurs: [] };
 const defaultCalc: CalcState = { offre: "", prix: 150, taux: 10, objectif: 500, jours: 5 };
 const defaultMode500: Mode500State = { objectif: 500, jours: 5, competences: "", tempsParJour: "", contexte: "" };
+const defaultOffre: Omit<Offre, "id"> = { nom: "", prix: 0, description: "", canal: "", ventes: 0, actif: true };
 
 const options = {
   objectifs: ["raconter une histoire personnelle", "clarifier un message", "ecrire un texte emotionnel"],
@@ -229,6 +232,160 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
   );
 }
 
+function BibliothequeOffresPanel({ offres, onUpdate }: { offres: Offre[]; onUpdate: (o: Offre[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<Omit<Offre, "id">>(defaultOffre);
+
+  const totalRevenu = offres.reduce((acc, o) => acc + o.prix * o.ventes, 0);
+  const totalVentes = offres.reduce((acc, o) => acc + o.ventes, 0);
+  const actives = offres.filter((o) => o.actif).length;
+
+  function ouvrirAjout() {
+    setEditId(null);
+    setForm(defaultOffre);
+    setOpen(true);
+  }
+
+  function ouvrirEdition(o: Offre) {
+    setEditId(o.id);
+    setForm({ nom: o.nom, prix: o.prix, description: o.description, canal: o.canal, ventes: o.ventes, actif: o.actif });
+    setOpen(true);
+  }
+
+  function sauvegarder() {
+    if (form.nom.trim() === "") return;
+    if (editId !== null) {
+      onUpdate(offres.map((o) => o.id === editId ? { ...o, ...form } : o));
+    } else {
+      onUpdate([{ id: genId(), ...form }, ...offres]);
+    }
+    setOpen(false);
+    setEditId(null);
+    setForm(defaultOffre);
+  }
+
+  function supprimer(id: string) {
+    onUpdate(offres.filter((o) => o.id !== id));
+  }
+
+  function toggleActif(id: string) {
+    onUpdate(offres.map((o) => o.id === id ? { ...o, actif: !o.actif } : o));
+  }
+
+  function incrementerVentes(id: string) {
+    onUpdate(offres.map((o) => o.id === id ? { ...o, ventes: o.ventes + 1 } : o));
+  }
+
+  return (
+    <SystemPanel ariaLabel="Bibliotheque offres" compact>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: offres.length > 0 ? 10 : 0 }}>
+        <div>
+          <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Bibliotheque des offres</p>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 0" }}>{offres.length} offre{offres.length > 1 ? "s" : ""} · {actives} active{actives > 1 ? "s" : ""}</p>
+        </div>
+        <button className="soft-button" type="button" onClick={ouvrirAjout} style={{ fontSize: 11, padding: "2px 8px" }}>+ Ajouter</button>
+      </div>
+
+      {offres.length > 0 ? (
+        <SystemGrid gap={8} min={110}>
+          <CompactMetric label="Revenu total" value={totalRevenu + " $"} />
+          <CompactMetric label="Ventes totales" value={String(totalVentes)} />
+          <CompactMetric label="Offres actives" value={String(actives)} />
+        </SystemGrid>
+      ) : null}
+
+      {open ? (
+        <div style={{ marginTop: 12, padding: "12px", background: "rgba(201,168,92,0.06)", borderRadius: 8, border: "1px solid rgba(201,168,92,0.18)" }}>
+          <p className="label-meta" style={{ margin: "0 0 10px", fontSize: 12 }}>{editId !== null ? "Modifier l offre" : "Nouvelle offre"}</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Nom *</p>
+              <input type="text" placeholder="ex: Revision de CV" value={form.nom}
+                onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Prix ($)</p>
+              <input type="number" min={0} value={form.prix}
+                onChange={(e) => setForm((f) => ({ ...f, prix: Number(e.target.value) }))}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Ventes realisees</p>
+              <input type="number" min={0} value={form.ventes}
+                onChange={(e) => setForm((f) => ({ ...f, ventes: Number(e.target.value) }))}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Canal principal</p>
+              <input type="text" placeholder="ex: Facebook, reseau, LinkedIn" value={form.canal}
+                onChange={(e) => setForm((f) => ({ ...f, canal: e.target.value }))}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Description (optionnel)</p>
+              <textarea placeholder="Ce que tu livres, le delai, pour qui..." value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 12, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)", minHeight: 60, resize: "vertical" }}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" id="actif-check" checked={form.actif} onChange={(e) => setForm((f) => ({ ...f, actif: e.target.checked }))} />
+              <label htmlFor="actif-check" style={{ fontSize: 12, color: "var(--text-soft)", cursor: "pointer" }}>Offre active</label>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-primary" type="button" onClick={sauvegarder} style={{ flex: 1, padding: "6px", fontSize: 13 }}>Sauvegarder</button>
+            <button className="btn-ghost" type="button" onClick={() => { setOpen(false); setEditId(null); setForm(defaultOffre); }} style={{ padding: "6px 14px", fontSize: 13 }}>Annuler</button>
+          </div>
+        </div>
+      ) : null}
+
+      {offres.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+          {offres.map((o) => (
+            <div key={o.id} style={{ padding: "10px 12px", background: o.actif ? "rgba(255,250,238,0.04)" : "rgba(255,255,255,0.01)", border: "1px solid " + (o.actif ? "rgba(201,168,92,0.18)" : "rgba(201,168,92,0.07)"), borderRadius: 8, opacity: o.actif ? 1 : 0.6 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-main)" }}>{o.nom}</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-soft)" }}>{o.prix} $</span>
+                    {o.canal !== "" ? <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{o.canal}</span> : null}
+                    <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 99, background: o.actif ? "rgba(29,158,117,0.15)" : "rgba(136,135,128,0.15)", color: o.actif ? "#1D9E75" : "#888780", border: "1px solid " + (o.actif ? "rgba(29,158,117,0.3)" : "rgba(136,135,128,0.3)") }}>
+                      {o.actif ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  {o.description !== "" ? <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "4px 0 0", lineHeight: 1.5 }}>{o.description}</p> : null}
+                </div>
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                  <button type="button" onClick={() => ouvrirEdition(o)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.3)", background: "transparent", color: "var(--text-soft)", cursor: "pointer" }}>Modifier</button>
+                  <button type="button" onClick={() => toggleActif(o.id)} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.2)", background: "transparent", color: "var(--text-muted)", cursor: "pointer" }}>{o.actif ? "Desactiver" : "Activer"}</button>
+                  <button type="button" onClick={() => supprimer(o.id)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, border: "1px solid rgba(216,90,48,0.3)", background: "transparent", color: "#D85A30", cursor: "pointer" }}>x</button>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <SystemGrid gap={8} min={100}>
+                  <CompactMetric label="Ventes" value={String(o.ventes)} />
+                  <CompactMetric label="Revenu genere" value={(o.prix * o.ventes) + " $"} />
+                  <CompactMetric label="Prix unitaire" value={o.prix + " $"} />
+                </SystemGrid>
+                <button type="button" onClick={() => incrementerVentes(o.id)} title="Ajouter une vente" style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(29,158,117,0.4)", background: "rgba(29,158,117,0.08)", color: "#1D9E75", cursor: "pointer", flexShrink: 0 }}>+1 vente</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "10px 0 0" }}>Aucune offre encore. Ajoute ta premiere offre pour suivre tes ventes.</p>
+      )}
+    </SystemPanel>
+  );
+}
+
 function CalculateurPanel({ calc, onUpdate }: { calc: CalcState; onUpdate: (c: CalcState) => void }) {
   const res = calculerResultats(calc);
   return (
@@ -283,9 +440,7 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
   const [copiedId, setCopiedId] = useState("");
   const [confirmerEffacement, setConfirmerEffacement] = useState(false);
 
-  useEffect(() => {
-    setHistorique(lireLS<PlanHistorique[]>(FL_HISTORY, []));
-  }, []);
+  useEffect(() => { setHistorique(lireLS<PlanHistorique[]>(FL_HISTORY, [])); }, []);
 
   function sauvegarderDansHistorique(contenu: string) {
     const resume = mode500.competences.slice(0, 60) + (mode500.competences.length > 60 ? "..." : "") + " — " + mode500.objectif + " $ / " + mode500.jours + "j";
@@ -318,11 +473,7 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
     setLoading(true); setErreur(""); setResultat("");
     const prompt = "Tu es un consultant en revenus freelance pour le marche quebecois francophone 2026. Mode verite brutale uniquement.\n\nPROFIL:\n- Objectif: " + mode500.objectif + " $ en " + mode500.jours + " jours\n- Competences: " + mode500.competences + "\n- Temps disponible: " + (mode500.tempsParJour || "non precise") + " par jour\n- Contexte: " + (mode500.contexte || "aucun contexte additionnel") + "\n\nReponds EXACTEMENT dans ce format avec ces balises:\n\n[ANALYSE]\nObjectif: " + mode500.objectif + " $ en " + mode500.jours + " jours\nDifficulte: (faible/moyenne/elevee)\nFaisabilite: (0-100%)\nRaison principale: (1 phrase brutale et honnete)\n[/ANALYSE]\n\n[OFFRES]\nOFFRE 1: (nom)\nPrix recommande: (montant $)\nDifficulte de vente: (faible/moyenne/elevee)\nVitesse de vente: (rapide/moyenne/lente)\nScore: (0-100)/100\nJustification: (1 phrase)\n\nOFFRE 2: (nom)\nPrix recommande: (montant $)\nDifficulte de vente: (faible/moyenne/elevee)\nVitesse de vente: (rapide/moyenne/lente)\nScore: (0-100)/100\nJustification: (1 phrase)\n\nOFFRE 3: (nom)\nPrix recommande: (montant $)\nDifficulte de vente: (faible/moyenne/elevee)\nVitesse de vente: (rapide/moyenne/lente)\nScore: (0-100)/100\nJustification: (1 phrase)\n[/OFFRES]\n\n[MATHS]\nOffre retenue: (nom)\nPrix: (montant $)\nVentes necessaires: (nombre)\nProspects necessaires: (nombre)\nProspects par jour: (nombre)\nRevenu projete si 10% conversion: (montant $)\nRevenu projete si 15% conversion: (montant $)\n[/MATHS]\n\n[PLAN]\nJ1: (3 actions concretes avec canaux precis)\nJ2: (3 actions concretes)\nJ3: (3 actions concretes)\nJ4: (3 actions concretes)\nJ5: (3 actions concretes)\n[/PLAN]\n\n[SCRIPTS]\nPREMIER CONTACT:\n(message pret a envoyer, ton humain, max 5 lignes)\n\nRELANCE:\n(message de suivi si pas de reponse apres 48h)\n\nFERMETURE:\n(message de conversion quand prospect est interesse)\n[/SCRIPTS]";
     try {
-      const resp = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: prompt }),
-      });
+      const resp = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: prompt }) });
       const data = await resp.json();
       if (resp.ok) {
         const contenu = data.result || "";
@@ -342,9 +493,7 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
           <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Mode 500 $ en 5 jours</p>
           <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 0" }}>Plan complet genere par IA · {historique.length} plan{historique.length > 1 ? "s" : ""} sauvegarde{historique.length > 1 ? "s" : ""}</p>
         </div>
-        <button className="soft-button" type="button" onClick={() => setOpen(open ? false : true)} style={{ fontSize: 11, padding: "2px 10px" }}>
-          {open ? "Reduire" : "Ouvrir"}
-        </button>
+        <button className="soft-button" type="button" onClick={() => setOpen(open ? false : true)} style={{ fontSize: 11, padding: "2px 10px" }}>{open ? "Reduire" : "Ouvrir"}</button>
       </div>
 
       {open ? (
@@ -352,72 +501,38 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             <div>
               <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Objectif ($)</p>
-              <input type="number" min={1} value={mode500.objectif}
-                onChange={(e) => onUpdate({ ...mode500, objectif: Number(e.target.value) })}
-                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
-              />
+              <input type="number" min={1} value={mode500.objectif} onChange={(e) => onUpdate({ ...mode500, objectif: Number(e.target.value) })} style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }} />
             </div>
             <div>
               <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Jours disponibles</p>
-              <input type="number" min={1} max={30} value={mode500.jours}
-                onChange={(e) => onUpdate({ ...mode500, jours: Number(e.target.value) })}
-                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
-              />
+              <input type="number" min={1} max={30} value={mode500.jours} onChange={(e) => onUpdate({ ...mode500, jours: Number(e.target.value) })} style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }} />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Competences disponibles *</p>
-              <input type="text" placeholder="ex: redaction, revision, lettres formelles..." value={mode500.competences}
-                onChange={(e) => onUpdate({ ...mode500, competences: e.target.value })}
-                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
-              />
+              <input type="text" placeholder="ex: redaction, revision, lettres formelles..." value={mode500.competences} onChange={(e) => onUpdate({ ...mode500, competences: e.target.value })} style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }} />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Temps disponible par jour</p>
-              <input type="text" placeholder="ex: 4h le matin, 2h le soir" value={mode500.tempsParJour}
-                onChange={(e) => onUpdate({ ...mode500, tempsParJour: e.target.value })}
-                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
-              />
+              <input type="text" placeholder="ex: 4h le matin, 2h le soir" value={mode500.tempsParJour} onChange={(e) => onUpdate({ ...mode500, tempsParJour: e.target.value })} style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }} />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Contexte libre (optionnel)</p>
-              <textarea placeholder="ex: zero client actif, reseau dormant, a Drummondville..." value={mode500.contexte}
-                onChange={(e) => onUpdate({ ...mode500, contexte: e.target.value })}
-                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)", minHeight: 70, resize: "vertical" }}
-              />
+              <textarea placeholder="ex: zero client actif, reseau dormant, a Drummondville..." value={mode500.contexte} onChange={(e) => onUpdate({ ...mode500, contexte: e.target.value })} style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)", minHeight: 70, resize: "vertical" }} />
             </div>
           </div>
-
-          <button className="btn-primary" type="button" onClick={generer} disabled={loading} style={{ width: "100%", padding: "8px", fontSize: 14 }}>
-            {loading ? "Generation en cours..." : "Generer mon plan"}
-          </button>
-
-          {loading ? (
-            <div style={{ marginTop: 12, padding: "12px", background: "rgba(201,168,92,0.06)", borderRadius: 8, textAlign: "center" }}>
-              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Analyse en cours... (15 a 30 secondes)</p>
-            </div>
-          ) : null}
-
-          {erreur !== "" ? (
-            <div style={{ marginTop: 12, padding: "10px 12px", background: "rgba(216,90,48,0.08)", border: "1px solid rgba(216,90,48,0.3)", borderRadius: 8 }}>
-              <p style={{ fontSize: 13, color: "#D85A30", margin: 0 }}>{erreur}</p>
-            </div>
-          ) : null}
-
+          <button className="btn-primary" type="button" onClick={generer} disabled={loading} style={{ width: "100%", padding: "8px", fontSize: 14 }}>{loading ? "Generation en cours..." : "Generer mon plan"}</button>
+          {loading ? <div style={{ marginTop: 12, padding: "12px", background: "rgba(201,168,92,0.06)", borderRadius: 8, textAlign: "center" }}><p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Analyse en cours... (15 a 30 secondes)</p></div> : null}
+          {erreur !== "" ? <div style={{ marginTop: 12, padding: "10px 12px", background: "rgba(216,90,48,0.08)", border: "1px solid rgba(216,90,48,0.3)", borderRadius: 8 }}><p style={{ fontSize: 13, color: "#D85A30", margin: 0 }}>{erreur}</p></div> : null}
           {sections.length > 0 ? (
             <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
               {sections.map((sec) => (
                 <div key={sec.tag} style={{ borderRadius: 8, border: "1px solid " + sec.couleur + "33", overflow: "hidden" }}>
-                  <div style={{ padding: "8px 12px", background: sec.couleur + "18", borderBottom: "1px solid " + sec.couleur + "22" }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: sec.couleur, margin: 0 }}>{sec.titre}</p>
-                  </div>
-                  <div style={{ padding: "10px 12px" }}>
-                    <p style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{sec.contenu}</p>
-                  </div>
+                  <div style={{ padding: "8px 12px", background: sec.couleur + "18", borderBottom: "1px solid " + sec.couleur + "22" }}><p style={{ fontSize: 12, fontWeight: 600, color: sec.couleur, margin: 0 }}>{sec.titre}</p></div>
+                  <div style={{ padding: "10px 12px" }}><p style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{sec.contenu}</p></div>
                 </div>
               ))}
             </div>
           ) : null}
-
           {historique.length > 0 ? (
             <div style={{ marginTop: 18, borderTop: "1px solid rgba(201,168,92,0.15)", paddingTop: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -468,6 +583,7 @@ export default function FreelancePage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
+  const [offres, setOffres] = useState<Offre[]>([]);
   const qa = analyserProjet(form.clientText);
 
   useEffect(() => { setForm(lireSauvegarde()); }, []);
@@ -477,11 +593,13 @@ export default function FreelancePage() {
     setProspects(lireLS<Prospect[]>(FL_PROSPECTS, []));
     setCalc(lireLS(FL_CALC, defaultCalc));
     setMode500(lireLS(FL_MODE500, defaultMode500));
+    setOffres(lireLS<Offre[]>(FL_OFFERS, []));
   }, []);
   useEffect(() => { ecrireLS(FL_SPRINT, sprint); }, [sprint]);
   useEffect(() => { ecrireLS(FL_PROSPECTS, prospects); }, [prospects]);
   useEffect(() => { ecrireLS(FL_CALC, calc); }, [calc]);
   useEffect(() => { ecrireLS(FL_MODE500, mode500); }, [mode500]);
+  useEffect(() => { ecrireLS(FL_OFFERS, offres); }, [offres]);
 
   function toggleOpt(group: OptionGroup, value: string) {
     setForm((c) => ({ ...c, [group]: c[group].includes(value) ? c[group].filter((i) => i !== value) : [value] }));
@@ -492,10 +610,7 @@ export default function FreelancePage() {
     if (txt === "") { setGenerationError("Colle un texte avant de generer."); return; }
     setCopied(false); setGenerationError(""); setIsGenerating(true);
     try {
-      const resp = await fetch("/api/agent", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Tu es un expert en ghostwriting narratif.\n\nMessage client :\n" + txt + "\n\nObjectif : " + (form.objectifs[0] || "clarifier") + "\nTon : " + (form.tons[0] || "professionnel") + "\nLongueur : " + (form.longueurs[0] || "moyen") + "\n\nGenere un texte humain et fluide." }),
-      });
+      const resp = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Tu es un expert en ghostwriting narratif.\n\nMessage client :\n" + txt + "\n\nObjectif : " + (form.objectifs[0] || "clarifier") + "\nTon : " + (form.tons[0] || "professionnel") + "\nLongueur : " + (form.longueurs[0] || "moyen") + "\n\nGenere un texte humain et fluide." }) });
       const data = await resp.json();
       if (resp.ok) { setResult(data.result || ""); }
       else { setGenerationError(data.error || "Erreur generation"); }
@@ -523,6 +638,7 @@ export default function FreelancePage() {
           <CRMPanel prospects={prospects} onUpdate={setProspects} />
         </div>
 
+        <BibliothequeOffresPanel offres={offres} onUpdate={setOffres} />
         <CalculateurPanel calc={calc} onUpdate={setCalc} />
         <Mode500Panel mode500={mode500} onUpdate={setMode500} />
 
