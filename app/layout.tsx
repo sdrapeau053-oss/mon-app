@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import ContinuityTracker from "@/components/ContinuityTracker";
 import FloatingBackupManager from "@/components/FloatingBackupManager";
-import GlobalNavigation from "@/components/GlobalNavigation";
 import LanguageToggle from "@/components/LanguageToggle";
 import { LanguageProvider } from "@/lib/LanguageContext";
+import ConditionalNav from "@/components/ConditionalNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "L’Héritage des Silences — Atelier",
-  description: "Atelier d’écriture et structure du manuscrit",
+  title: "L'Héritage des Silences — Atelier",
+  description: "Atelier d'écriture et structure du manuscrit",
 };
 
 export default function RootLayout({
@@ -20,7 +20,7 @@ export default function RootLayout({
     <html lang="fr">
       <body>
         <LanguageProvider>
-          <GlobalNavigation />
+          <ConditionalNav />
           <ContinuityTracker />
           <div className="app-page-motion">{children}</div>
           <FloatingBackupManager />
