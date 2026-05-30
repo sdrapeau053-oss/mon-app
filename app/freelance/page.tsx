@@ -14,12 +14,22 @@ type Prospect = { id: string; nom: string; canal: string; offre: string; statut:
 type SprintActif = { objectif: number; dateDebut: string; revenusEncaisses: number; revenusAttente: number; prospectsContactes: number; clientsObtenus: number; };
 type OptionGroup = "objectifs" | "tons" | "longueurs";
 type GhostwritingState = { clientText: string; objectifs: string[]; tons: string[]; longueurs: string[]; };
+type CalcState = { offre: string; prix: number; taux: number; objectif: number; jours: number; };
+type Mode500State = { objectif: number; jours: number; competences: string; tempsParJour: string; contexte: string; };
+type PlanHistorique = { id: string; date: string; resume: string; contenu: string; };
 
 const FL_SPRINT = "strate_fl_sprint";
 const FL_PROSPECTS = "strate_fl_prospects";
+const FL_CALC = "strate_fl_calc";
+const FL_MODE500 = "strate_fl_mode500";
+const FL_HISTORY = "freelance-mode-500-history";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
+
 const defaultSprint: SprintActif = { objectif: 500, dateDebut: new Date().toISOString().split("T")[0], revenusEncaisses: 0, revenusAttente: 0, prospectsContactes: 0, clientsObtenus: 0 };
 const defaultState: GhostwritingState = { clientText: "", objectifs: [], tons: [], longueurs: [] };
+const defaultCalc: CalcState = { offre: "", prix: 150, taux: 10, objectif: 500, jours: 5 };
+const defaultMode500: Mode500State = { objectif: 500, jours: 5, competences: "", tempsParJour: "", contexte: "" };
+
 const options = {
   objectifs: ["raconter une histoire personnelle", "clarifier un message", "ecrire un texte emotionnel"],
   tons: ["intime", "professionnel", "litteraire"],
@@ -32,6 +42,13 @@ const STATUTS = [
   { value: "devis_envoye" as StatutProspect, label: "Devis envoye", color: "#7F77DD" },
   { value: "gagne" as StatutProspect, label: "Gagne", color: "#1D9E75" },
   { value: "perdu" as StatutProspect, label: "Perdu", color: "#D85A30" },
+];
+const SECTION_MAP = [
+  { tag: "ANALYSE", titre: "Analyse", couleur: "#3B8BD4" },
+  { tag: "OFFRES", titre: "Top 3 offres", couleur: "#BA7517" },
+  { tag: "MATHS", titre: "Mathematiques", couleur: "#7F77DD" },
+  { tag: "PLAN", titre: "Plan J1 a J5", couleur: "#1D9E75" },
+  { tag: "SCRIPTS", titre: "Scripts", couleur: "#888780" },
 ];
 
 function lireLS<T>(key: string, fallback: T): T {
@@ -57,6 +74,19 @@ function calculerKPIs(s: SprintActif) {
   const joursRestants = Math.max(0, 5 - joursEcoules);
   return { taux, prob, manque, joursRestants };
 }
+function calculerResultats(c: CalcState) {
+  if (c.prix <= 0 || c.taux <= 0 || c.jours <= 0) return null;
+  const ventes = Math.ceil(c.objectif / c.prix);
+  const prospects = Math.ceil(ventes / (c.taux / 100));
+  const parJour = Math.ceil(prospects / c.jours);
+  const faisable = parJour <= 20;
+  let justification = "";
+  if (faisable && parJour <= 5) justification = "Tres realiste. Moins de 5 messages par jour.";
+  else if (faisable && parJour <= 10) justification = "Realiste. Environ " + parJour + " messages par jour.";
+  else if (faisable) justification = "Exigeant mais possible. " + parJour + " contacts par jour.";
+  else justification = "Irrealiste a ce taux. Augmente le prix ou le taux de conversion.";
+  return { ventes, prospects, parJour, faisable, justification };
+}
 function genId(): string { return "p_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7); }
 function analyserProjet(t: string) {
   const n = t.trim().length;
@@ -71,6 +101,29 @@ function lireSauvegarde(): GhostwritingState {
     return saved ? { ...defaultState, ...JSON.parse(saved) } : defaultState;
   } catch { return defaultState; }
 }
+function parseSections(text: string) {
+  const results: { tag: string; titre: string; couleur: string; contenu: string }[] = [];
+  for (const s of SECTION_MAP) {
+    const open = "[" + s.tag + "]";
+    const close = "[/" + s.tag + "]";
+    const i1 = text.indexOf(open);
+    const i2 = text.indexOf(close);
+    if (i1 >= 0 && i2 > i1) {
+      results.push({ tag: s.tag, titre: s.titre, couleur: s.couleur, contenu: text.slice(i1 + open.length, i2).trim() });
+    }
+  }
+  if (results.length === 0 && text.trim().length > 0) {
+    results.push({ tag: "RAW", titre: "Resultat", couleur: "#888780", contenu: text.trim() });
+  }
+  return results;
+}
+function formaterDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const mois = ["jan", "fev", "mar", "avr", "mai", "jun", "jul", "aou", "sep", "oct", "nov", "dec"];
+    return d.getDate() + " " + mois[d.getMonth()] + " " + d.getFullYear() + " " + String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0");
+  } catch { return iso; }
+}
 
 function SprintPanel({ sprint, onUpdate }: { sprint: SprintActif; onUpdate: (s: SprintActif) => void }) {
   const kpis = calculerKPIs(sprint);
@@ -82,9 +135,7 @@ function SprintPanel({ sprint, onUpdate }: { sprint: SprintActif; onUpdate: (s: 
     <SystemPanel ariaLabel="Sprint" compact>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Sprint · {kpis.joursRestants}j</p>
-        <button className="soft-button" type="button" onClick={() => setEditing(editing ? false : true)} style={{ fontSize: 11, padding: "2px 8px" }}>
-          {editing ? "Fermer" : "Modifier"}
-        </button>
+        <button className="soft-button" type="button" onClick={() => setEditing(editing ? false : true)} style={{ fontSize: 11, padding: "2px 8px" }}>{editing ? "Fermer" : "Modifier"}</button>
       </div>
       <SystemGrid gap={8} min={90}>
         <CompactMetric label="Encaisse" value={sprint.revenusEncaisses + " $"} />
@@ -178,6 +229,233 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
   );
 }
 
+function CalculateurPanel({ calc, onUpdate }: { calc: CalcState; onUpdate: (c: CalcState) => void }) {
+  const res = calculerResultats(calc);
+  return (
+    <SystemPanel ariaLabel="Calculateur" compact>
+      <p className="label-meta" style={{ margin: "0 0 10px" }}>Calculateur — Faisabilite</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Nom de l offre</p>
+          <input type="text" placeholder="ex: Revision de CV" value={calc.offre}
+            onChange={(e) => onUpdate({ ...calc, offre: e.target.value })}
+            style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+          />
+        </div>
+        {([
+          { key: "prix" as keyof CalcState, label: "Prix par vente ($)", min: 1 },
+          { key: "taux" as keyof CalcState, label: "Taux conversion (%)", min: 1 },
+          { key: "objectif" as keyof CalcState, label: "Objectif ($)", min: 1 },
+          { key: "jours" as keyof CalcState, label: "Jours disponibles", min: 1 },
+        ]).map(({ key, label, min }) => (
+          <div key={key}>
+            <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>{label}</p>
+            <input type="number" min={min} value={calc[key] as number}
+              onChange={(e) => onUpdate({ ...calc, [key]: Math.max(min, Number(e.target.value)) })}
+              style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+            />
+          </div>
+        ))}
+      </div>
+      {res !== null ? (
+        <div style={{ borderTop: "1px solid rgba(201,168,92,0.15)", paddingTop: 12 }}>
+          <SystemGrid gap={8} min={110}>
+            <CompactMetric label="Ventes requises" value={String(res.ventes)} />
+            <CompactMetric label="Prospects" value={String(res.prospects)} />
+            <CompactMetric label="Par jour" value={res.parJour + " / j"} />
+          </SystemGrid>
+          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: res.faisable ? "rgba(29,158,117,0.1)" : "rgba(216,90,48,0.1)", border: "1px solid " + (res.faisable ? "rgba(29,158,117,0.3)" : "rgba(216,90,48,0.3)") }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: res.faisable ? "#1D9E75" : "#D85A30" }}>{res.faisable ? "OUI — Faisable" : "NON — Irrealiste"}</span>
+            <p style={{ fontSize: 12, color: "var(--text-soft)", margin: "4px 0 0" }}>{res.justification}</p>
+          </div>
+        </div>
+      ) : null}
+    </SystemPanel>
+  );
+}
+
+function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: (m: Mode500State) => void }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [erreur, setErreur] = useState("");
+  const [resultat, setResultat] = useState("");
+  const [historique, setHistorique] = useState<PlanHistorique[]>([]);
+  const [copiedId, setCopiedId] = useState("");
+  const [confirmerEffacement, setConfirmerEffacement] = useState(false);
+
+  useEffect(() => {
+    setHistorique(lireLS<PlanHistorique[]>(FL_HISTORY, []));
+  }, []);
+
+  function sauvegarderDansHistorique(contenu: string) {
+    const resume = mode500.competences.slice(0, 60) + (mode500.competences.length > 60 ? "..." : "") + " — " + mode500.objectif + " $ / " + mode500.jours + "j";
+    const entree: PlanHistorique = { id: genId(), date: new Date().toISOString(), resume, contenu };
+    const updated = [entree, ...historique].slice(0, 5);
+    setHistorique(updated);
+    ecrireLS(FL_HISTORY, updated);
+  }
+
+  function supprimerEntree(id: string) {
+    const updated = historique.filter((h) => h.id !== id);
+    setHistorique(updated);
+    ecrireLS(FL_HISTORY, updated);
+  }
+
+  function effacerTout() {
+    setHistorique([]);
+    ecrireLS(FL_HISTORY, []);
+    setConfirmerEffacement(false);
+  }
+
+  async function copierTexte(texte: string, id: string) {
+    await navigator.clipboard.writeText(texte);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(""), 1400);
+  }
+
+  async function generer() {
+    if (mode500.competences.trim() === "") { setErreur("Indique au moins une competence."); return; }
+    setLoading(true); setErreur(""); setResultat("");
+    const prompt = "Tu es un consultant en revenus freelance pour le marche quebecois francophone 2026. Mode verite brutale uniquement.\n\nPROFIL:\n- Objectif: " + mode500.objectif + " $ en " + mode500.jours + " jours\n- Competences: " + mode500.competences + "\n- Temps disponible: " + (mode500.tempsParJour || "non precise") + " par jour\n- Contexte: " + (mode500.contexte || "aucun contexte additionnel") + "\n\nReponds EXACTEMENT dans ce format avec ces balises:\n\n[ANALYSE]\nObjectif: " + mode500.objectif + " $ en " + mode500.jours + " jours\nDifficulte: (faible/moyenne/elevee)\nFaisabilite: (0-100%)\nRaison principale: (1 phrase brutale et honnete)\n[/ANALYSE]\n\n[OFFRES]\nOFFRE 1: (nom)\nPrix recommande: (montant $)\nDifficulte de vente: (faible/moyenne/elevee)\nVitesse de vente: (rapide/moyenne/lente)\nScore: (0-100)/100\nJustification: (1 phrase)\n\nOFFRE 2: (nom)\nPrix recommande: (montant $)\nDifficulte de vente: (faible/moyenne/elevee)\nVitesse de vente: (rapide/moyenne/lente)\nScore: (0-100)/100\nJustification: (1 phrase)\n\nOFFRE 3: (nom)\nPrix recommande: (montant $)\nDifficulte de vente: (faible/moyenne/elevee)\nVitesse de vente: (rapide/moyenne/lente)\nScore: (0-100)/100\nJustification: (1 phrase)\n[/OFFRES]\n\n[MATHS]\nOffre retenue: (nom)\nPrix: (montant $)\nVentes necessaires: (nombre)\nProspects necessaires: (nombre)\nProspects par jour: (nombre)\nRevenu projete si 10% conversion: (montant $)\nRevenu projete si 15% conversion: (montant $)\n[/MATHS]\n\n[PLAN]\nJ1: (3 actions concretes avec canaux precis)\nJ2: (3 actions concretes)\nJ3: (3 actions concretes)\nJ4: (3 actions concretes)\nJ5: (3 actions concretes)\n[/PLAN]\n\n[SCRIPTS]\nPREMIER CONTACT:\n(message pret a envoyer, ton humain, max 5 lignes)\n\nRELANCE:\n(message de suivi si pas de reponse apres 48h)\n\nFERMETURE:\n(message de conversion quand prospect est interesse)\n[/SCRIPTS]";
+    try {
+      const resp = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: prompt }),
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        const contenu = data.result || "";
+        setResultat(contenu);
+        if (contenu.trim().length > 0) { sauvegarderDansHistorique(contenu); }
+      } else { setErreur(data.error || "Erreur API"); }
+    } catch (e) { setErreur(e instanceof Error ? e.message : "Erreur reseau"); }
+    setLoading(false);
+  }
+
+  const sections = parseSections(resultat);
+
+  return (
+    <SystemPanel ariaLabel="Mode 500" compact>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Mode 500 $ en 5 jours</p>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 0" }}>Plan complet genere par IA · {historique.length} plan{historique.length > 1 ? "s" : ""} sauvegarde{historique.length > 1 ? "s" : ""}</p>
+        </div>
+        <button className="soft-button" type="button" onClick={() => setOpen(open ? false : true)} style={{ fontSize: 11, padding: "2px 10px" }}>
+          {open ? "Reduire" : "Ouvrir"}
+        </button>
+      </div>
+
+      {open ? (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Objectif ($)</p>
+              <input type="number" min={1} value={mode500.objectif}
+                onChange={(e) => onUpdate({ ...mode500, objectif: Number(e.target.value) })}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Jours disponibles</p>
+              <input type="number" min={1} max={30} value={mode500.jours}
+                onChange={(e) => onUpdate({ ...mode500, jours: Number(e.target.value) })}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Competences disponibles *</p>
+              <input type="text" placeholder="ex: redaction, revision, lettres formelles..." value={mode500.competences}
+                onChange={(e) => onUpdate({ ...mode500, competences: e.target.value })}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Temps disponible par jour</p>
+              <input type="text" placeholder="ex: 4h le matin, 2h le soir" value={mode500.tempsParJour}
+                onChange={(e) => onUpdate({ ...mode500, tempsParJour: e.target.value })}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Contexte libre (optionnel)</p>
+              <textarea placeholder="ex: zero client actif, reseau dormant, a Drummondville..." value={mode500.contexte}
+                onChange={(e) => onUpdate({ ...mode500, contexte: e.target.value })}
+                style={{ width: "100%", padding: "5px 8px", fontSize: 13, borderRadius: 6, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)", minHeight: 70, resize: "vertical" }}
+              />
+            </div>
+          </div>
+
+          <button className="btn-primary" type="button" onClick={generer} disabled={loading} style={{ width: "100%", padding: "8px", fontSize: 14 }}>
+            {loading ? "Generation en cours..." : "Generer mon plan"}
+          </button>
+
+          {loading ? (
+            <div style={{ marginTop: 12, padding: "12px", background: "rgba(201,168,92,0.06)", borderRadius: 8, textAlign: "center" }}>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Analyse en cours... (15 a 30 secondes)</p>
+            </div>
+          ) : null}
+
+          {erreur !== "" ? (
+            <div style={{ marginTop: 12, padding: "10px 12px", background: "rgba(216,90,48,0.08)", border: "1px solid rgba(216,90,48,0.3)", borderRadius: 8 }}>
+              <p style={{ fontSize: 13, color: "#D85A30", margin: 0 }}>{erreur}</p>
+            </div>
+          ) : null}
+
+          {sections.length > 0 ? (
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              {sections.map((sec) => (
+                <div key={sec.tag} style={{ borderRadius: 8, border: "1px solid " + sec.couleur + "33", overflow: "hidden" }}>
+                  <div style={{ padding: "8px 12px", background: sec.couleur + "18", borderBottom: "1px solid " + sec.couleur + "22" }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: sec.couleur, margin: 0 }}>{sec.titre}</p>
+                  </div>
+                  <div style={{ padding: "10px 12px" }}>
+                    <p style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{sec.contenu}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {historique.length > 0 ? (
+            <div style={{ marginTop: 18, borderTop: "1px solid rgba(201,168,92,0.15)", paddingTop: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Historique des plans ({historique.length})</p>
+                {confirmerEffacement ? (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" onClick={effacerTout} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(216,90,48,0.5)", background: "rgba(216,90,48,0.1)", color: "#D85A30", cursor: "pointer" }}>Confirmer</button>
+                    <button type="button" onClick={() => setConfirmerEffacement(false)} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.2)", background: "transparent", color: "var(--text-muted)", cursor: "pointer" }}>Annuler</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setConfirmerEffacement(true)} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.2)", background: "transparent", color: "var(--text-muted)", cursor: "pointer" }}>Effacer tout</button>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {historique.map((h) => (
+                  <div key={h.id} style={{ padding: "10px 12px", background: "rgba(255,250,238,0.03)", border: "1px solid rgba(201,168,92,0.12)", borderRadius: 8 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-main)", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.resume}</p>
+                        <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>{formaterDate(h.date)}</p>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                        <button type="button" onClick={() => setResultat(h.contenu)} style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, border: "1px solid rgba(29,158,117,0.4)", background: "rgba(29,158,117,0.08)", color: "#1D9E75", cursor: "pointer" }}>Recharger</button>
+                        <button type="button" onClick={() => copierTexte(h.contenu, h.id)} style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.3)", background: "transparent", color: "var(--text-soft)", cursor: "pointer" }}>{copiedId === h.id ? "Copie" : "Copier"}</button>
+                        <button type="button" onClick={() => supprimerEntree(h.id)} style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid rgba(216,90,48,0.3)", background: "transparent", color: "#D85A30", cursor: "pointer" }}>x</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </SystemPanel>
+  );
+}
+
 export default function FreelancePage() {
   const [form, setForm] = useState<GhostwritingState>(defaultState);
   const [result, setResult] = useState("");
@@ -188,6 +466,8 @@ export default function FreelancePage() {
   const [crCopied, setCrCopied] = useState(false);
   const [sprint, setSprint] = useState<SprintActif>(defaultSprint);
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [calc, setCalc] = useState<CalcState>(defaultCalc);
+  const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
   const qa = analyserProjet(form.clientText);
 
   useEffect(() => { setForm(lireSauvegarde()); }, []);
@@ -195,9 +475,13 @@ export default function FreelancePage() {
   useEffect(() => {
     setSprint(lireLS(FL_SPRINT, defaultSprint));
     setProspects(lireLS<Prospect[]>(FL_PROSPECTS, []));
+    setCalc(lireLS(FL_CALC, defaultCalc));
+    setMode500(lireLS(FL_MODE500, defaultMode500));
   }, []);
   useEffect(() => { ecrireLS(FL_SPRINT, sprint); }, [sprint]);
   useEffect(() => { ecrireLS(FL_PROSPECTS, prospects); }, [prospects]);
+  useEffect(() => { ecrireLS(FL_CALC, calc); }, [calc]);
+  useEffect(() => { ecrireLS(FL_MODE500, mode500); }, [mode500]);
 
   function toggleOpt(group: OptionGroup, value: string) {
     setForm((c) => ({ ...c, [group]: c[group].includes(value) ? c[group].filter((i) => i !== value) : [value] }));
@@ -213,7 +497,7 @@ export default function FreelancePage() {
         body: JSON.stringify({ message: "Tu es un expert en ghostwriting narratif.\n\nMessage client :\n" + txt + "\n\nObjectif : " + (form.objectifs[0] || "clarifier") + "\nTon : " + (form.tons[0] || "professionnel") + "\nLongueur : " + (form.longueurs[0] || "moyen") + "\n\nGenere un texte humain et fluide." }),
       });
       const data = await resp.json();
-      if (resp.ok) { setResult(data.result || "Erreur generation"); }
+      if (resp.ok) { setResult(data.result || ""); }
       else { setGenerationError(data.error || "Erreur generation"); }
     } catch (err) { setGenerationError(err instanceof Error ? err.message : "Erreur"); }
     setIsGenerating(false);
@@ -238,6 +522,9 @@ export default function FreelancePage() {
           <SprintPanel sprint={sprint} onUpdate={setSprint} />
           <CRMPanel prospects={prospects} onUpdate={setProspects} />
         </div>
+
+        <CalculateurPanel calc={calc} onUpdate={setCalc} />
+        <Mode500Panel mode500={mode500} onUpdate={setMode500} />
 
         <SystemPanel ariaLabel="Analyse" compact>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
