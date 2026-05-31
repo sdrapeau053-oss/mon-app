@@ -266,10 +266,10 @@ export default function AutreRivePage() {
                   onClick={() => setActiveTierKey(tier.key)}
                   role="tab"
                   style={{
-                    background: active ? "var(--accent-gold)" : "rgba(255,250,238,.035)",
-                    border: active ? "1px solid rgba(255,236,180,.86)" : "1px solid rgba(201,168,92,.18)",
+                    background: active ? "rgba(201,168,92,0.18)" : "rgba(255,250,238,.055)",
+                    border: active ? "1px solid rgba(201,168,92,.72)" : "1px solid rgba(201,168,92,.22)",
                     borderRadius: 999,
-                    color: active ? "#16120b" : "var(--accent-gold)",
+                    color: active ? "#fff7e8" : "#d8caa8",
                     cursor: "pointer",
                     flex: "0 0 auto",
                     fontSize: 13,
