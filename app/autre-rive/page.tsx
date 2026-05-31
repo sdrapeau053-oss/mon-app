@@ -186,6 +186,28 @@ export default function AutreRivePage() {
 
   return (
     <main className="internal-page">
+      <style>
+        {`
+          .autre-rive-tier-tab {
+            background: rgba(255,250,238,.055) !important;
+            color: #d8caa8 !important;
+            -webkit-text-fill-color: #d8caa8 !important;
+          }
+
+          .autre-rive-tier-tab[aria-selected="true"] {
+            background: rgba(201,168,92,0.18) !important;
+            border-color: rgba(201,168,92,.72) !important;
+            color: #fff7e8 !important;
+            -webkit-text-fill-color: #fff7e8 !important;
+          }
+
+          .autre-rive-tier-tab:hover {
+            background: rgba(201,168,92,0.16) !important;
+            color: #fff7e8 !important;
+            -webkit-text-fill-color: #fff7e8 !important;
+          }
+        `}
+      </style>
       <SystemPageShell maxWidth={1180}>
         <header className="internal-header">
           <BackLink href="/centre-de-controle" label="Centre" />
@@ -262,6 +284,7 @@ export default function AutreRivePage() {
               return (
                 <button
                   aria-selected={active}
+                  className="autre-rive-tier-tab"
                   key={tier.key}
                   onClick={() => setActiveTierKey(tier.key)}
                   role="tab"
