@@ -14,6 +14,7 @@ interface RelationDossier {
   nom: string;
   statut: string;
   dateCreation: string;
+  typeRelation?: string;
   derniereInteraction?: string;
   notes?: string;
   tags?: string[];
@@ -26,6 +27,7 @@ interface RelationDossier {
 type DossierDraft = {
   id?: string;
   nom: string;
+  typeRelation: string;
   notes: string;
   statut: string;
 };
@@ -40,9 +42,11 @@ type DossierSort = "date" | "nom" | "completion";
 const STORAGE_KEY = "autre-rive-dossiers";
 
 const statutOptions = ["Rencontre", "Dating", "Relation", "Rupture", "Famille", "Coparentalité", "Autre"];
+const typeRelationOptions = ["Romantique", "Familiale", "Amicale", "Professionnelle", "Coparentalite", "Autre"];
 
 const emptyDraft: DossierDraft = {
   nom: "",
+  typeRelation: "",
   notes: "",
   statut: "",
 };
@@ -260,6 +264,7 @@ export default function RelationDossiersPage() {
     setDraft({
       id: dossier.id,
       nom: dossier.nom,
+      typeRelation: dossier.typeRelation || "",
       notes: dossier.notes || "",
       statut: dossier.statut,
     });
@@ -295,6 +300,7 @@ export default function RelationDossiersPage() {
                 nom,
                 notes: draft.notes.trim(),
                 statut,
+                typeRelation: draft.typeRelation.trim() || undefined,
               }
             : dossier,
         ),
@@ -305,6 +311,7 @@ export default function RelationDossiersPage() {
         nom,
         statut,
         dateCreation: todayDate(),
+        typeRelation: draft.typeRelation.trim() || undefined,
         notes: draft.notes.trim(),
       };
 
@@ -419,6 +426,20 @@ export default function RelationDossiersPage() {
                     value={draft.nom}
                   />
                   {errors.nom ? <span style={{ color: "#d79a8f", fontSize: 12 }}>{errors.nom}</span> : null}
+                </label>
+                <label style={dashboardFieldStyle}>
+                  <span className="label-meta">Type de relation</span>
+                  <select
+                    className="internal-control"
+                    onChange={(event) => setDraft((current) => ({ ...current, typeRelation: event.target.value }))}
+                    style={dashboardControlStyle}
+                    value={draft.typeRelation}
+                  >
+                    <option value="">Choisir un type</option>
+                    {typeRelationOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
                 </label>
                 <label style={dashboardFieldStyle}>
                   <span className="label-meta">Statut</span>
@@ -556,6 +577,12 @@ export default function RelationDossiersPage() {
                 <p className="label-meta" style={{ lineHeight: 1.25, margin: 0 }}>
                   Créé le {formatDisplayDate(dossier.dateCreation)} · Dernière interaction : {derniereInteraction}
                 </p>
+
+                {dossier.typeRelation?.trim() ? (
+                  <p className="label-meta" style={{ lineHeight: 1.2, margin: 0 }}>
+                    Type : {dossier.typeRelation}
+                  </p>
+                ) : null}
 
                 <div style={{ alignItems: "center", display: "grid", gap: 7, gridTemplateColumns: "minmax(0, 1fr) 34px" }}>
                   <div style={{ background: "rgba(255,255,255,.06)", borderRadius: 999, height: 4, maxWidth: "78%", overflow: "hidden", width: "100%" }}>
