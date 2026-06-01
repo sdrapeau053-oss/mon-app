@@ -624,147 +624,125 @@ export default function FreelancePage() {
     setTimeout(() => setter(false), 1400);
   }
 
+  const kpis = calculerKPIs(sprint);
+
   return (
     <main className="internal-page">
       <style>
         {`
-          .freelance-dashboard-grid {
+          .fl-label {
+            color: rgba(201,168,92,0.75);
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            margin: 0 0 6px;
+            text-transform: uppercase;
+          }
+
+          .fl-2col {
             display: grid;
             gap: 14px;
           }
 
-          .freelance-dashboard-column,
-          .freelance-generator-stack {
+          .fl-stack,
+          .fl-gen {
             display: flex;
             flex-direction: column;
             gap: 12px;
             min-width: 0;
           }
 
-          .freelance-header-panel {
-            align-items: flex-start;
-            border: 1px solid rgba(201,168,92,0.16);
-            border-radius: 14px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            justify-content: space-between;
-            padding: 14px 16px;
-          }
-
-          .freelance-section-title {
-            color: var(--accent-gold);
-            font-size: 11px;
-            letter-spacing: .11em;
-            margin: 0 0 6px;
-            text-transform: uppercase;
-          }
-
-          @media (max-width: 640px) {
-            .freelance-header-panel {
-              flex-direction: column;
+          @media (min-width: 860px) {
+            .fl-2col {
+              grid-template-columns: 1fr 1fr;
             }
 
-            .freelance-objective-summary {
-              justify-items: start !important;
-            }
-          }
-
-          @media (min-width: 920px) {
-            .freelance-dashboard-grid {
-              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            }
-
-            .freelance-generator-stack {
+            .fl-gen {
               display: grid;
-              grid-column: 1 / -1;
-              grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
-            }
-
-            .freelance-mode-wide {
-              grid-column: 1 / -1;
+              grid-template-columns: 1.1fr 0.9fr;
+              gap: 14px;
             }
           }
         `}
       </style>
 
-      <SystemPageShell maxWidth={1180}>
-        <header className="internal-header" style={{ marginBottom: 10 }}>
+      <SystemPageShell maxWidth={1200}>
+        <header className="internal-header" style={{ marginBottom: 14 }}>
           <BackLink label="Systeme" />
-          <div className="freelance-header-panel">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
             <div>
-              <p className="internal-kicker" style={{ marginBottom: 4 }}>MVP service</p>
-              <h1 className="internal-title" style={{ fontSize: 34, fontStyle: "italic", marginBottom: 0 }}>Ghostwriting</h1>
+              <p className="internal-kicker" style={{ marginBottom: 2 }}>MVP service</p>
+              <h1 className="internal-title" style={{ fontSize: 26, fontStyle: "italic", marginBottom: 0 }}>Ghostwriting</h1>
             </div>
-            <div className="freelance-objective-summary" style={{ display: "grid", gap: 4, justifyItems: "end", paddingTop: 2 }}>
-              <p className="label-meta" style={{ margin: 0 }}>Objectif actif</p>
-              <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 24, lineHeight: 1 }}>{sprint.objectif} $</strong>
-              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{calculerKPIs(sprint).joursRestants} jours restants</span>
+            <div style={{ display: "flex", gap: 20, alignItems: "baseline", flexWrap: "wrap" }}>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Objectif</p>
+                <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 22, lineHeight: 1 }}>{sprint.objectif} $</strong>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Jours</p>
+                <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 22, lineHeight: 1 }}>{kpis.joursRestants}</strong>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Manque</p>
+                <strong style={{ color: kpis.manque === 0 ? "#1D9E75" : "var(--text-soft)", fontFamily: "var(--font-serif)", fontSize: 22, lineHeight: 1 }}>{kpis.manque} $</strong>
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="freelance-dashboard-grid">
-          <div className="freelance-dashboard-column">
-            <section>
-              <p className="freelance-section-title">Objectif rapide</p>
-              <SprintPanel sprint={sprint} onUpdate={setSprint} />
-            </section>
-            <section>
-              <p className="freelance-section-title">Prospects</p>
-              <CRMPanel prospects={prospects} onUpdate={setProspects} />
-            </section>
+        <section style={{ marginBottom: 14 }}>
+          <p className="fl-label">Tableau de bord</p>
+          <SprintPanel sprint={sprint} onUpdate={setSprint} />
+          <div style={{ marginTop: 10 }}>
+            <Mode500Panel mode500={mode500} onUpdate={setMode500} />
           </div>
+        </section>
 
-          <div className="freelance-dashboard-column">
-            <section>
-              <p className="freelance-section-title">Offres</p>
+        <div className="fl-2col" style={{ marginBottom: 14 }}>
+          <section>
+            <p className="fl-label">Prospects</p>
+            <CRMPanel prospects={prospects} onUpdate={setProspects} />
+          </section>
+          <section className="fl-stack">
+            <div>
+              <p className="fl-label">Offres et Faisabilite</p>
               <BibliothequeOffresPanel offres={offres} onUpdate={setOffres} />
-            </section>
-            <section>
-              <p className="freelance-section-title">Faisabilite</p>
-              <CalculateurPanel calc={calc} onUpdate={setCalc} />
-            </section>
-          </div>
+            </div>
+            <CalculateurPanel calc={calc} onUpdate={setCalc} />
+          </section>
+        </div>
 
-          <div className="freelance-generator-stack">
-            <section className="freelance-mode-wide">
-              <p className="freelance-section-title">Mode 500 $</p>
-              <Mode500Panel mode500={mode500} onUpdate={setMode500} />
-            </section>
-
-            <section>
-              <p className="freelance-section-title">Generateur client</p>
-              <div className="freelance-dashboard-column">
-                <SystemPanel ariaLabel="Analyse" compact>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                    <span className="label-meta" style={{ margin: 0 }}>Complexite : <strong>{qa.complexite}</strong></span>
-                    <span className="label-meta" style={{ margin: 0 }}>Prix : <strong>{qa.prix}</strong></span>
-                    <button className="btn-ghost" type="button" onClick={() => { setClientResponse("Voici ce que je te propose :\nUn texte narratif base sur ton histoire.\n\nDelai : 3 jours\nPrix : " + qa.prix); setCrCopied(false); }} style={{ marginLeft: "auto", padding: "4px 12px", fontSize: 13 }}>Reponse client</button>
-                  </div>
-                  {clientResponse !== "" ? (
-                    <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(201,168,92,0.06)", borderRadius: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Reponse client</span>
-                        <button className="soft-button" type="button" onClick={() => copier(clientResponse, setCrCopied)} style={{ fontSize: 11 }}>{crCopied ? "Copie" : "Copier"}</button>
-                      </div>
-                      <p style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{clientResponse}</p>
+        <section>
+          <p className="fl-label">Generateur client</p>
+          <div className="fl-gen">
+            <div className="fl-stack">
+              <SystemPanel ariaLabel="Analyse" compact>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: clientResponse !== "" ? 10 : 0 }}>
+                  <span className="label-meta" style={{ margin: 0 }}>Complexite : <strong>{qa.complexite}</strong></span>
+                  <span className="label-meta" style={{ margin: 0 }}>Prix suggere : <strong>{qa.prix}</strong></span>
+                  <button className="btn-ghost" type="button" onClick={() => { setClientResponse("Voici ce que je te propose :\nUn texte narratif base sur ton histoire.\n\nDelai : 3 jours\nPrix : " + qa.prix); setCrCopied(false); }} style={{ marginLeft: "auto", padding: "4px 12px", fontSize: 12 }}>Reponse client</button>
+                </div>
+                {clientResponse !== "" ? (
+                  <div style={{ padding: "10px 12px", background: "rgba(201,168,92,0.06)", borderRadius: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reponse client</span>
+                      <button className="soft-button" type="button" onClick={() => copier(clientResponse, setCrCopied)} style={{ fontSize: 11 }}>{crCopied ? "Copie" : "Copier"}</button>
                     </div>
-                  ) : null}
-                </SystemPanel>
-
-                <SystemPanel ariaLabel="Texte du client" compact>
-                  <label className="label-meta" htmlFor="client-text">Texte du client</label>
-                  <textarea className="textarea-atelier" id="client-text" value={form.clientText}
-                    onChange={(e) => setForm((c) => ({ ...c, clientText: e.target.value }))}
-                    placeholder="Colle ici le texte ou l idee du client..."
-                    style={{ fontSize: 14, minHeight: 100 }}
-                  />
-                </SystemPanel>
-              </div>
-            </section>
-
-            <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <p style={{ fontSize: 12, color: "var(--text-soft)", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{clientResponse}</p>
+                  </div>
+                ) : null}
+              </SystemPanel>
+              <SystemPanel ariaLabel="Texte du client" compact>
+                <label className="label-meta" htmlFor="client-text">Texte du client</label>
+                <textarea className="textarea-atelier" id="client-text" value={form.clientText}
+                  onChange={(e) => setForm((c) => ({ ...c, clientText: e.target.value }))}
+                  placeholder="Colle ici le texte ou l idee du client..."
+                  style={{ fontSize: 14, minHeight: 120 }}
+                />
+              </SystemPanel>
+            </div>
+            <div className="fl-stack">
               <SystemPanel ariaLabel="Options" compact>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {(["objectifs", "tons", "longueurs"] as OptionGroup[]).map((group) => (
@@ -777,7 +755,7 @@ export default function FreelancePage() {
                           const on = form[group].includes(value);
                           return (
                             <button key={value} type="button" onClick={() => toggleOpt(group, value)}
-                              style={{ padding: "5px 12px", fontSize: 12, borderRadius: 99, cursor: "pointer", background: on ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.06)", border: on ? "1px solid rgba(201,168,92,0.6)" : "1px solid rgba(201,168,92,0.18)", color: on ? "var(--text-main)" : "var(--text-soft)", fontWeight: on ? 600 : 400 }}>
+                              style={{ padding: "5px 11px", fontSize: 11, borderRadius: 99, cursor: "pointer", background: on ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.06)", border: on ? "1px solid rgba(201,168,92,0.6)" : "1px solid rgba(201,168,92,0.18)", color: on ? "var(--text-main)" : "var(--text-soft)", fontWeight: on ? 600 : 400 }}>
                               {value}
                             </button>
                           );
@@ -787,16 +765,14 @@ export default function FreelancePage() {
                   ))}
                 </div>
               </SystemPanel>
-
-              <div style={{ display: "flex", gap: 8, marginTop: 0 }}>
+              <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn-primary" type="button" onClick={handleGenerate} disabled={isGenerating} style={{ flex: 1 }}>
                   {isGenerating ? "Generation..." : "Generer"}
                 </button>
                 {result !== "" ? <button className="btn-ghost" type="button" onClick={handleGenerate} disabled={isGenerating}>Regenerer</button> : null}
               </div>
-
               {generationError !== "" || result !== "" ? (
-                <SystemPanel ariaLabel="Resultat" compact style={{ marginTop: 0 }}>
+                <SystemPanel ariaLabel="Resultat" compact>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <p className="label-meta" style={{ margin: 0 }}>Resultat</p>
                     {result !== "" ? <button className="soft-button" type="button" onClick={() => copier(result, setCopied)} style={{ fontSize: 11 }}>{copied ? "Copie" : "Copier"}</button> : null}
@@ -807,9 +783,9 @@ export default function FreelancePage() {
                   }
                 </SystemPanel>
               ) : null}
-            </section>
+            </div>
           </div>
-        </div>
+        </section>
       </SystemPageShell>
     </main>
   );
