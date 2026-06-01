@@ -1,34 +1,47 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-const MOT_DE_PASSE = process.env.APP_PASSWORD ?? 'strate2026';
-const COOKIE = 'strate_auth';
+const COOKIE_NAME = "strate_session";
+const CHEMINS_PUBLICS = ["/login", "/api/login", "/_next", "/favicon.ico"];
+const SESSION_MESSAGE = "strate-session-v1";
 
-export function proxy(req: NextRequest) {
-  const cookie = req.cookies.get(COOKIE)?.value;
+async function tokenAttendu(): Promise<string | null> {
+  const password = process.env.APP_PASSWORD;
+  if (!password) return null;
 
-  if (cookie === MOT_DE_PASSE) return NextResponse.next();
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(SESSION_MESSAGE));
+  return Array.from(new Uint8Array(sig))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname === '/login') return NextResponse.next();
-
-  if (pathname === '/api/login') {
-    const pwd = req.nextUrl.searchParams.get('pwd') ?? '';
-    if (pwd === MOT_DE_PASSE) {
-      const res = NextResponse.redirect(new URL('/', req.url));
-      res.cookies.set(COOKIE, MOT_DE_PASSE, {
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30,
-      });
-      return res;
-    }
-    return NextResponse.redirect(new URL('/login?erreur=1', req.url));
+  if (CHEMINS_PUBLICS.some((path) => pathname.startsWith(path))) {
+    return NextResponse.next();
   }
 
-  return NextResponse.redirect(new URL('/login', req.url));
+  const cookie = req.cookies.get(COOKIE_NAME)?.value;
+  if (!cookie) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  const attendu = await tokenAttendu();
+  if (!attendu || cookie !== attendu) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

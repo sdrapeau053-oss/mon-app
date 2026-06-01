@@ -1,191 +1,127 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { useState, type FormEvent } from "react";
 
-function LoginForm() {
-  const [pwd, setPwd] = useState('');
-  const router = useRouter();
-  const params = useSearchParams();
-  const erreur = params.get('erreur');
+export default function LoginPage() {
+  const [password, setPassword] = useState("");
+  const [erreur, setErreur] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function soumettre(e: React.FormEvent) {
-    e.preventDefault();
-    router.push(`/api/login?pwd=${encodeURIComponent(pwd)}`);
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (password.trim() === "") return;
+
+    setLoading(true);
+    setErreur("");
+
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      if (response.ok) {
+        window.location.href = "/";
+        return;
+      }
+
+      const data = await response.json();
+      setErreur(data.error || "Mot de passe incorrect.");
+      setPassword("");
+    } catch {
+      setErreur("Erreur reseau. Reessaie.");
+    }
+
+    setLoading(false);
   }
 
   return (
-    <div
+    <main
       style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: '#09090b',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        zIndex: 9999,
-        overflow: 'hidden',
+        alignItems: "center",
+        background: "var(--bg-main, #1a1a16)",
+        display: "flex",
+        justifyContent: "center",
+        minHeight: "100vh",
+        padding: "24px",
       }}
     >
-      {/* Halo large */}
-      <div style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -58%)',
-        width: '800px',
-        height: '800px',
-        borderRadius: '50%',
-        background: 'radial-gradient(ellipse at center, rgba(201,168,92,0.08) 0%, rgba(201,168,92,0.03) 45%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-      {/* Halo concentré */}
-      <div style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -65%)',
-        width: '360px',
-        height: '360px',
-        borderRadius: '50%',
-        background: 'radial-gradient(ellipse at center, rgba(201,168,92,0.12) 0%, transparent 65%)',
-        pointerEvents: 'none',
-      }} />
-
-      {/* Contenu */}
-      <div style={{
-        width: '100%',
-        maxWidth: '480px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '48px',
-        position: 'relative',
-        zIndex: 1,
-      }}>
-        {/* En-tête */}
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <h1 style={{
-            fontSize: 'clamp(56px, 10vw, 88px)',
-            fontWeight: 300,
-            letterSpacing: '0.25em',
-            color: '#f4f4f5',
-            margin: 0,
-            lineHeight: 1,
-            textShadow: '0 0 80px rgba(201,168,92,0.22), 0 0 160px rgba(201,168,92,0.08)',
-          }}>
-            STRATE
-          </h1>
-          <p style={{
-            fontSize: '15px',
-            color: 'rgba(161,161,170,0.65)',
-            margin: 0,
-            letterSpacing: '0.08em',
-            fontWeight: 300,
-          }}>
-            Écrire. Vivre. Travailler. En profondeur.
-          </p>
-        </div>
-
-        {/* Séparateur */}
-        <div style={{
-          width: '1px',
-          height: '36px',
-          background: 'linear-gradient(to bottom, transparent, rgba(201,168,92,0.25), transparent)',
-        }} />
-
-        {/* Formulaire */}
-        <form onSubmit={soumettre} style={{
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '14px',
-        }}>
-          <input
-            type="password"
-            value={pwd}
-            onChange={(e) => setPwd(e.target.value)}
-            placeholder="Mot de passe"
-            autoFocus
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 24,
+          maxWidth: 360,
+          width: "100%",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <p
             style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              backgroundColor: 'rgba(24,24,27,0.80)',
-              border: '1px solid rgba(63,63,70,0.80)',
-              borderRadius: '12px',
-              padding: '18px 24px',
-              fontSize: '16px',
-              color: '#f4f4f5',
-              textAlign: 'center',
-              letterSpacing: '0.15em',
-              outline: 'none',
-              transition: 'border-color 0.2s, box-shadow 0.2s',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(201,168,92,0.50)';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(201,168,92,0.07), 0 0 24px rgba(201,168,92,0.05)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(63,63,70,0.80)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          />
-
-          {erreur && (
-            <p style={{
-              fontSize: '13px',
-              color: 'rgba(248,113,113,0.80)',
-              textAlign: 'center',
-              margin: 0,
-              letterSpacing: '0.03em',
-            }}>
-              Mot de passe incorrect.
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!pwd}
-            style={{
-              width: '100%',
-              padding: '18px 24px',
-              backgroundColor: pwd ? 'rgba(180,140,60,0.88)' : 'rgba(39,39,42,0.60)',
-              color: pwd ? '#f4f4f5' : 'rgba(113,113,122,0.60)',
-              border: pwd ? '1px solid rgba(201,168,92,0.28)' : '1px solid rgba(63,63,70,0.40)',
-              borderRadius: '12px',
-              fontSize: '15px',
-              letterSpacing: '0.12em',
-              fontWeight: 400,
-              cursor: pwd ? 'pointer' : 'not-allowed',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (pwd) {
-                e.currentTarget.style.backgroundColor = 'rgba(201,168,92,0.95)';
-                e.currentTarget.style.boxShadow = '0 0 28px rgba(201,168,92,0.14)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (pwd) {
-                e.currentTarget.style.backgroundColor = 'rgba(180,140,60,0.88)';
-                e.currentTarget.style.boxShadow = 'none';
-              }
+              color: "var(--text-muted, #888)",
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.12em",
+              margin: "0 0 8px",
+              textTransform: "uppercase",
             }}
           >
-            Entrer
+            Acces prive
+          </p>
+          <h1
+            style={{
+              color: "var(--text-main, #f5f0e8)",
+              fontSize: 28,
+              fontStyle: "italic",
+              fontWeight: 400,
+              margin: 0,
+            }}
+          >
+            STRATE
+          </h1>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input
+            autoFocus
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Mot de passe"
+            style={{
+              background: "rgba(255,250,238,0.05)",
+              border: "1px solid rgba(201,168,92,0.25)",
+              borderRadius: 10,
+              color: "var(--text-main, #f5f0e8)",
+              fontSize: 15,
+              outline: "none",
+              padding: "12px 14px",
+              width: "100%",
+            }}
+            type="password"
+            value={password}
+          />
+
+          {erreur !== "" ? <p style={{ color: "#D85A30", fontSize: 12, margin: 0 }}>{erreur}</p> : null}
+
+          <button
+            disabled={loading || password.trim() === ""}
+            style={{
+              background: loading || password.trim() === "" ? "rgba(201,168,92,0.3)" : "rgba(201,168,92,0.85)",
+              border: "none",
+              borderRadius: 10,
+              color: "#1a1a16",
+              cursor: loading || password.trim() === "" ? "not-allowed" : "pointer",
+              fontSize: 14,
+              fontWeight: 500,
+              padding: "11px",
+              transition: "background 0.15s",
+            }}
+            type="submit"
+          >
+            {loading ? "Verification..." : "Entrer"}
           </button>
         </form>
       </div>
-    </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
+    </main>
   );
 }
