@@ -627,9 +627,13 @@ export default function FreelancePage() {
   const kpis = calculerKPIs(sprint);
 
   return (
-    <main className="internal-page">
+    <main className="internal-page freelance-saas">
       <style>
         {`
+          .freelance-saas .panel {
+            margin-bottom: 10px;
+          }
+
           .fl-label {
             color: rgba(201,168,92,0.75);
             font-size: 10px;
@@ -639,34 +643,52 @@ export default function FreelancePage() {
             text-transform: uppercase;
           }
 
-          .fl-2col {
+          .fl-command-row,
+          .fl-pipeline-grid,
+          .fl-options-row {
             display: grid;
-            gap: 14px;
+            gap: 8px;
           }
 
-          .fl-stack,
-          .fl-gen {
+          .fl-command-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .fl-stack {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
             min-width: 0;
           }
 
+          .fl-pipeline-grid .panel {
+            background: rgba(255,250,238,0.025) !important;
+            border-color: rgba(201,168,92,0.12) !important;
+            margin-bottom: 0 !important;
+            padding: 10px !important;
+          }
+
+          .fl-generator-panel textarea {
+            min-height: 150px;
+          }
+
           @media (min-width: 860px) {
-            .fl-2col {
-              grid-template-columns: 1fr 1fr;
+            .fl-command-row {
+              grid-template-columns: repeat(7, minmax(0, 1fr));
             }
 
-            .fl-gen {
-              display: grid;
-              grid-template-columns: 1.1fr 0.9fr;
-              gap: 14px;
+            .fl-pipeline-grid {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .fl-options-row {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
             }
           }
         `}
       </style>
 
-      <SystemPageShell maxWidth={1200}>
+      <SystemPageShell maxWidth={1400}>
         <header className="internal-header" style={{ marginBottom: 14 }}>
           <BackLink label="Systeme" />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
@@ -691,100 +713,108 @@ export default function FreelancePage() {
           </div>
         </header>
 
-        <section style={{ marginBottom: 14 }}>
-          <p className="fl-label">Tableau de bord</p>
-          <SprintPanel sprint={sprint} onUpdate={setSprint} />
-          <div style={{ marginTop: 10 }}>
-            <Mode500Panel mode500={mode500} onUpdate={setMode500} />
-          </div>
+        <section style={{ marginBottom: 10 }}>
+          <p className="fl-label">Command Center</p>
+          <SystemPanel ariaLabel="Command Center" compact style={{ padding: "10px 12px" }}>
+            <div className="fl-command-row">
+              <CompactMetric label="Objectif" value={sprint.objectif + " $"} />
+              <CompactMetric label="Encaisse" value={sprint.revenusEncaisses + " $"} />
+              <CompactMetric label="Attente" value={sprint.revenusAttente + " $"} />
+              <CompactMetric label="Manque" value={kpis.manque + " $"} />
+              <CompactMetric label="Prospects" value={String(sprint.prospectsContactes)} />
+              <CompactMetric label="Taux" value={kpis.taux + " %"} />
+              <CompactMetric label="Jours restants" value={String(kpis.joursRestants)} />
+            </div>
+          </SystemPanel>
         </section>
 
-        <div className="fl-2col" style={{ marginBottom: 14 }}>
-          <section>
-            <p className="fl-label">Prospects</p>
-            <CRMPanel prospects={prospects} onUpdate={setProspects} />
-          </section>
-          <section className="fl-stack">
-            <div>
-              <p className="fl-label">Offres et Faisabilite</p>
+        <SystemPanel ariaLabel="Pipeline" compact style={{ marginBottom: 10, padding: "12px" }}>
+          <p className="fl-label">Pipeline</p>
+          <div className="fl-pipeline-grid">
+            <section>
+              <p className="fl-label">Prospects</p>
+              <CRMPanel prospects={prospects} onUpdate={setProspects} />
+            </section>
+            <section>
+              <p className="fl-label">Offres</p>
               <BibliothequeOffresPanel offres={offres} onUpdate={setOffres} />
+            </section>
+            <section>
+              <p className="fl-label">Calculateur</p>
+              <CalculateurPanel calc={calc} onUpdate={setCalc} />
+            </section>
+          </div>
+        </SystemPanel>
+
+        <section style={{ marginBottom: 10 }}>
+          <p className="fl-label">Generateur client</p>
+          <SystemPanel ariaLabel="Generateur client" compact style={{ padding: "12px" }}>
+            <div className="fl-generator-panel">
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 8 }}>
+              <span className="label-meta" style={{ margin: 0 }}>Complexite : <strong>{qa.complexite}</strong></span>
+              <span className="label-meta" style={{ margin: 0 }}>Prix suggere : <strong>{qa.prix}</strong></span>
+              <button className="btn-ghost" type="button" onClick={() => { setClientResponse("Voici ce que je te propose :\nUn texte narratif base sur ton histoire.\n\nDelai : 3 jours\nPrix : " + qa.prix); setCrCopied(false); }} style={{ marginLeft: "auto", padding: "4px 12px", fontSize: 12 }}>Reponse client</button>
             </div>
-            <CalculateurPanel calc={calc} onUpdate={setCalc} />
-          </section>
-        </div>
+            {clientResponse !== "" ? (
+              <div style={{ background: "rgba(201,168,92,0.06)", borderRadius: 8, marginBottom: 8, padding: "8px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reponse client</span>
+                  <button className="soft-button" type="button" onClick={() => copier(clientResponse, setCrCopied)} style={{ fontSize: 11 }}>{crCopied ? "Copie" : "Copier"}</button>
+                </div>
+                <p style={{ fontSize: 12, color: "var(--text-soft)", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{clientResponse}</p>
+              </div>
+            ) : null}
+            <label className="label-meta" htmlFor="client-text">Texte du client</label>
+            <textarea className="textarea-atelier" id="client-text" value={form.clientText}
+              onChange={(e) => setForm((c) => ({ ...c, clientText: e.target.value }))}
+              placeholder="Colle ici le texte ou l idee du client..."
+              style={{ fontSize: 14, marginBottom: 10, minHeight: 150 }}
+            />
+            <div className="fl-options-row" style={{ marginBottom: 10 }}>
+              {(["objectifs", "tons", "longueurs"] as OptionGroup[]).map((group) => (
+                <div key={group}>
+                  <p className="label-meta" style={{ marginBottom: 5, fontSize: 11 }}>
+                    {group === "objectifs" ? "Objectif" : group === "tons" ? "Ton" : "Longueur"}
+                  </p>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {options[group].map((value) => {
+                      const on = form[group].includes(value);
+                      return (
+                        <button key={value} type="button" onClick={() => toggleOpt(group, value)}
+                          style={{ padding: "5px 11px", fontSize: 11, borderRadius: 99, cursor: "pointer", background: on ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.06)", border: on ? "1px solid rgba(201,168,92,0.6)" : "1px solid rgba(201,168,92,0.18)", color: on ? "var(--text-main)" : "var(--text-soft)", fontWeight: on ? 600 : 400 }}>
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" type="button" onClick={handleGenerate} disabled={isGenerating} style={{ flex: 1 }}>
+                {isGenerating ? "Generation..." : "Generer"}
+              </button>
+              {result !== "" ? <button className="btn-ghost" type="button" onClick={handleGenerate} disabled={isGenerating}>Regenerer</button> : null}
+            </div>
+            {generationError !== "" || result !== "" ? (
+              <div style={{ background: "rgba(255,250,238,0.03)", border: "1px solid rgba(201,168,92,0.12)", borderRadius: 8, marginTop: 10, padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <p className="label-meta" style={{ margin: 0 }}>Resultat</p>
+                  {result !== "" ? <button className="soft-button" type="button" onClick={() => copier(result, setCopied)} style={{ fontSize: 11 }}>{copied ? "Copie" : "Copier"}</button> : null}
+                </div>
+                {generationError !== ""
+                  ? <p style={{ color: "#9f3a38", fontSize: 13, lineHeight: 1.6, margin: 0 }}>{generationError}</p>
+                  : <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{result}</p>
+                }
+              </div>
+            ) : null}
+            </div>
+          </SystemPanel>
+        </section>
 
         <section>
-          <p className="fl-label">Generateur client</p>
-          <div className="fl-gen">
-            <div className="fl-stack">
-              <SystemPanel ariaLabel="Analyse" compact>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: clientResponse !== "" ? 10 : 0 }}>
-                  <span className="label-meta" style={{ margin: 0 }}>Complexite : <strong>{qa.complexite}</strong></span>
-                  <span className="label-meta" style={{ margin: 0 }}>Prix suggere : <strong>{qa.prix}</strong></span>
-                  <button className="btn-ghost" type="button" onClick={() => { setClientResponse("Voici ce que je te propose :\nUn texte narratif base sur ton histoire.\n\nDelai : 3 jours\nPrix : " + qa.prix); setCrCopied(false); }} style={{ marginLeft: "auto", padding: "4px 12px", fontSize: 12 }}>Reponse client</button>
-                </div>
-                {clientResponse !== "" ? (
-                  <div style={{ padding: "10px 12px", background: "rgba(201,168,92,0.06)", borderRadius: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reponse client</span>
-                      <button className="soft-button" type="button" onClick={() => copier(clientResponse, setCrCopied)} style={{ fontSize: 11 }}>{crCopied ? "Copie" : "Copier"}</button>
-                    </div>
-                    <p style={{ fontSize: 12, color: "var(--text-soft)", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{clientResponse}</p>
-                  </div>
-                ) : null}
-              </SystemPanel>
-              <SystemPanel ariaLabel="Texte du client" compact>
-                <label className="label-meta" htmlFor="client-text">Texte du client</label>
-                <textarea className="textarea-atelier" id="client-text" value={form.clientText}
-                  onChange={(e) => setForm((c) => ({ ...c, clientText: e.target.value }))}
-                  placeholder="Colle ici le texte ou l idee du client..."
-                  style={{ fontSize: 14, minHeight: 120 }}
-                />
-              </SystemPanel>
-            </div>
-            <div className="fl-stack">
-              <SystemPanel ariaLabel="Options" compact>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {(["objectifs", "tons", "longueurs"] as OptionGroup[]).map((group) => (
-                    <div key={group}>
-                      <p className="label-meta" style={{ marginBottom: 5, fontSize: 11 }}>
-                        {group === "objectifs" ? "Objectif" : group === "tons" ? "Ton" : "Longueur"}
-                      </p>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {options[group].map((value) => {
-                          const on = form[group].includes(value);
-                          return (
-                            <button key={value} type="button" onClick={() => toggleOpt(group, value)}
-                              style={{ padding: "5px 11px", fontSize: 11, borderRadius: 99, cursor: "pointer", background: on ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.06)", border: on ? "1px solid rgba(201,168,92,0.6)" : "1px solid rgba(201,168,92,0.18)", color: on ? "var(--text-main)" : "var(--text-soft)", fontWeight: on ? 600 : 400 }}>
-                              {value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SystemPanel>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-primary" type="button" onClick={handleGenerate} disabled={isGenerating} style={{ flex: 1 }}>
-                  {isGenerating ? "Generation..." : "Generer"}
-                </button>
-                {result !== "" ? <button className="btn-ghost" type="button" onClick={handleGenerate} disabled={isGenerating}>Regenerer</button> : null}
-              </div>
-              {generationError !== "" || result !== "" ? (
-                <SystemPanel ariaLabel="Resultat" compact>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <p className="label-meta" style={{ margin: 0 }}>Resultat</p>
-                    {result !== "" ? <button className="soft-button" type="button" onClick={() => copier(result, setCopied)} style={{ fontSize: 11 }}>{copied ? "Copie" : "Copier"}</button> : null}
-                  </div>
-                  {generationError !== ""
-                    ? <p style={{ color: "#9f3a38", fontSize: 13, lineHeight: 1.6, margin: 0 }}>{generationError}</p>
-                    : <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{result}</p>
-                  }
-                </SystemPanel>
-              ) : null}
-            </div>
-          </div>
+          <p className="fl-label">Mode 500 $</p>
+          <Mode500Panel mode500={mode500} onUpdate={setMode500} />
         </section>
       </SystemPageShell>
     </main>
