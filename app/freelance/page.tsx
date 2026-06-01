@@ -137,7 +137,7 @@ function SprintPanel({ sprint, onUpdate }: { sprint: SprintActif; onUpdate: (s: 
   return (
     <SystemPanel ariaLabel="Sprint" compact>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Sprint · {kpis.joursRestants}j</p>
+        <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Objectif rapide · {kpis.joursRestants}j</p>
         <button className="soft-button" type="button" onClick={() => setEditing(editing ? false : true)} style={{ fontSize: 11, padding: "2px 8px" }}>{editing ? "Fermer" : "Modifier"}</button>
       </div>
       <SystemGrid gap={8} min={90}>
@@ -190,7 +190,7 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
   return (
     <SystemPanel ariaLabel="CRM" compact>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: open || prospects.length > 0 ? 8 : 0 }}>
-        <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>CRM — {prospects.length} prospect{prospects.length > 1 ? "s" : ""}</p>
+        <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Prospects — {prospects.length} prospect{prospects.length > 1 ? "s" : ""}</p>
         <button className="soft-button" type="button" onClick={() => setOpen(open ? false : true)} style={{ fontSize: 11, padding: "2px 8px" }}>{open ? "Annuler" : "+ Ajouter"}</button>
       </div>
       {open ? (
@@ -281,7 +281,7 @@ function BibliothequeOffresPanel({ offres, onUpdate }: { offres: Offre[]; onUpda
     <SystemPanel ariaLabel="Bibliotheque offres" compact>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: offres.length > 0 ? 10 : 0 }}>
         <div>
-          <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Bibliotheque des offres</p>
+          <p className="label-meta" style={{ margin: 0, fontSize: 12 }}>Offres</p>
           <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 0" }}>{offres.length} offre{offres.length > 1 ? "s" : ""} · {actives} active{actives > 1 ? "s" : ""}</p>
         </div>
         <button className="soft-button" type="button" onClick={ouvrirAjout} style={{ fontSize: 11, padding: "2px 8px" }}>+ Ajouter</button>
@@ -390,7 +390,7 @@ function CalculateurPanel({ calc, onUpdate }: { calc: CalcState; onUpdate: (c: C
   const res = calculerResultats(calc);
   return (
     <SystemPanel ariaLabel="Calculateur" compact>
-      <p className="label-meta" style={{ margin: "0 0 10px" }}>Calculateur — Faisabilite</p>
+      <p className="label-meta" style={{ margin: "0 0 10px" }}>Faisabilite</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
         <div style={{ gridColumn: "1 / -1" }}>
           <p className="label-meta" style={{ fontSize: 10, marginBottom: 3 }}>Nom de l offre</p>
@@ -626,90 +626,190 @@ export default function FreelancePage() {
 
   return (
     <main className="internal-page">
-      <SystemPageShell maxWidth={680}>
-        <header className="internal-header">
+      <style>
+        {`
+          .freelance-dashboard-grid {
+            display: grid;
+            gap: 14px;
+          }
+
+          .freelance-dashboard-column,
+          .freelance-generator-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 0;
+          }
+
+          .freelance-header-panel {
+            align-items: flex-start;
+            border: 1px solid rgba(201,168,92,0.16);
+            border-radius: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: space-between;
+            padding: 14px 16px;
+          }
+
+          .freelance-section-title {
+            color: var(--accent-gold);
+            font-size: 11px;
+            letter-spacing: .11em;
+            margin: 0 0 6px;
+            text-transform: uppercase;
+          }
+
+          @media (max-width: 640px) {
+            .freelance-header-panel {
+              flex-direction: column;
+            }
+
+            .freelance-objective-summary {
+              justify-items: start !important;
+            }
+          }
+
+          @media (min-width: 920px) {
+            .freelance-dashboard-grid {
+              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            }
+
+            .freelance-generator-stack {
+              display: grid;
+              grid-column: 1 / -1;
+              grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+            }
+
+            .freelance-mode-wide {
+              grid-column: 1 / -1;
+            }
+          }
+        `}
+      </style>
+
+      <SystemPageShell maxWidth={1180}>
+        <header className="internal-header" style={{ marginBottom: 10 }}>
           <BackLink label="Systeme" />
-          <p className="internal-kicker">MVP service</p>
-          <h1 className="internal-title" style={{ fontStyle: "italic" }}>Ghostwriting</h1>
+          <div className="freelance-header-panel">
+            <div>
+              <p className="internal-kicker" style={{ marginBottom: 4 }}>MVP service</p>
+              <h1 className="internal-title" style={{ fontSize: 34, fontStyle: "italic", marginBottom: 0 }}>Ghostwriting</h1>
+            </div>
+            <div className="freelance-objective-summary" style={{ display: "grid", gap: 4, justifyItems: "end", paddingTop: 2 }}>
+              <p className="label-meta" style={{ margin: 0 }}>Objectif actif</p>
+              <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 24, lineHeight: 1 }}>{sprint.objectif} $</strong>
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{calculerKPIs(sprint).joursRestants} jours restants</span>
+            </div>
+          </div>
         </header>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <SprintPanel sprint={sprint} onUpdate={setSprint} />
-          <CRMPanel prospects={prospects} onUpdate={setProspects} />
-        </div>
-
-        <BibliothequeOffresPanel offres={offres} onUpdate={setOffres} />
-        <CalculateurPanel calc={calc} onUpdate={setCalc} />
-        <Mode500Panel mode500={mode500} onUpdate={setMode500} />
-
-        <SystemPanel ariaLabel="Analyse" compact>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <span className="label-meta" style={{ margin: 0 }}>Complexite : <strong>{qa.complexite}</strong></span>
-            <span className="label-meta" style={{ margin: 0 }}>Prix : <strong>{qa.prix}</strong></span>
-            <button className="btn-ghost" type="button" onClick={() => { setClientResponse("Voici ce que je te propose :\nUn texte narratif base sur ton histoire.\n\nDelai : 3 jours\nPrix : " + qa.prix); setCrCopied(false); }} style={{ marginLeft: "auto", padding: "4px 12px", fontSize: 13 }}>Reponse client</button>
+        <div className="freelance-dashboard-grid">
+          <div className="freelance-dashboard-column">
+            <section>
+              <p className="freelance-section-title">Objectif rapide</p>
+              <SprintPanel sprint={sprint} onUpdate={setSprint} />
+            </section>
+            <section>
+              <p className="freelance-section-title">Prospects</p>
+              <CRMPanel prospects={prospects} onUpdate={setProspects} />
+            </section>
           </div>
-          {clientResponse !== "" ? (
-            <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(201,168,92,0.06)", borderRadius: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Reponse client</span>
-                <button className="soft-button" type="button" onClick={() => copier(clientResponse, setCrCopied)} style={{ fontSize: 11 }}>{crCopied ? "Copie" : "Copier"}</button>
+
+          <div className="freelance-dashboard-column">
+            <section>
+              <p className="freelance-section-title">Offres</p>
+              <BibliothequeOffresPanel offres={offres} onUpdate={setOffres} />
+            </section>
+            <section>
+              <p className="freelance-section-title">Faisabilite</p>
+              <CalculateurPanel calc={calc} onUpdate={setCalc} />
+            </section>
+          </div>
+
+          <div className="freelance-generator-stack">
+            <section className="freelance-mode-wide">
+              <p className="freelance-section-title">Mode 500 $</p>
+              <Mode500Panel mode500={mode500} onUpdate={setMode500} />
+            </section>
+
+            <section>
+              <p className="freelance-section-title">Generateur client</p>
+              <div className="freelance-dashboard-column">
+                <SystemPanel ariaLabel="Analyse" compact>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                    <span className="label-meta" style={{ margin: 0 }}>Complexite : <strong>{qa.complexite}</strong></span>
+                    <span className="label-meta" style={{ margin: 0 }}>Prix : <strong>{qa.prix}</strong></span>
+                    <button className="btn-ghost" type="button" onClick={() => { setClientResponse("Voici ce que je te propose :\nUn texte narratif base sur ton histoire.\n\nDelai : 3 jours\nPrix : " + qa.prix); setCrCopied(false); }} style={{ marginLeft: "auto", padding: "4px 12px", fontSize: 13 }}>Reponse client</button>
+                  </div>
+                  {clientResponse !== "" ? (
+                    <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(201,168,92,0.06)", borderRadius: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Reponse client</span>
+                        <button className="soft-button" type="button" onClick={() => copier(clientResponse, setCrCopied)} style={{ fontSize: 11 }}>{crCopied ? "Copie" : "Copier"}</button>
+                      </div>
+                      <p style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{clientResponse}</p>
+                    </div>
+                  ) : null}
+                </SystemPanel>
+
+                <SystemPanel ariaLabel="Texte du client" compact>
+                  <label className="label-meta" htmlFor="client-text">Texte du client</label>
+                  <textarea className="textarea-atelier" id="client-text" value={form.clientText}
+                    onChange={(e) => setForm((c) => ({ ...c, clientText: e.target.value }))}
+                    placeholder="Colle ici le texte ou l idee du client..."
+                    style={{ fontSize: 14, minHeight: 100 }}
+                  />
+                </SystemPanel>
               </div>
-              <p style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{clientResponse}</p>
-            </div>
-          ) : null}
-        </SystemPanel>
+            </section>
 
-        <SystemPanel ariaLabel="Texte du client" compact>
-          <label className="label-meta" htmlFor="client-text">Texte du client</label>
-          <textarea className="textarea-atelier" id="client-text" value={form.clientText}
-            onChange={(e) => setForm((c) => ({ ...c, clientText: e.target.value }))}
-            placeholder="Colle ici le texte ou l idee du client..."
-            style={{ fontSize: 14, minHeight: 100 }}
-          />
-        </SystemPanel>
-
-        <SystemPanel ariaLabel="Options" compact>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(["objectifs", "tons", "longueurs"] as OptionGroup[]).map((group) => (
-              <div key={group}>
-                <p className="label-meta" style={{ marginBottom: 5, fontSize: 11 }}>
-                  {group === "objectifs" ? "Objectif" : group === "tons" ? "Ton" : "Longueur"}
-                </p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {options[group].map((value) => {
-                    const on = form[group].includes(value);
-                    return (
-                      <button key={value} type="button" onClick={() => toggleOpt(group, value)}
-                        style={{ padding: "5px 12px", fontSize: 12, borderRadius: 99, cursor: "pointer", background: on ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.06)", border: on ? "1px solid rgba(201,168,92,0.6)" : "1px solid rgba(201,168,92,0.18)", color: on ? "var(--text-main)" : "var(--text-soft)", fontWeight: on ? 600 : 400 }}>
-                        {value}
-                      </button>
-                    );
-                  })}
+            <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <SystemPanel ariaLabel="Options" compact>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {(["objectifs", "tons", "longueurs"] as OptionGroup[]).map((group) => (
+                    <div key={group}>
+                      <p className="label-meta" style={{ marginBottom: 5, fontSize: 11 }}>
+                        {group === "objectifs" ? "Objectif" : group === "tons" ? "Ton" : "Longueur"}
+                      </p>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {options[group].map((value) => {
+                          const on = form[group].includes(value);
+                          return (
+                            <button key={value} type="button" onClick={() => toggleOpt(group, value)}
+                              style={{ padding: "5px 12px", fontSize: 12, borderRadius: 99, cursor: "pointer", background: on ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.06)", border: on ? "1px solid rgba(201,168,92,0.6)" : "1px solid rgba(201,168,92,0.18)", color: on ? "var(--text-main)" : "var(--text-soft)", fontWeight: on ? 600 : 400 }}>
+                              {value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              </SystemPanel>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 0 }}>
+                <button className="btn-primary" type="button" onClick={handleGenerate} disabled={isGenerating} style={{ flex: 1 }}>
+                  {isGenerating ? "Generation..." : "Generer"}
+                </button>
+                {result !== "" ? <button className="btn-ghost" type="button" onClick={handleGenerate} disabled={isGenerating}>Regenerer</button> : null}
               </div>
-            ))}
+
+              {generationError !== "" || result !== "" ? (
+                <SystemPanel ariaLabel="Resultat" compact style={{ marginTop: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <p className="label-meta" style={{ margin: 0 }}>Resultat</p>
+                    {result !== "" ? <button className="soft-button" type="button" onClick={() => copier(result, setCopied)} style={{ fontSize: 11 }}>{copied ? "Copie" : "Copier"}</button> : null}
+                  </div>
+                  {generationError !== ""
+                    ? <p style={{ color: "#9f3a38", fontSize: 13, lineHeight: 1.6, margin: 0 }}>{generationError}</p>
+                    : <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{result}</p>
+                  }
+                </SystemPanel>
+              ) : null}
+            </section>
           </div>
-        </SystemPanel>
-
-        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-          <button className="btn-primary" type="button" onClick={handleGenerate} disabled={isGenerating} style={{ flex: 1 }}>
-            {isGenerating ? "Generation..." : "Generer"}
-          </button>
-          {result !== "" ? <button className="btn-ghost" type="button" onClick={handleGenerate} disabled={isGenerating}>Regenerer</button> : null}
         </div>
-
-        {generationError !== "" || result !== "" ? (
-          <SystemPanel ariaLabel="Resultat" compact style={{ marginTop: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <p className="label-meta" style={{ margin: 0 }}>Resultat</p>
-              {result !== "" ? <button className="soft-button" type="button" onClick={() => copier(result, setCopied)} style={{ fontSize: 11 }}>{copied ? "Copie" : "Copier"}</button> : null}
-            </div>
-            {generationError !== ""
-              ? <p style={{ color: "#9f3a38", fontSize: 13, lineHeight: 1.6, margin: 0 }}>{generationError}</p>
-              : <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{result}</p>
-            }
-          </SystemPanel>
-        ) : null}
       </SystemPageShell>
     </main>
   );

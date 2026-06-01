@@ -368,14 +368,49 @@ export default function HomePage() {
 
   return (
     <main className="h-[calc(100vh-46px)] overflow-y-auto bg-[#1A1A16] text-[#E8E0D0] lg:overflow-hidden">
+      <style>
+        {`
+          @media (min-width: 1024px) {
+            .home-portal-card {
+              height: 240px !important;
+              max-height: 240px !important;
+              padding: 24px !important;
+            }
+
+            .home-portal-card-icon {
+              height: 32px !important;
+              width: 32px !important;
+            }
+
+            .home-portal-card-copy {
+              margin-top: 12px !important;
+            }
+
+            .home-portal-card-description {
+              white-space: normal !important;
+              overflow: visible !important;
+              text-overflow: clip !important;
+              line-height: 1.4 !important;
+              font-size: 13px !important;
+              min-height: 36px;
+            }
+
+            .home-portal-card-button {
+              margin-top: auto !important;
+              padding: 10px 20px !important;
+              font-size: 13px !important;
+            }
+          }
+        `}
+      </style>
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(180deg,rgba(232,224,208,0.012),transparent_38%,rgba(26,26,22,0.18))]" />
 
       <div className="relative mx-auto flex min-h-[calc(100vh-46px)] w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:h-[calc(100vh-46px)] lg:min-h-0 lg:py-0">
         <header className="mx-auto text-center">
-          <h1 className="mt-5 font-serif text-[26px] font-normal uppercase leading-none tracking-[0.36em] text-[#C9A84C] lg:mt-7">
+          <h1 className="mt-5 font-serif text-[26px] font-normal uppercase leading-none tracking-[0.36em] text-[#C9A84C] lg:mt-7 lg:text-[36px]">
             {t("home.kicker", lang)}
           </h1>
-          <p className="mt-1.5 text-center text-[11px] font-light leading-tight text-[#9A9080]">
+          <p className="mt-1.5 text-center text-[11px] font-light leading-tight text-[#9A9080] lg:text-[13px]">
             {t("home.title", lang)}
           </p>
         </header>
@@ -383,7 +418,7 @@ export default function HomePage() {
         {resumeSoftly && (
           <section
             aria-label="Reprendre doucement"
-            className="mx-auto mt-3 w-full max-w-3xl rounded-xl border border-[#C9A84C]/15 bg-[#1E1E1A]/95 px-3 py-2.5"
+            className="mx-auto mt-3 w-full max-w-3xl rounded-xl border border-[#C9A84C]/15 bg-[#1E1E1A]/95 px-3 py-2.5 lg:max-w-5xl"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -408,7 +443,7 @@ export default function HomePage() {
 
         <section
           aria-label="Que veux-tu faire ?"
-          className="mx-auto mt-3 w-full max-w-3xl rounded-xl border border-[#C9A84C]/12 bg-[#1E1E1A]/85 px-3 py-2.5"
+          className="mx-auto mt-3 w-full max-w-3xl rounded-xl border border-[#C9A84C]/12 bg-[#1E1E1A]/85 px-3 py-2.5 lg:max-w-5xl"
         >
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
@@ -437,7 +472,7 @@ export default function HomePage() {
 
         <section
           aria-label={t("home.continuity.title", lang)}
-          className="mx-auto mt-3 w-full max-w-3xl rounded-xl border border-[#2A2A24]/70 bg-[#1E1E1A]/90 px-3 py-2"
+          className="mx-auto mt-3 w-full max-w-3xl rounded-xl border border-[#2A2A24]/70 bg-[#1E1E1A]/90 px-3 py-2 lg:max-w-5xl"
         >
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <p className="font-serif text-[10px] font-normal uppercase tracking-[0.12em] text-[#B99A45]">
@@ -460,24 +495,24 @@ export default function HomePage() {
         <section className="mt-3 grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
           {portalSpaces.map((space) => (
             <article
-              className="group flex h-[148px] max-h-[148px] flex-col rounded-2xl border-0 border-l-2 bg-[#1E1E1A] p-4 transition duration-500 hover:-translate-y-0.5 hover:bg-[#22221d] sm:h-[152px] sm:max-h-[152px]"
+              className="home-portal-card group flex h-[148px] max-h-[148px] flex-col rounded-2xl border-0 border-l-2 bg-[#1E1E1A] p-4 transition duration-500 hover:-translate-y-0.5 hover:bg-[#22221d] sm:h-[152px] sm:max-h-[152px]"
               key={space.titleKey}
               style={{ borderLeftColor: space.accent }}
             >
               <div
-                className="flex h-5 w-5 items-center justify-center"
+                className="home-portal-card-icon flex h-5 w-5 items-center justify-center"
                 style={{ color: space.accent }}
               >
                 <EditorialIcon color={space.accent} name={space.icon} size={18} />
               </div>
 
-              <div className="mt-3.5 min-w-0">
-                <h2 className="truncate font-serif text-[15px] font-medium leading-tight text-[#E8E0D0]">{t(space.titleKey, lang)}</h2>
-                <p className="mt-1 truncate text-[10.5px] leading-tight text-[#9A9080]">{t(space.shortDescriptionKey, lang)}</p>
+              <div className="home-portal-card-copy mt-3.5 min-w-0">
+                <h2 className="truncate font-serif text-[15px] font-medium leading-tight text-[#E8E0D0] lg:text-[20px]">{t(space.titleKey, lang)}</h2>
+                <p className="home-portal-card-description mt-1 truncate text-[10.5px] leading-tight text-[#9A9080]">{t(space.shortDescriptionKey, lang)}</p>
               </div>
 
               <Link
-                className="mt-auto inline-flex w-fit rounded-[20px] border px-3.5 py-1 text-[11.5px] font-semibold leading-none transition hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#C9A84C]"
+                className="home-portal-card-button mt-auto inline-flex w-fit rounded-[20px] border px-3.5 py-1 text-[11.5px] font-semibold leading-none transition hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#C9A84C]"
                 href={space.entryHref}
                 style={{
                   background: space.accent,
