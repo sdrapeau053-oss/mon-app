@@ -197,14 +197,14 @@ export default function AutreRivePage() {
           .autre-rive-tier-tab[aria-selected="true"] {
             background: rgba(201,168,92,0.18) !important;
             border-color: rgba(201,168,92,.72) !important;
-            color: #fff7e8 !important;
-            -webkit-text-fill-color: #fff7e8 !important;
+            color: #d8caa8 !important;
+            -webkit-text-fill-color: #d8caa8 !important;
           }
 
           .autre-rive-tier-tab:hover {
             background: rgba(201,168,92,0.16) !important;
-            color: #fff7e8 !important;
-            -webkit-text-fill-color: #fff7e8 !important;
+            color: #d8caa8 !important;
+            -webkit-text-fill-color: #d8caa8 !important;
           }
         `}
       </style>
@@ -292,7 +292,7 @@ export default function AutreRivePage() {
                     background: active ? "rgba(201,168,92,0.18)" : "rgba(255,250,238,.055)",
                     border: active ? "1px solid rgba(201,168,92,.72)" : "1px solid rgba(201,168,92,.22)",
                     borderRadius: 999,
-                    color: active ? "#fff7e8" : "#d8caa8",
+                    color: "#d8caa8",
                     cursor: "pointer",
                     flex: "0 0 auto",
                     fontSize: 13,
