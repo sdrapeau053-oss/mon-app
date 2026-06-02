@@ -12,7 +12,7 @@ import {
 } from "@/components/system-ui";
 import { BackLink } from "@/components/ui/back-link";
 
-type TabKey = "overview" | "review" | "balance" | "lost" | "timeline" | "journal" | "memory";
+type TabKey = "overview" | "map" | "evolution" | "priorities" | "anchors" | "recap" | "review" | "balance" | "lost" | "timeline" | "journal" | "memory";
 type MemoireField = keyof PerteMemoireVivante;
 
 interface PerteDossier {
@@ -62,6 +62,11 @@ const STORAGE_KEY = "pertes-humaines-dossiers";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Vue d'ensemble" },
+  { key: "map", label: "Cartographie" },
+  { key: "evolution", label: "Évolution" },
+  { key: "priorities", label: "Priorités" },
+  { key: "anchors", label: "Ancrages" },
+  { key: "recap", label: "Récapitulatif" },
   { key: "review", label: "À relire" },
   { key: "balance", label: "Bilan" },
   { key: "lost", label: "Ce que j'ai perdu" },
@@ -178,6 +183,17 @@ function formatDateFr(date?: string) {
     });
   } catch {
     return date;
+  }
+}
+
+function getDateTimestamp(date?: string) {
+  if (!date) return null;
+
+  try {
+    const parsed = new Date(date);
+    return Number.isFinite(parsed.getTime()) ? parsed.getTime() : null;
+  } catch {
+    return null;
   }
 }
 
@@ -572,6 +588,88 @@ export default function PerteDossierDetailPage() {
     showToast("Bilan copié dans le presse-papiers.");
   }
 
+  async function copyRecapExport() {
+    if (!dossier) return;
+
+    const exportText = [
+      "RÉCAPITULATIF DU DOSSIER DE PERTE",
+      "",
+      "INFORMATIONS PRINCIPALES",
+      `Titre : ${dossier.titre}`,
+      `Type : ${dossier.typePerte}`,
+      `Personne/situation : ${dossier.personneOuSituation || "Non précisé"}`,
+      `Date/période : ${dossier.dateDebut || "Non précisée"}`,
+      `Intensité : ${typeof dossier.intensiteActuelle === "number" ? `${dossier.intensiteActuelle}/10` : "Non évaluée"}`,
+      `Créé le : ${formatDateFr(dossier.dateCreation)}`,
+      "",
+      "SYNTHÈSE DU DOSSIER",
+      `${dossierStatus} · Complétion ${completionLevel}%`,
+      intensitySummary,
+      "",
+      "LECTURE ÉMOTIONNELLE",
+      `Charge émotionnelle : ${emotionalChargeLabel}`,
+      emotionalChargeText,
+      `Densité du dossier : ${dossierDensityLabel}`,
+      dossierDensityText,
+      "",
+      "REPÈRE DE PROGRESSION",
+      progressionStatus,
+      progressionText,
+      "",
+      "FIL CONDUCTEUR",
+      guidingThread,
+      guidingThreadText,
+      "",
+      "PERTES SECONDAIRES",
+      formatExportList(pertesSecondaires),
+      "",
+      "PERTES ASSOCIÉES",
+      formatExportList(pertesAssociees),
+      "",
+      "TIMELINE",
+      timeline.length > 0
+        ? timeline.map((event) => [
+            `- ${event.titre}`,
+            `  Date : ${event.date || "Non précisée"}`,
+            `  Type : ${event.type}`,
+            `  Intensité : ${typeof event.intensite === "number" ? `${event.intensite}/10` : "Non évaluée"}`,
+            `  Note : ${event.note || "Aucune note"}`,
+          ].join("\n")).join("\n")
+        : "- Aucun événement",
+      "",
+      "JOURNAL",
+      journal.length > 0
+        ? journal.map((entry) => [
+            `- ${formatDateFr(entry.date)}`,
+            `  Émotion : ${entry.emotion}`,
+            `  Intensité : ${entry.intensite}/10`,
+            `  Déclencheur : ${entry.declencheur || "Non précisé"}`,
+            `  Texte : ${entry.texte}`,
+          ].join("\n")).join("\n")
+        : "- Aucune entrée",
+      "",
+      "MÉMOIRE VIVANTE",
+      memoireItems.map((item) => `${item.label} :\n${formatExportList(item.values)}`).join("\n\n"),
+      "",
+      "ANCRAGES",
+      `Ce qui reste vivant : ${recentMemoireItems.length > 0 ? recentMemoireItems.map((item) => `${item.label} — ${item.value}`).join(" | ") : "Aucun élément récent"}`,
+      `Ce qui peut soutenir : ${pertesAssociees.length > 0 ? pertesAssociees.join(", ") : "Aucune perte associée nommée"}`,
+      `Ce qui demande douceur : ${dossier.notes?.trim() ? dossier.notes.trim() : intensitySummary}`,
+      `Prochain geste simple : ${currentDirection}`,
+      "",
+      "PRIORITÉS",
+      `À traiter maintenant : ${currentDirection}`,
+      `À relire bientôt : ${recentJournalEntries.length > 0 ? recentJournalEntries.map((entry) => `${formatDateFr(entry.date)} — ${entry.emotion}`).join(" | ") : "Aucune entrée journal récente"}`,
+      `À garder en mémoire : ${recentMemoireItems.length > 0 ? recentMemoireItems.map((item) => `${item.label} — ${item.value}`).join(" | ") : "Aucun élément mémoire récent"}`,
+      "",
+      "PROCHAINE ÉTAPE",
+      currentDirection,
+    ].join("\n");
+
+    await navigator.clipboard.writeText(exportText);
+    showToast("Récapitulatif copié dans le presse-papiers.");
+  }
+
   if (!loaded) {
     return (
       <main className="internal-page">
@@ -717,13 +815,64 @@ export default function PerteDossierDetailPage() {
     .flatMap((item) => item.values.map((value) => ({ label: item.label, value })))
     .slice(-3)
     .reverse();
+  const evolutionItems = [
+    ...timeline.map((event) => ({
+      dateLabel: event.date || "Date non précisée",
+      detail: event.note || event.type,
+      id: event.id,
+      meta: `${event.type}${typeof event.intensite === "number" ? ` · Intensité ${event.intensite}/10` : ""}`,
+      source: "Timeline" as const,
+      timestamp: getDateTimestamp(event.date),
+      title: event.titre,
+    })),
+    ...journal.map((entry) => ({
+      dateLabel: formatDateFr(entry.date),
+      detail: entry.texte,
+      id: entry.id,
+      meta: `${entry.emotion} · Intensité ${entry.intensite}/10${entry.declencheur ? ` · ${entry.declencheur}` : ""}`,
+      source: "Journal" as const,
+      timestamp: getDateTimestamp(entry.date),
+      title: entry.emotion,
+    })),
+    ...memoireItems.flatMap((item) =>
+      item.values.map((value, index) => ({
+        dateLabel: `Mémoire vivante · ${formatDateFr(dossier.dateCreation)}`,
+        detail: value,
+        id: `memoire-${item.field}-${index}`,
+        meta: item.label,
+        source: "Mémoire" as const,
+        timestamp: getDateTimestamp(dossier.dateCreation),
+        title: item.label,
+      })),
+    ),
+  ].sort((a, b) => {
+    const aTime = a.timestamp ?? Number.MAX_SAFE_INTEGER;
+    const bTime = b.timestamp ?? Number.MAX_SAFE_INTEGER;
+    return aTime - bTime;
+  });
+  const datedEvolutionItems = evolutionItems.filter((item) => item.timestamp !== null);
+  const firstEvolutionItem = evolutionItems[0] || null;
+  const lastEvolutionItem = evolutionItems[evolutionItems.length - 1] || null;
+  const firstDatedEvolutionItem = datedEvolutionItems[0] || null;
+  const lastDatedEvolutionItem = datedEvolutionItems[datedEvolutionItems.length - 1] || null;
+  const evolutionDurationDays =
+    firstDatedEvolutionItem && lastDatedEvolutionItem
+      ? Math.max(0, Math.round(((lastDatedEvolutionItem.timestamp || 0) - (firstDatedEvolutionItem.timestamp || 0)) / 86400000))
+      : null;
   const hasReviewContent =
     recentJournalEntries.length > 0 ||
     recentTimelineEvents.length > 0 ||
     recentPertesAssociees.length > 0 ||
     recentMemoireItems.length > 0;
+  const hasPriorityContent = Boolean(currentDirection) || intensite !== null || hasReviewContent;
+  const hasAnchorContent = memoireCount > 0 || pertesAssociees.length > 0 || Boolean(dossier.notes?.trim()) || Boolean(currentDirection);
   const balanceIsSparse = totalDossierElements <= 1;
   const tabCounts: Partial<Record<TabKey, number>> = {
+    map: 1 + pertesSecondaires.length + pertesAssociees.length,
+    evolution: evolutionItems.length,
+    priorities: totalDossierElements + (intensite !== null ? 1 : 0),
+    anchors: memoireCount + pertesAssociees.length + (dossier.notes?.trim() ? 1 : 0),
+    recap: totalDossierElements,
     review: totalDossierElements,
     balance: totalDossierElements,
     lost: pertesAssociees.length,
@@ -1061,6 +1210,619 @@ export default function PerteDossierDetailPage() {
               </p>
             </SystemPanel>
           </SystemGrid>
+        ) : null}
+
+        {activeTab === "map" ? (
+          <SystemPanel ariaLabel="Cartographie visuelle des pertes" compact>
+            <SystemSectionHeader eyebrow="Vue locale" title="Cartographie des pertes" />
+            <div style={{ display: "grid", gap: 16 }}>
+              <article
+                style={{
+                  background: "linear-gradient(135deg, rgba(201,168,92,0.16), rgba(255,250,238,0.035))",
+                  border: "1px solid rgba(201,168,92,0.34)",
+                  borderRadius: 14,
+                  display: "grid",
+                  gap: 12,
+                  padding: 18,
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <StatusChip tone="warning">Perte principale</StatusChip>
+                  <StatusChip tone="neutral">{dossier.typePerte}</StatusChip>
+                  {intensite !== null ? <StatusChip tone="warning">Intensité {intensite}/10</StatusChip> : null}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 28, fontStyle: "italic", fontWeight: 400, lineHeight: 1.15, margin: 0 }}>
+                    {dossier.titre}
+                  </h2>
+                  {dossier.personneOuSituation ? (
+                    <p style={{ color: "var(--text-soft)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                      {dossier.personneOuSituation}
+                    </p>
+                  ) : null}
+                </div>
+                {intensite !== null ? (
+                  <div style={{ display: "grid", gap: 5 }}>
+                    <div style={{ background: "rgba(255,255,255,.07)", borderRadius: 999, height: 6, overflow: "hidden", width: "100%" }}>
+                      <div style={{ background: "var(--accent-gold)", height: "100%", width: `${Math.max(0, Math.min(10, intensite)) * 10}%` }} />
+                    </div>
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      Charge actuelle visible dans ce dossier.
+                    </p>
+                  </div>
+                ) : null}
+              </article>
+
+              <SystemGrid gap={12} min={260}>
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Pertes secondaires</p>
+                  {pertesSecondaires.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {pertesSecondaires.map((perte) => <StatusChip key={perte} tone="warning">{perte}</StatusChip>)}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                      Aucune perte secondaire indiquée.
+                    </p>
+                  )}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Pertes associées</p>
+                  {pertesAssociees.length > 0 ? (
+                    <div style={{ display: "grid", gap: 7 }}>
+                      {pertesAssociees.map((perte) => (
+                        <div
+                          key={perte}
+                          style={{
+                            background: "rgba(201,168,92,0.08)",
+                            border: "1px solid rgba(201,168,92,0.18)",
+                            borderRadius: 9,
+                            color: "var(--text-soft)",
+                            fontSize: 13,
+                            lineHeight: 1.5,
+                            padding: "8px 10px",
+                          }}
+                        >
+                          {perte}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                      Aucune perte associée ajoutée pour le moment.
+                    </p>
+                  )}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 12,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Repères du dossier</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                    <StatusChip tone={guidingThread === "Mémoire" ? "success" : guidingThread === "Survie" ? "warning" : "neutral"}>
+                      Thème : {guidingThread}
+                    </StatusChip>
+                    <StatusChip tone={progressionStatus === "À honorer" ? "success" : progressionStatus === "À déposer" ? "warning" : "neutral"}>
+                      Progression : {progressionStatus}
+                    </StatusChip>
+                  </div>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                    {guidingThreadText}
+                  </p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                    {progressionText}
+                  </p>
+                </article>
+              </SystemGrid>
+            </div>
+          </SystemPanel>
+        ) : null}
+
+        {activeTab === "evolution" ? (
+          <SystemPanel ariaLabel="Ligne de temps émotionnelle" compact>
+            <SystemSectionHeader eyebrow="Lecture chronologique" title="Évolution" />
+            <div style={{ display: "grid", gap: 16 }}>
+              <SystemGrid gap={12} min={220}>
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 5,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Total</p>
+                  <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 26, fontWeight: 400 }}>
+                    {evolutionItems.length}
+                  </strong>
+                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                    élément{evolutionItems.length > 1 ? "s" : ""} dans la ligne de temps
+                  </p>
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 5,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Premier élément</p>
+                  <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 400 }}>
+                    {firstEvolutionItem ? firstEvolutionItem.title : "Aucun"}
+                  </strong>
+                  {firstEvolutionItem ? <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>{firstEvolutionItem.dateLabel}</p> : null}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 5,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Dernier élément</p>
+                  <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 400 }}>
+                    {lastEvolutionItem ? lastEvolutionItem.title : "Aucun"}
+                  </strong>
+                  {lastEvolutionItem ? <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>{lastEvolutionItem.dateLabel}</p> : null}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 5,
+                    padding: 14,
+                  }}
+                >
+                  <p className="label-meta" style={{ margin: 0 }}>Durée couverte</p>
+                  <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 400 }}>
+                    {evolutionDurationDays !== null ? `${evolutionDurationDays} jour${evolutionDurationDays > 1 ? "s" : ""}` : "Non calculable"}
+                  </strong>
+                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                    Selon les dates exploitables.
+                  </p>
+                </article>
+              </SystemGrid>
+
+              {evolutionItems.length > 0 ? (
+                <div style={{ borderLeft: "1px solid rgba(201,168,92,0.28)", display: "grid", gap: 12, paddingLeft: 14 }}>
+                  {evolutionItems.map((item) => (
+                    <article
+                      key={`${item.source}-${item.id}`}
+                      style={{
+                        background: "rgba(255,250,238,0.025)",
+                        border: "1px solid rgba(201,168,92,0.12)",
+                        borderRadius: 12,
+                        display: "grid",
+                        gap: 7,
+                        padding: 14,
+                      }}
+                    >
+                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 7, justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                          <StatusChip tone={item.source === "Journal" ? "warning" : item.source === "Mémoire" ? "success" : "neutral"}>
+                            {item.source}
+                          </StatusChip>
+                          <StatusChip tone="neutral">{item.dateLabel}</StatusChip>
+                        </div>
+                        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{item.meta}</span>
+                      </div>
+                      <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 400, margin: 0 }}>
+                        {item.title}
+                      </h2>
+                      <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.65, margin: 0, whiteSpace: "pre-wrap" }}>
+                        {item.detail}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                  Aucun élément à afficher pour le moment. Ajoutez un événement, une entrée journal ou un élément de mémoire vivante.
+                </p>
+              )}
+            </div>
+          </SystemPanel>
+        ) : null}
+
+        {activeTab === "priorities" ? (
+          <SystemPanel ariaLabel="Priorités du dossier" compact>
+            <SystemSectionHeader eyebrow="Lecture locale" title="Priorités" />
+            {hasPriorityContent ? (
+              <SystemGrid gap={12} min={280}>
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                    <StatusChip tone={intensite !== null && intensite >= 7 ? "warning" : "neutral"}>
+                      À traiter maintenant
+                    </StatusChip>
+                    {intensite !== null ? <StatusChip tone="neutral">Intensité {intensite}/10</StatusChip> : null}
+                  </div>
+                  <p className="editorial-body" style={{ margin: 0 }}>
+                    {currentDirection}
+                  </p>
+                  {intensite !== null ? (
+                    <div style={{ display: "grid", gap: 5 }}>
+                      <div style={{ background: "rgba(255,255,255,.06)", borderRadius: 999, height: 5, overflow: "hidden", width: "100%" }}>
+                        <div style={{ background: "var(--accent-gold)", height: "100%", width: `${Math.max(0, Math.min(10, intensite)) * 10}%` }} />
+                      </div>
+                      <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>{intensitySummary}</p>
+                    </div>
+                  ) : null}
+                  {recentPertesAssociees.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {recentPertesAssociees.map((perte, index) => (
+                        <StatusChip key={`${perte}-${index}`} tone="warning">{perte}</StatusChip>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <StatusChip tone="neutral">À relire bientôt</StatusChip>
+                  {recentJournalEntries.length > 0 ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {recentJournalEntries.map((entry) => (
+                        <div key={entry.id} style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                          <p className="label-meta" style={{ margin: "0 0 3px" }}>{formatDateFr(entry.date)} · {entry.emotion}</p>
+                          <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{entry.texte}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                      Aucune entrée journal récente à relire.
+                    </p>
+                  )}
+                  {recentTimelineEvents[0] ? (
+                    <div style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                      <p className="label-meta" style={{ margin: "0 0 3px" }}>Dernier événement timeline</p>
+                      <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                        {recentTimelineEvents[0].titre}{recentTimelineEvents[0].date ? ` · ${recentTimelineEvents[0].date}` : ""}
+                      </p>
+                    </div>
+                  ) : null}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <StatusChip tone="success">À garder en mémoire</StatusChip>
+                  {recentMemoireItems.length > 0 ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {recentMemoireItems.map((item) => (
+                        <div key={`${item.label}-${item.value}`} style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                          <p className="label-meta" style={{ margin: "0 0 3px" }}>{item.label}</p>
+                          <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                      Aucun élément de mémoire vivante ajouté pour le moment.
+                    </p>
+                  )}
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                    {guidingThreadText}
+                  </p>
+                </article>
+              </SystemGrid>
+            ) : (
+              <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                Le dossier contient encore trop peu d'éléments pour proposer des priorités de relecture. Ajoutez une perte associée, une entrée journal, un événement ou un élément de mémoire.
+              </p>
+            )}
+          </SystemPanel>
+        ) : null}
+
+        {activeTab === "anchors" ? (
+          <SystemPanel ariaLabel="Ancrages du dossier" compact>
+            <SystemSectionHeader eyebrow="Stabilisation locale" title="Ancrages" />
+            {hasAnchorContent ? (
+              <SystemGrid gap={12} min={260}>
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <StatusChip tone="success">Ce qui reste vivant</StatusChip>
+                  {recentMemoireItems.length > 0 ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {recentMemoireItems.map((item) => (
+                        <div key={`${item.label}-${item.value}`} style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                          <p className="label-meta" style={{ margin: "0 0 3px" }}>{item.label}</p>
+                          <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                      Aucun élément de mémoire vivante ajouté pour le moment.
+                    </p>
+                  )}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <StatusChip tone="neutral">Ce qui peut soutenir</StatusChip>
+                  {pertesAssociees.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {pertesAssociees.map((perte, index) => (
+                        <StatusChip key={`${perte}-${index}`} tone="warning">{perte}</StatusChip>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
+                      Aucune perte associée nommée pour l'instant.
+                    </p>
+                  )}
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                    {guidingThreadText}
+                  </p>
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(255,250,238,0.03)",
+                    border: "1px solid rgba(201,168,92,0.14)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <StatusChip tone={intensite !== null && intensite >= 7 ? "warning" : "neutral"}>Ce qui demande douceur</StatusChip>
+                  <p className="editorial-body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                    {dossier.notes?.trim() ? dossier.notes : intensitySummary}
+                  </p>
+                  {intensite !== null ? (
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      Intensité actuelle : {intensite}/10
+                    </p>
+                  ) : null}
+                </article>
+
+                <article
+                  style={{
+                    background: "rgba(201,168,92,0.08)",
+                    border: "1px solid rgba(201,168,92,0.24)",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                    padding: 14,
+                  }}
+                >
+                  <StatusChip tone="warning">Prochain geste simple</StatusChip>
+                  <p className="editorial-body" style={{ margin: 0 }}>
+                    {currentDirection}
+                  </p>
+                </article>
+              </SystemGrid>
+            ) : (
+              <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                Le dossier contient encore peu d'éléments stabilisants. Ajoutez une note initiale, une perte associée, un élément de mémoire ou une prochaine étape.
+              </p>
+            )}
+          </SystemPanel>
+        ) : null}
+
+        {activeTab === "recap" ? (
+          <SystemPanel ariaLabel="Récapitulatif imprimable" compact>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginBottom: 14 }}>
+              <SystemSectionHeader eyebrow="Version copiable" title="Récapitulatif imprimable" />
+              <button className="internal-button" onClick={copyRecapExport} style={dashboardButtonStyle} type="button">
+                Copier le récapitulatif
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gap: 14 }}>
+              <article
+                style={{
+                  background: "rgba(201,168,92,0.08)",
+                  border: "1px solid rgba(201,168,92,0.24)",
+                  borderRadius: 12,
+                  display: "grid",
+                  gap: 10,
+                  padding: 16,
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  <StatusChip tone="neutral">{dossier.typePerte}</StatusChip>
+                  <StatusChip tone={intensite !== null && intensite >= 7 ? "warning" : "neutral"}>
+                    {intensite !== null ? `Intensité ${intensite}/10` : "Intensité non évaluée"}
+                  </StatusChip>
+                  <StatusChip tone="neutral">Créée le {formatDateFr(dossier.dateCreation)}</StatusChip>
+                </div>
+                <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 28, fontStyle: "italic", fontWeight: 400, lineHeight: 1.15, margin: 0 }}>
+                  {dossier.titre}
+                </h2>
+                <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.65, margin: 0 }}>
+                  {dossier.personneOuSituation || "Personne ou situation non précisée"}
+                  {dossier.dateDebut ? ` · ${dossier.dateDebut}` : ""}
+                </p>
+              </article>
+
+              <SystemGrid gap={12} min={260}>
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Synthèse du dossier</h2>
+                  <p className="label-meta" style={{ margin: 0 }}>{dossierStatus} · Complétion {completionLevel}%</p>
+                  <p className="editorial-body" style={{ margin: 0 }}>{intensitySummary}</p>
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Lecture émotionnelle</h2>
+                  <p className="label-meta" style={{ margin: 0 }}>{emotionalChargeLabel} · {dossierDensityLabel}</p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>{emotionalChargeText}</p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>{dossierDensityText}</p>
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Repère de progression</h2>
+                  <StatusChip tone={progressionStatus === "À honorer" ? "success" : progressionStatus === "À déposer" ? "warning" : "neutral"}>{progressionStatus}</StatusChip>
+                  <p className="editorial-body" style={{ margin: 0 }}>{progressionText}</p>
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Fil conducteur</h2>
+                  <StatusChip tone={guidingThread === "Mémoire" ? "success" : guidingThread === "Survie" ? "warning" : "neutral"}>{guidingThread}</StatusChip>
+                  <p className="editorial-body" style={{ margin: 0 }}>{guidingThreadText}</p>
+                </article>
+              </SystemGrid>
+
+              <SystemGrid gap={12} min={280}>
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Pertes associées</h2>
+                  {pertesAssociees.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {pertesAssociees.map((perte, index) => <StatusChip key={`${perte}-${index}`} tone="warning">{perte}</StatusChip>)}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Aucune perte associée ajoutée.</p>
+                  )}
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Timeline</h2>
+                  {timeline.length > 0 ? (
+                    timeline.map((event) => (
+                      <div key={event.id} style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                        <p className="label-meta" style={{ margin: "0 0 3px" }}>{event.date || "Date non précisée"} · {event.type}</p>
+                        <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{event.titre}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Aucun événement timeline.</p>
+                  )}
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Journal</h2>
+                  {journal.length > 0 ? (
+                    journal.map((entry) => (
+                      <div key={entry.id} style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                        <p className="label-meta" style={{ margin: "0 0 3px" }}>{formatDateFr(entry.date)} · {entry.emotion} · {entry.intensite}/10</p>
+                        <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{entry.texte}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Aucune entrée journal.</p>
+                  )}
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Mémoire vivante</h2>
+                  {memoireCount > 0 ? (
+                    memoireItems.map((item) => (
+                      arrayHasItems(item.values) ? (
+                        <div key={item.field} style={{ borderTop: "1px solid rgba(201,168,92,0.12)", paddingTop: 8 }}>
+                          <p className="label-meta" style={{ margin: "0 0 3px" }}>{item.label}</p>
+                          <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{item.values.join(" · ")}</p>
+                        </div>
+                      ) : null
+                    ))
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Aucun élément de mémoire vivante.</p>
+                  )}
+                </article>
+              </SystemGrid>
+
+              <SystemGrid gap={12} min={280}>
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Ancrages</h2>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>Ce qui reste vivant : {recentMemoireItems.length > 0 ? recentMemoireItems.map((item) => item.value).join(" · ") : "Aucun élément récent"}</p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>Ce qui peut soutenir : {pertesAssociees.length > 0 ? pertesAssociees.join(" · ") : "Aucune perte associée"}</p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>Ce qui demande douceur : {dossier.notes?.trim() ? dossier.notes : intensitySummary}</p>
+                </article>
+
+                <article className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 14 }}>
+                  <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 400, margin: 0 }}>Priorités</h2>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>À traiter maintenant : {currentDirection}</p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>À relire bientôt : {recentJournalEntries.length > 0 ? recentJournalEntries.map((entry) => `${formatDateFr(entry.date)} · ${entry.emotion}`).join(" · ") : "Aucune entrée récente"}</p>
+                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>À garder en mémoire : {recentMemoireItems.length > 0 ? recentMemoireItems.map((item) => item.value).join(" · ") : "Aucun élément récent"}</p>
+                </article>
+              </SystemGrid>
+
+              <SystemPanel ariaLabel="Prochaine étape du récapitulatif" compact>
+                <SystemSectionHeader eyebrow="Suite" title="Prochaine étape" />
+                <p className="editorial-body" style={{ margin: 0 }}>{currentDirection}</p>
+              </SystemPanel>
+            </div>
+          </SystemPanel>
         ) : null}
 
         {activeTab === "review" ? (
