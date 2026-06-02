@@ -16,6 +16,7 @@ interface RelationDossier {
   id: string;
   nom: string;
   statut: string;
+  typeRelation?: string;
   dateCreation: string;
   derniereInteraction?: string;
   derniereAnalyse?: RelationAnalysis;
@@ -36,6 +37,9 @@ interface RelationConversation {
   titre?: string;
   contenu: string;
   dateCreation: string;
+  source?: string;
+  dateConversation?: string;
+  participants?: string[];
 }
 
 interface RelationAnalysis {
@@ -348,9 +352,9 @@ function formatConversationDate(value: string) {
   }
 }
 
-function previewConversation(value: string) {
-  const compact = value.replace(/\s+/g, " ").trim();
-  return compact.length > 200 ? `${compact.slice(0, 200)}...` : compact;
+function getConversationMiniSummary(contenu: string) {
+  const compact = contenu.replace(/\s+/g, " ").trim();
+  return compact.length <= 180 ? compact : `${compact.slice(0, 180)}...`;
 }
 
 function formatDecisionRelativeDate(value: string) {
@@ -698,9 +702,16 @@ export default function RelationDossierDetailPage() {
   const [tagDraft, setTagDraft] = useState("");
   const [tagError, setTagError] = useState("");
   const [conversationTitle, setConversationTitle] = useState("");
+  const [conversationSource, setConversationSource] = useState("Messenger");
+  const [conversationDate, setConversationDate] = useState("");
+  const [conversationParticipants, setConversationParticipants] = useState("");
   const [conversationContent, setConversationContent] = useState("");
   const [conversationError, setConversationError] = useState("");
   const [conversationMessage, setConversationMessage] = useState("");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [bulkImportContent, setBulkImportContent] = useState("");
+  const [bulkImportSummary, setBulkImportSummary] = useState("");
+  const [lastImportedConversationIds, setLastImportedConversationIds] = useState<string[]>([]);
   const [expandedConversationId, setExpandedConversationId] = useState("");
   const [deleteConversationTarget, setDeleteConversationTarget] = useState<RelationConversation | null>(null);
   const [expandedAnalysisId, setExpandedAnalysisId] = useState("");
@@ -722,6 +733,10 @@ export default function RelationDossierDetailPage() {
   const [deleteJournalTarget, setDeleteJournalTarget] = useState<EntreeJournal | null>(null);
   const [activeTab, setActiveTab] = useState<RelationTab>("Vue d’ensemble");
   const [searchQuery, setSearchQuery] = useState("");
+  const [conversationSourceFilter, setConversationSourceFilter] = useState("Toutes");
+  const [conversationParticipantFilter, setConversationParticipantFilter] = useState("");
+  const [conversationDateFromFilter, setConversationDateFromFilter] = useState("");
+  const [conversationDateToFilter, setConversationDateToFilter] = useState("");
   const [journalSearchQuery, setJournalSearchQuery] = useState("");
   const [journalEmotionFilter, setJournalEmotionFilter] = useState("");
   const [analysisSearchQuery, setAnalysisSearchQuery] = useState("");
@@ -798,6 +813,11 @@ export default function RelationDossierDetailPage() {
       titre: conversationTitle.trim() || undefined,
       contenu,
       dateCreation: new Date().toISOString(),
+      source: conversationSource,
+      dateConversation: conversationDate || undefined,
+      participants: conversationParticipants.split(",").map((participant) => participant.trim()).filter(Boolean).length
+        ? conversationParticipants.split(",").map((participant) => participant.trim()).filter(Boolean)
+        : undefined,
     };
 
     updateDossier((current) => ({
@@ -805,9 +825,101 @@ export default function RelationDossierDetailPage() {
       conversations: [conversation, ...getConversations(current)],
     }));
     setConversationTitle("");
+    setConversationSource("Messenger");
+    setConversationDate("");
+    setConversationParticipants("");
     setConversationContent("");
     setConversationError("");
     setConversationMessage("Conversation enregistrée.");
+    window.setTimeout(() => setConversationMessage(""), 2000);
+  }
+
+  function handleBulkImport() {
+    if (!bulkImportBlocks.length) {
+      setConversationError("Aucune conversation valide à importer.");
+      setBulkImportSummary("");
+      return;
+    }
+
+    const participants = conversationParticipants
+      .split(",")
+      .map((participant) => participant.trim())
+      .filter(Boolean);
+    const dateCreation = new Date().toISOString();
+    const importedConversations: RelationConversation[] = bulkImportBlocks.map((bloc, index) => ({
+      id: createConversationId(),
+      titre: `Conversation importée ${index + 1}`,
+      contenu: bloc,
+      dateCreation,
+      source: conversationSource,
+      dateConversation: conversationDate || undefined,
+      participants: participants.length ? participants : undefined,
+    }));
+
+    updateDossier((current) => ({
+      ...current,
+      conversations: [...importedConversations, ...getConversations(current)],
+    }));
+    setLastImportedConversationIds(importedConversations.map((conversation) => conversation.id));
+    setBulkImportContent("");
+    setBulkImportSummary(`${bulkImportBlocks.length} conversation(s) importée(s) depuis ${conversationSource}.`);
+    setConversationError("");
+    setConversationMessage(`${importedConversations.length} conversation(s) importée(s).`);
+    window.setTimeout(() => setConversationMessage(""), 2000);
+  }
+
+  async function copyConversationsExport() {
+    const exportText = displayedConversations
+      .map((conversation) => [
+        "--- Conversation ---",
+        `Titre : ${conversation.titre?.trim() || "Conversation sans titre"}`,
+        `Source : ${conversation.source || "Non précisée"}`,
+        `Date conversation : ${conversation.dateConversation || "Non précisée"}`,
+        `Participants : ${conversation.participants?.length ? conversation.participants.join(", ") : "Non précisés"}`,
+        `Ajoutée le : ${formatConversationDate(conversation.dateCreation)}`,
+        "Contenu :",
+        conversation.contenu,
+      ].join("\n"))
+      .join("\n\n");
+
+    await navigator.clipboard.writeText(exportText);
+    setConversationMessage("Export copié dans le presse-papiers.");
+    window.setTimeout(() => setConversationMessage(""), 2000);
+  }
+
+  async function copyFilteredConversationsExport() {
+    const exportText = displayedConversations
+      .map((conversation) => [
+        "--- Conversation ---",
+        `Titre : ${conversation.titre?.trim() || "Conversation sans titre"}`,
+        `Source : ${conversation.source || "Non précisée"}`,
+        `Date conversation : ${conversation.dateConversation || "Non précisée"}`,
+        `Participants : ${conversation.participants?.length ? conversation.participants.join(", ") : "Non précisés"}`,
+        `Ajoutée le : ${formatConversationDate(conversation.dateCreation)}`,
+        "Contenu :",
+        conversation.contenu,
+      ].join("\n"))
+      .join("\n\n");
+
+    await navigator.clipboard.writeText(exportText);
+    setConversationMessage("Export filtré copié dans le presse-papiers.");
+    window.setTimeout(() => setConversationMessage(""), 2000);
+  }
+
+  async function copySingleConversation(conversation: RelationConversation) {
+    const exportText = [
+      "--- Conversation ---",
+      `Titre : ${conversation.titre?.trim() || "Conversation sans titre"}`,
+      `Source : ${conversation.source || "Non précisée"}`,
+      `Date conversation : ${conversation.dateConversation || "Non précisée"}`,
+      `Participants : ${conversation.participants?.length ? conversation.participants.join(", ") : "Non précisés"}`,
+      `Ajoutée le : ${formatConversationDate(conversation.dateCreation)}`,
+      "Contenu :",
+      conversation.contenu,
+    ].join("\n");
+
+    await navigator.clipboard.writeText(exportText);
+    setConversationMessage("Conversation copiée dans le presse-papiers.");
     window.setTimeout(() => setConversationMessage(""), 2000);
   }
 
@@ -1459,15 +1571,57 @@ export default function RelationDossierDetailPage() {
       weekly,
     };
   }, [analyses, conversations, decisions, journalEntries]);
+  const bulkImportBlocks = bulkImportContent
+    .split("--- Conversation ---")
+    .map((block) => block.trim())
+    .filter(Boolean);
   const normalizedConversationSearch = searchQuery.toLocaleLowerCase("fr-CA").trim();
+  const normalizedParticipantFilter = conversationParticipantFilter.toLocaleLowerCase("fr-CA").trim();
   const filteredConversations = useMemo(() => {
-    if (!normalizedConversationSearch) return conversations;
     return conversations.filter((conversation) => {
       const title = conversation.titre?.toLocaleLowerCase("fr-CA") || "";
       const content = conversation.contenu.toLocaleLowerCase("fr-CA");
-      return title.includes(normalizedConversationSearch) || content.includes(normalizedConversationSearch);
+      const matchesSearch = !normalizedConversationSearch || title.includes(normalizedConversationSearch) || content.includes(normalizedConversationSearch);
+      const matchesSource = conversationSourceFilter === "Toutes" || conversation.source === conversationSourceFilter;
+      const matchesParticipant = !normalizedParticipantFilter || (conversation.participants || []).some((participant) =>
+        participant.toLocaleLowerCase("fr-CA").includes(normalizedParticipantFilter),
+      );
+      const dateFiltersActive = Boolean(conversationDateFromFilter || conversationDateToFilter);
+      const matchesDate = !dateFiltersActive || Boolean(
+        conversation.dateConversation &&
+        (!conversationDateFromFilter || conversation.dateConversation >= conversationDateFromFilter) &&
+        (!conversationDateToFilter || conversation.dateConversation <= conversationDateToFilter),
+      );
+      return matchesSearch && matchesSource && matchesParticipant && matchesDate;
     });
-  }, [conversations, normalizedConversationSearch]);
+  }, [conversations, conversationDateFromFilter, conversationDateToFilter, conversationSourceFilter, normalizedConversationSearch, normalizedParticipantFilter]);
+  const conversationFiltersActive = Boolean(normalizedConversationSearch || conversationSourceFilter !== "Toutes" || normalizedParticipantFilter || conversationDateFromFilter || conversationDateToFilter);
+  const activeConversationFilterLabels = [
+    normalizedConversationSearch ? `Recherche : "${searchQuery.trim()}"` : "",
+    conversationSourceFilter !== "Toutes" ? `Source : "${conversationSourceFilter}"` : "",
+    normalizedParticipantFilter ? `Participant : "${conversationParticipantFilter.trim()}"` : "",
+    conversationDateFromFilter ? `Du : "${conversationDateFromFilter}"` : "",
+    conversationDateToFilter ? `Au : "${conversationDateToFilter}"` : "",
+  ].filter(Boolean);
+  const displayedConversations = useMemo(() => {
+    return [...filteredConversations].sort((first, second) => {
+      const firstDate = new Date(first.dateConversation || first.dateCreation).getTime();
+      const secondDate = new Date(second.dateConversation || second.dateCreation).getTime();
+      return (Number.isFinite(secondDate) ? secondDate : 0) - (Number.isFinite(firstDate) ? firstDate : 0);
+    });
+  }, [filteredConversations]);
+  const totalConversationCharacters = conversations.reduce(
+    (total, conversation) => total + conversation.contenu.length,
+    0,
+  );
+  const displayedConversationCharacters = displayedConversations.reduce(
+    (total, conversation) => total + conversation.contenu.length,
+    0,
+  );
+  const displayedConversationAverageLength =
+    displayedConversations.length > 0
+      ? Math.round(displayedConversationCharacters / displayedConversations.length)
+      : 0;
   const normalizedJournalSearch = journalSearchQuery.toLocaleLowerCase("fr-CA").trim();
   const journalFiltersActive = Boolean(normalizedJournalSearch || journalEmotionFilter);
   const filteredJournalEntries = useMemo(() => {
@@ -2335,6 +2489,34 @@ export default function RelationDossierDetailPage() {
           <p className="editorial-body" style={{ margin: "0 0 14px" }}>
             Ajoutez des conversations importantes à ce dossier afin de préparer les futures analyses.
           </p>
+          <p className="label-meta" style={{ margin: "0 0 14px" }}>
+            Nombre de conversations : {conversations.length} · Caractères totaux : {totalConversationCharacters}
+            {conversationFiltersActive ? ` · Résultats affichés : ${filteredConversations.length}` : ""}
+            <br />
+            Caractères affichés : {displayedConversationCharacters} · Longueur moyenne affichée : {displayedConversationAverageLength} caractères
+            <br />
+            Tri : plus récentes en premier
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+            <button
+              className="internal-button"
+              disabled={displayedConversations.length === 0}
+              onClick={copyConversationsExport}
+              style={{ ...dashboardButtonStyle, opacity: displayedConversations.length === 0 ? 0.55 : 1 }}
+              type="button"
+            >
+              Copier l&apos;export
+            </button>
+            <button
+              className="internal-button"
+              disabled={displayedConversations.length === 0}
+              onClick={copyFilteredConversationsExport}
+              style={{ ...dashboardButtonStyle, opacity: displayedConversations.length === 0 ? 0.55 : 1 }}
+              type="button"
+            >
+              Copier l&apos;export filtré
+            </button>
+          </div>
 
           <div style={{ display: "grid", gap: 10 }}>
             <label style={dashboardFieldStyle}>
@@ -2345,6 +2527,39 @@ export default function RelationDossierDetailPage() {
                 placeholder="Exemple — Conversation du 12 mai"
                 style={dashboardControlStyle}
                 value={conversationTitle}
+              />
+            </label>
+            <label style={dashboardFieldStyle}>
+              <span className="label-meta">Source</span>
+              <select
+                className="internal-control"
+                onChange={(event) => setConversationSource(event.target.value)}
+                style={dashboardControlStyle}
+                value={conversationSource}
+              >
+                {["Messenger", "SMS", "Email", "WhatsApp", "Autre"].map((source) => (
+                  <option key={source} value={source}>{source}</option>
+                ))}
+              </select>
+            </label>
+            <label style={dashboardFieldStyle}>
+              <span className="label-meta">Date de la conversation</span>
+              <input
+                className="internal-control"
+                onChange={(event) => setConversationDate(event.target.value)}
+                style={dashboardControlStyle}
+                type="date"
+                value={conversationDate}
+              />
+            </label>
+            <label style={dashboardFieldStyle}>
+              <span className="label-meta">Participants</span>
+              <input
+                className="internal-control"
+                onChange={(event) => setConversationParticipants(event.target.value)}
+                placeholder="Sylvie, Michael"
+                style={dashboardControlStyle}
+                value={conversationParticipants}
               />
             </label>
             <label style={dashboardFieldStyle}>
@@ -2366,35 +2581,167 @@ export default function RelationDossierDetailPage() {
               <button className="internal-button-primary" onClick={saveConversation} style={dashboardButtonStyle} type="button">
                 Enregistrer la conversation
               </button>
+              <button className="internal-button" onClick={() => setBulkImportOpen(!bulkImportOpen)} style={dashboardButtonStyle} type="button">
+                Importer par lot
+              </button>
               {conversationMessage ? <span style={{ color: "var(--accent-gold)", fontSize: 13 }}>{conversationMessage}</span> : null}
             </div>
+            {bulkImportOpen ? (
+              <div className="chapter-card" style={{ display: "grid", gap: 8, marginBottom: 0, padding: 12 }}>
+                <p className="editorial-body" style={{ margin: 0 }}>
+                  Collez plusieurs conversations séparées par : --- Conversation ---
+                </p>
+                <textarea
+                  className="internal-control"
+                  onChange={(event) => {
+                    setBulkImportContent(event.target.value);
+                    setBulkImportSummary("");
+                    setLastImportedConversationIds([]);
+                  }}
+                  placeholder="Conversation 1&#10;--- Conversation ---&#10;Conversation 2"
+                  rows={6}
+                  style={{ ...dashboardControlStyle, minHeight: 120 }}
+                  value={bulkImportContent}
+                />
+                <div style={{ display: "grid", gap: 5 }}>
+                  <p className="label-meta" style={{ margin: 0 }}>{bulkImportBlocks.length} conversation(s) détectée(s)</p>
+                  {bulkImportBlocks.length > 0 ? (
+                    <>
+                      <p className="label-meta" style={{ margin: 0 }}>Source appliquée : {conversationSource}</p>
+                      <p className="label-meta" style={{ margin: 0 }}>Date appliquée : {conversationDate || "Aucune"}</p>
+                      <p className="label-meta" style={{ margin: 0 }}>Participants appliqués : {conversationParticipants || "Aucun"}</p>
+                    </>
+                  ) : null}
+                </div>
+                {bulkImportSummary ? (
+                  <p style={{ color: "var(--accent-gold)", fontSize: 13, margin: 0 }}>{bulkImportSummary}</p>
+                ) : null}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    className="internal-button-primary"
+                    disabled={bulkImportBlocks.length === 0}
+                    onClick={handleBulkImport}
+                    style={{ ...dashboardButtonStyle, opacity: bulkImportBlocks.length === 0 ? 0.55 : 1 }}
+                    type="button"
+                  >
+                    Importer les conversations
+                  </button>
+                  <button
+                    className="internal-button"
+                    disabled={bulkImportContent.trim() === ""}
+                    onClick={() => {
+                      setBulkImportContent("");
+                      setBulkImportSummary("");
+                      setConversationMessage("");
+                    }}
+                    style={{ ...dashboardButtonStyle, opacity: bulkImportContent.trim() === "" ? 0.55 : 1 }}
+                    type="button"
+                  >
+                    Vider l&apos;import
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
             {conversations.length ? (
               <>
-                <label style={dashboardFieldStyle}>
-                  <span className="label-meta">Recherche</span>
-                  <input
-                    className="internal-control"
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Rechercher dans les conversations..."
-                    style={dashboardControlStyle}
-                    type="text"
-                    value={searchQuery}
-                  />
-                </label>
+                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "minmax(0, 1fr) minmax(150px, 190px) minmax(160px, 220px) minmax(140px, 170px) minmax(140px, 170px)" }}>
+                  <label style={dashboardFieldStyle}>
+                    <span className="label-meta">Recherche</span>
+                    <input
+                      className="internal-control"
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Rechercher dans les conversations..."
+                      style={dashboardControlStyle}
+                      type="text"
+                      value={searchQuery}
+                    />
+                  </label>
+                  <label style={dashboardFieldStyle}>
+                    <span className="label-meta">Filtrer par source</span>
+                    <select
+                      className="internal-control"
+                      onChange={(event) => setConversationSourceFilter(event.target.value)}
+                      style={dashboardControlStyle}
+                      value={conversationSourceFilter}
+                    >
+                      {["Toutes", "Messenger", "SMS", "Email", "WhatsApp", "Autre"].map((source) => (
+                        <option key={source} value={source}>{source}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={dashboardFieldStyle}>
+                    <span className="label-meta">Filtrer par participant</span>
+                    <input
+                      className="internal-control"
+                      onChange={(event) => setConversationParticipantFilter(event.target.value)}
+                      placeholder="Ex. Sylvie, Michael"
+                      style={dashboardControlStyle}
+                      type="text"
+                      value={conversationParticipantFilter}
+                    />
+                  </label>
+                  <label style={dashboardFieldStyle}>
+                    <span className="label-meta">Date de début</span>
+                    <input
+                      className="internal-control"
+                      onChange={(event) => setConversationDateFromFilter(event.target.value)}
+                      style={dashboardControlStyle}
+                      type="date"
+                      value={conversationDateFromFilter}
+                    />
+                  </label>
+                  <label style={dashboardFieldStyle}>
+                    <span className="label-meta">Date de fin</span>
+                    <input
+                      className="internal-control"
+                      onChange={(event) => setConversationDateToFilter(event.target.value)}
+                      style={dashboardControlStyle}
+                      type="date"
+                      value={conversationDateToFilter}
+                    />
+                  </label>
+                </div>
                 <p className="label-meta" style={{ margin: 0 }}>
-                  {normalizedConversationSearch
-                    ? `${filteredConversations.length} résultat(s) pour "${searchQuery.trim()}"`
+                  {conversationFiltersActive
+                    ? `${filteredConversations.length} résultat(s) affiché(s)`
                     : `${conversations.length} conversation${conversations.length > 1 ? "s" : ""}`}
                 </p>
+                {activeConversationFilterLabels.length ? (
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    <span className="label-meta" style={{ margin: 0 }}>Filtres actifs :</span>
+                    {activeConversationFilterLabels.map((label) => (
+                      <span key={label} style={{ border: "1px solid rgba(201,168,92,.22)", borderRadius: 999, color: "var(--text-soft)", fontSize: 11, lineHeight: 1, padding: "4px 7px" }}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <button
+                  className="internal-button"
+                  disabled={!conversationFiltersActive}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setConversationSourceFilter("Toutes");
+                    setConversationParticipantFilter("");
+                    setConversationDateFromFilter("");
+                    setConversationDateToFilter("");
+                  }}
+                  style={{ ...dashboardButtonStyle, justifySelf: "start", opacity: conversationFiltersActive ? 1 : 0.55 }}
+                  type="button"
+                >
+                  Réinitialiser les filtres
+                </button>
               </>
             ) : null}
             {conversations.length ? (
-              filteredConversations.length ? (
-              filteredConversations.map((conversation) => {
+              displayedConversations.length ? (
+              displayedConversations.map((conversation) => {
                 const expanded = expandedConversationId === conversation.id;
+                const conversationCharacters = conversation.contenu.length;
+                const isLastImported = lastImportedConversationIds.includes(conversation.id);
 
                 return (
                   <article
@@ -2404,10 +2751,31 @@ export default function RelationDossierDetailPage() {
                   >
                     <div style={{ alignItems: "start", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
                       <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-                        <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 18, margin: 0 }}>
-                          {conversation.titre?.trim() || "Conversation sans titre"}
-                        </h2>
-                        <p className="label-meta" style={{ margin: 0 }}>{formatConversationDate(conversation.dateCreation)}</p>
+                        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 7 }}>
+                          <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 18, margin: 0 }}>
+                            {conversation.titre?.trim() || "Conversation sans titre"}
+                          </h2>
+                          {isLastImported ? (
+                            <span style={{ border: "1px solid rgba(29,158,117,.35)", borderRadius: 999, color: "#1D9E75", fontSize: 11, lineHeight: 1, padding: "4px 7px" }}>
+                              Nouvel import
+                            </span>
+                          ) : null}
+                        </div>
+                        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 7 }}>
+                          {conversation.dateConversation ? (
+                            <p className="label-meta" style={{ margin: 0 }}>Date conversation : {conversation.dateConversation}</p>
+                          ) : null}
+                          <p className="label-meta" style={{ margin: 0 }}>Ajoutée le : {formatConversationDate(conversation.dateCreation)}</p>
+                          {conversation.source ? (
+                            <span style={{ border: "1px solid rgba(201,168,92,.22)", borderRadius: 999, color: "var(--text-soft)", fontSize: 11, lineHeight: 1, padding: "4px 7px" }}>
+                              {conversation.source}
+                            </span>
+                          ) : null}
+                        </div>
+                        {conversation.participants?.length ? (
+                          <p className="label-meta" style={{ margin: 0 }}>Participants : {conversation.participants.join(", ")}</p>
+                        ) : null}
+                        <p className="label-meta" style={{ margin: 0 }}>Longueur : {conversationCharacters} caractères</p>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
                         <button
@@ -2416,7 +2784,15 @@ export default function RelationDossierDetailPage() {
                           style={{ ...dashboardButtonStyle, minHeight: 32 }}
                           type="button"
                         >
-                          Voir
+                          Voir ({conversationCharacters} caractères)
+                        </button>
+                        <button
+                          className="internal-button"
+                          onClick={() => copySingleConversation(conversation)}
+                          style={{ ...dashboardButtonStyle, minHeight: 32 }}
+                          type="button"
+                        >
+                          Copier
                         </button>
                         <button
                           className="internal-button"
@@ -2429,7 +2805,7 @@ export default function RelationDossierDetailPage() {
                       </div>
                     </div>
                     <p className="editorial-body" style={{ margin: 0 }}>
-                      {previewConversation(conversation.contenu)}
+                      Aperçu : {getConversationMiniSummary(conversation.contenu)}
                     </p>
                     {expanded ? (
                       <div
@@ -2455,14 +2831,20 @@ export default function RelationDossierDetailPage() {
                   <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 18, margin: 0 }}>
                     Aucun résultat
                   </h2>
-                  <p className="editorial-body" style={{ margin: 0 }}>Aucune conversation ne correspond à votre recherche.</p>
+                  <p className="editorial-body" style={{ margin: 0 }}>Aucune conversation ne correspond aux filtres actifs.</p>
                   <button
-                    className="internal-button-primary"
-                    onClick={() => setSearchQuery("")}
+                    className="internal-button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setConversationSourceFilter("Toutes");
+                      setConversationParticipantFilter("");
+                      setConversationDateFromFilter("");
+                      setConversationDateToFilter("");
+                    }}
                     style={{ ...dashboardButtonStyle, justifySelf: "center" }}
                     type="button"
                   >
-                    Effacer la recherche
+                    Réinitialiser les filtres
                   </button>
                 </div>
               )
