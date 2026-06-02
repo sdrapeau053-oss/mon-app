@@ -18,6 +18,7 @@ type CalcState = { offre: string; prix: number; taux: number; objectif: number; 
 type Mode500State = { objectif: number; jours: number; competences: string; tempsParJour: string; contexte: string; };
 type PlanHistorique = { id: string; date: string; resume: string; contenu: string; };
 type Offre = { id: string; nom: string; prix: number; description: string; canal: string; ventes: number; actif: boolean; };
+type Tache = { id: string; texte: string; done: boolean; date: string; };
 
 const FL_SPRINT = "strate_fl_sprint";
 const FL_PROSPECTS = "strate_fl_prospects";
@@ -25,6 +26,7 @@ const FL_CALC = "strate_fl_calc";
 const FL_MODE500 = "strate_fl_mode500";
 const FL_HISTORY = "freelance-mode-500-history";
 const FL_OFFERS = "strate_fl_offers";
+const FL_TACHES = "strate_fl_taches";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 const defaultSprint: SprintActif = { objectif: 500, dateDebut: new Date().toISOString().split("T")[0], revenusEncaisses: 0, revenusAttente: 0, prospectsContactes: 0, clientsObtenus: 0 };
@@ -126,6 +128,56 @@ function formaterDate(iso: string): string {
     const mois = ["jan", "fev", "mar", "avr", "mai", "jun", "jul", "aou", "sep", "oct", "nov", "dec"];
     return d.getDate() + " " + mois[d.getMonth()] + " " + d.getFullYear() + " " + String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0");
   } catch { return iso; }
+}
+function calculerPrevision(prospects: Prospect[]): number {
+  return prospects.reduce((total, p) => {
+    if (p.statut === "devis_envoye") return total + p.montant;
+    if (p.statut === "en_discussion") return total + Math.round(p.montant * 0.4);
+    return total;
+  }, 0);
+}
+function relancesProspects(prospects: Prospect[]) {
+  return prospects
+    .filter((p) => p.statut !== "gagne" && p.statut !== "perdu")
+    .map((p) => ({ ...p, jours: Math.floor((Date.now() - new Date(p.dateContact).getTime()) / 86400000) }))
+    .filter((p) => Number.isFinite(p.jours) && p.jours > 3);
+}
+
+function TachesDuJourPanel({ taches, nouvelleTache, onNouvelleTache, onUpdate }: { taches: Tache[]; nouvelleTache: string; onNouvelleTache: (v: string) => void; onUpdate: (t: Tache[]) => void }) {
+  const today = new Date().toISOString().split("T")[0];
+  const tachesDuJour = taches.filter((t) => t.date === today);
+
+  function ajouterTache() {
+    const texte = nouvelleTache.trim();
+    if (texte === "") return;
+    onUpdate([{ id: genId(), texte, done: false, date: today }, ...taches]);
+    onNouvelleTache("");
+  }
+
+  return (
+    <div style={{ border: "1px solid rgba(201,168,92,0.12)", borderRadius: 8, padding: "7px 8px" }}>
+      <p className="label-meta" style={{ fontSize: 10, margin: "0 0 5px" }}>Taches du jour</p>
+      <div style={{ display: "flex", gap: 6, marginBottom: tachesDuJour.length > 0 ? 6 : 0 }}>
+        <input type="text" placeholder="Ajouter une tache" value={nouvelleTache}
+          onChange={(e) => onNouvelleTache(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") ajouterTache(); }}
+          style={{ flex: 1, minWidth: 0, padding: "4px 7px", fontSize: 12, borderRadius: 6, border: "1px solid rgba(201,168,92,0.25)", background: "var(--bg-main)", color: "var(--text-main)" }}
+        />
+        <button className="soft-button" type="button" onClick={ajouterTache} style={{ fontSize: 11, padding: "2px 8px" }}>+</button>
+      </div>
+      {tachesDuJour.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 86, overflow: "auto" }}>
+          {tachesDuJour.map((t) => (
+            <div key={t.id} style={{ alignItems: "center", display: "flex", gap: 6 }}>
+              <input type="checkbox" checked={t.done} onChange={() => onUpdate(taches.map((item) => item.id === t.id ? { ...item, done: !item.done } : item))} />
+              <span style={{ color: t.done ? "var(--text-muted)" : "var(--text-soft)", flex: 1, fontSize: 12, minWidth: 0, overflow: "hidden", textDecoration: t.done ? "line-through" : "none", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.texte}</span>
+              <button type="button" onClick={() => onUpdate(taches.filter((item) => item.id !== t.id))} style={{ background: "transparent", border: "0", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: 0 }}>x</button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function SprintPanel({ sprint, onUpdate }: { sprint: SprintActif; onUpdate: (s: SprintActif) => void }) {
@@ -584,6 +636,8 @@ export default function FreelancePage() {
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
   const [offres, setOffres] = useState<Offre[]>([]);
+  const [taches, setTaches] = useState<Tache[]>([]);
+  const [nouvelleTache, setNouvelleTache] = useState("");
   const qa = analyserProjet(form.clientText);
 
   useEffect(() => { setForm(lireSauvegarde()); }, []);
@@ -594,12 +648,14 @@ export default function FreelancePage() {
     setCalc(lireLS(FL_CALC, defaultCalc));
     setMode500(lireLS(FL_MODE500, defaultMode500));
     setOffres(lireLS<Offre[]>(FL_OFFERS, []));
+    setTaches(lireLS<Tache[]>(FL_TACHES, []));
   }, []);
   useEffect(() => { ecrireLS(FL_SPRINT, sprint); }, [sprint]);
   useEffect(() => { ecrireLS(FL_PROSPECTS, prospects); }, [prospects]);
   useEffect(() => { ecrireLS(FL_CALC, calc); }, [calc]);
   useEffect(() => { ecrireLS(FL_MODE500, mode500); }, [mode500]);
   useEffect(() => { ecrireLS(FL_OFFERS, offres); }, [offres]);
+  useEffect(() => { ecrireLS(FL_TACHES, taches); }, [taches]);
 
   function toggleOpt(group: OptionGroup, value: string) {
     setForm((c) => ({ ...c, [group]: c[group].includes(value) ? c[group].filter((i) => i !== value) : [value] }));
@@ -625,6 +681,8 @@ export default function FreelancePage() {
   }
 
   const kpis = calculerKPIs(sprint);
+  const prevision = calculerPrevision(prospects);
+  const relances = relancesProspects(prospects);
 
   return (
     <main className="internal-page freelance-saas">
@@ -674,7 +732,7 @@ export default function FreelancePage() {
 
           @media (min-width: 860px) {
             .fl-command-row {
-              grid-template-columns: repeat(7, minmax(0, 1fr));
+              grid-template-columns: repeat(8, minmax(0, 1fr));
             }
 
             .fl-pipeline-grid {
@@ -724,6 +782,24 @@ export default function FreelancePage() {
               <CompactMetric label="Prospects" value={String(sprint.prospectsContactes)} />
               <CompactMetric label="Taux" value={kpis.taux + " %"} />
               <CompactMetric label="Jours restants" value={String(kpis.joursRestants)} />
+              <CompactMetric label="Prevision" value={prevision + " $"} />
+            </div>
+            <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+              <TachesDuJourPanel taches={taches} nouvelleTache={nouvelleTache} onNouvelleTache={setNouvelleTache} onUpdate={setTaches} />
+              <div style={{ border: "1px solid rgba(201,168,92,0.12)", borderRadius: 8, padding: "7px 8px" }}>
+                <p className="label-meta" style={{ fontSize: 10, margin: "0 0 5px" }}>Relances automatiques</p>
+                {relances.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {relances.map((p) => (
+                      <span key={p.id} style={{ background: "rgba(186,117,23,0.14)", border: "1px solid rgba(186,117,23,0.35)", borderRadius: 99, color: "#BA7517", fontSize: 11, padding: "2px 7px" }}>
+                        ⚠ Relance J+{p.jours} · {p.nom}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>Aucune relance due.</p>
+                )}
+              </div>
             </div>
           </SystemPanel>
         </section>
