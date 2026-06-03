@@ -47,6 +47,20 @@ type Mode500State = { objectif: number; jours: number; competences: string; temp
 type PlanHistorique = { id: string; date: string; resume: string; contenu: string; };
 type Offre = { id: string; nom: string; prix: number; description: string; canal: string; ventes: number; actif: boolean; };
 type Tache = { id: string; texte: string; done: boolean; date: string; };
+type StatutProposition = "brouillon" | "envoyee" | "acceptee" | "refusee" | "expiree";
+type Proposition = {
+  id: string;
+  prospectId: string;
+  nomClient: string;
+  offre: string;
+  montant: number;
+  dateCreation: string;
+  dateEnvoi?: string;
+  dateExpiration?: string;
+  statut: StatutProposition;
+  notes?: string;
+  version: number;
+};
 type MainTab = "cockpit" | "crm" | "pipeline" | "offres" | "outils";
 
 // ── Clés localStorage ────────────────────────────────────────────────────────
@@ -58,6 +72,7 @@ const FL_MODE500 = "strate_fl_mode500";
 const FL_HISTORY = "freelance-mode-500-history";
 const FL_OFFERS = "strate_fl_offers";
 const FL_TACHES = "strate_fl_taches";
+const FL_PROPOSITIONS = "freelance-propositions";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -437,7 +452,7 @@ function FicheProspect({ p, onUpdate, onClose }: {
   );
 }
 
-type CrmSousTab = "prospects" | "clients";
+type CrmSousTab = "prospects" | "clients" | "propositions";
 
 function ClientsPanel({ clients, onUpdate }: { clients: Prospect[]; onUpdate: (updated: Prospect) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -580,7 +595,294 @@ function ClientsPanel({ clients, onUpdate }: { clients: Prospect[]; onUpdate: (u
   );
 }
 
-function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p: Prospect[]) => void }) {
+const STATUTS_PROP: { value: StatutProposition; label: string; color: string }[] = [
+  { value: "brouillon",  label: "Brouillon",  color: "#888780" },
+  { value: "envoyee",    label: "Envoyée",    color: "#3B8BD4" },
+  { value: "acceptee",   label: "Acceptée",   color: "#1D9E75" },
+  { value: "refusee",    label: "Refusée",    color: "#D85A30" },
+  { value: "expiree",    label: "Expirée",    color: "#BA7517" },
+];
+
+const GROUPES_PROP: { key: StatutProposition[]; label: string }[] = [
+  { key: ["brouillon"],          label: "Brouillons" },
+  { key: ["envoyee"],            label: "Envoyées" },
+  { key: ["acceptee"],           label: "Acceptées" },
+  { key: ["refusee", "expiree"], label: "Refusées / Expirées" },
+];
+
+const defaultProp: Omit<Proposition, "id" | "dateCreation"> = {
+  prospectId: "",
+  nomClient: "",
+  offre: "",
+  montant: 0,
+  statut: "brouillon",
+  version: 1,
+};
+
+function PropositionsPanel({ propositions, prospects, onUpdate }: {
+  propositions: Proposition[];
+  prospects: Prospect[];
+  onUpdate: (p: Proposition[]) => void;
+}) {
+  const [ajoutOpen, setAjoutOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [form, setForm] = useState<Omit<Proposition, "id" | "dateCreation">>(defaultProp);
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // Liste combinée prospects + clients pour l'autocomplétion
+  const tousLeNoms = prospects.map((p) => ({ id: p.id, nom: p.nom }));
+
+  function ajouter() {
+    if (form.nomClient.trim() === "" || form.offre.trim() === "") return;
+    const prospect = prospects.find((p) => p.nom.toLowerCase() === form.nomClient.toLowerCase());
+    const nouvelle: Proposition = {
+      id: genId(),
+      dateCreation: today,
+      ...form,
+      prospectId: prospect ? prospect.id : "",
+      version: form.version < 1 ? 1 : form.version,
+    };
+    onUpdate([nouvelle, ...propositions]);
+    setForm(defaultProp);
+    setAjoutOpen(false);
+  }
+
+  function modifier(id: string, champs: Partial<Proposition>) {
+    onUpdate(propositions.map((p) => p.id === id ? { ...p, ...champs } : p));
+  }
+
+  function supprimer(id: string) {
+    onUpdate(propositions.filter((p) => p.id !== id));
+    if (expandedId === id) setExpandedId(null);
+  }
+
+  // KPIs globaux
+  const montantAccepte = propositions.filter((p) => p.statut === "acceptee").reduce((acc, p) => acc + p.montant, 0);
+  const montantEnAttente = propositions.filter((p) => p.statut === "envoyee").reduce((acc, p) => acc + p.montant, 0);
+
+  return (
+    <div>
+      {/* KPIs compacts */}
+      {propositions.length > 0 ? (
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          {montantAccepte > 0 ? (
+            <div style={{ background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.20)", borderRadius: 7, padding: "5px 10px" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>Accepté</p>
+              <strong style={{ color: "#1D9E75", fontSize: 15 }}>{montantAccepte} $</strong>
+            </div>
+          ) : null}
+          {montantEnAttente > 0 ? (
+            <div style={{ background: "rgba(59,139,212,0.08)", border: "1px solid rgba(59,139,212,0.20)", borderRadius: 7, padding: "5px 10px" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>En attente</p>
+              <strong style={{ color: "#3B8BD4", fontSize: 15 }}>{montantEnAttente} $</strong>
+            </div>
+          ) : null}
+          <div style={{ background: "rgba(255,250,238,0.03)", border: "1px solid rgba(201,168,92,0.12)", borderRadius: 7, padding: "5px 10px" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>Total</p>
+            <strong style={{ color: "var(--text-soft)", fontSize: 15 }}>{propositions.length}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Bouton ajout */}
+      <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <p className="label-meta" style={{ margin: 0 }}>
+          {propositions.length === 0 ? "Aucune proposition" : propositions.length + " proposition" + (propositions.length > 1 ? "s" : "")}
+        </p>
+        <button type="button" style={btnSmall} onClick={() => setAjoutOpen(!ajoutOpen)}>
+          {ajoutOpen ? "Annuler" : "+ Nouvelle"}
+        </button>
+      </div>
+
+      {/* Formulaire ajout */}
+      {ajoutOpen ? (
+        <div style={{ background: "rgba(201,168,92,0.05)", border: "1px solid rgba(201,168,92,0.18)", borderRadius: 8, display: "grid", gap: 6, marginBottom: 10, padding: "10px 12px" }}>
+          <p className="label-meta" style={{ fontSize: 10, margin: 0 }}>Nouvelle proposition</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Client / Prospect *</p>
+              <input
+                type="text"
+                list="noms-prospects"
+                placeholder="Nom du client…"
+                value={form.nomClient}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const match = prospects.find((p) => p.nom.toLowerCase() === val.toLowerCase());
+                  setForm((f) => ({ ...f, nomClient: val, prospectId: match ? match.id : "" }));
+                }}
+                style={inputStyle}
+              />
+              <datalist id="noms-prospects">
+                {tousLeNoms.map((n) => <option key={n.id} value={n.nom} />)}
+              </datalist>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Offre / service *</p>
+              <input type="text" placeholder="ex: Révision manuscrit, biographie…" value={form.offre} onChange={(e) => setForm((f) => ({ ...f, offre: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($)</p>
+              <input type="number" min={0} value={form.montant} onChange={(e) => setForm((f) => ({ ...f, montant: Number(e.target.value) }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Version</p>
+              <input type="number" min={1} max={99} value={form.version} onChange={(e) => setForm((f) => ({ ...f, version: Math.max(1, Number(e.target.value)) }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date d'envoi</p>
+              <input type="date" value={form.dateEnvoi || ""} onChange={(e) => setForm((f) => ({ ...f, dateEnvoi: e.target.value, statut: e.target.value ? "envoyee" : f.statut }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date d'expiration</p>
+              <input type="date" value={form.dateExpiration || ""} onChange={(e) => setForm((f) => ({ ...f, dateExpiration: e.target.value }))} style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Statut</p>
+              <select value={form.statut} onChange={(e) => setForm((f) => ({ ...f, statut: e.target.value as StatutProposition }))} style={inputStyle}>
+                {STATUTS_PROP.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Notes</p>
+              <textarea placeholder="Contexte, conditions, remarques…" value={form.notes || ""} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} style={{ ...inputStyle, minHeight: 48, resize: "vertical" }} />
+            </div>
+          </div>
+          <button className="btn-primary" type="button" onClick={ajouter} style={{ fontSize: 12, padding: "5px" }}>
+            Créer la proposition
+          </button>
+        </div>
+      ) : null}
+
+      {/* Liste groupée par statut */}
+      {propositions.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {GROUPES_PROP.map((groupe) => {
+            const items = propositions.filter((p) => groupe.key.includes(p.statut))
+              .sort((a, b) => b.montant - a.montant);
+            if (items.length === 0) return null;
+
+            return (
+              <div key={groupe.label}>
+                <p className="label-meta" style={{ fontSize: 10, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  {groupe.label} <span style={{ color: "var(--text-muted)" }}>({items.length})</span>
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {items.map((prop) => {
+                    const st = STATUTS_PROP.find((s) => s.value === prop.statut);
+                    const isExpanded = expandedId === prop.id;
+                    const expire = prop.dateExpiration !== undefined && prop.dateExpiration !== "" && prop.dateExpiration < today;
+
+                    return (
+                      <div key={prop.id}>
+                        {/* Ligne compacte */}
+                        <div
+                          style={{
+                            alignItems: "center",
+                            background: prop.statut === "acceptee" ? "rgba(29,158,117,0.05)" : "rgba(255,250,238,0.02)",
+                            border: "1px solid " + (prop.statut === "acceptee" ? "rgba(29,158,117,0.18)" : expire ? "rgba(186,117,23,0.25)" : "rgba(201,168,92,0.10)"),
+                            borderRadius: isExpanded ? "7px 7px 0 0" : 7,
+                            cursor: "pointer",
+                            display: "flex",
+                            gap: 8,
+                            justifyContent: "space-between",
+                            padding: "6px 9px",
+                          }}
+                          onClick={() => setExpandedId(isExpanded ? null : prop.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpandedId(isExpanded ? null : prop.id); }}
+                          aria-expanded={isExpanded}
+                        >
+                          <div style={{ alignItems: "center", display: "flex", gap: 8, flex: 1, minWidth: 0 }}>
+                            <span style={{ color: "var(--text-muted)", fontSize: 10, flexShrink: 0 }}>{isExpanded ? "▾" : "▸"}</span>
+                            <span style={{ color: "var(--text-main)", fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prop.nomClient}</span>
+                            <span style={{ color: "var(--text-soft)", fontSize: 12, flexShrink: 0 }}>{prop.offre}</span>
+                            {prop.montant > 0 ? <span style={{ color: prop.statut === "acceptee" ? "#1D9E75" : "var(--text-muted)", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{prop.montant} $</span> : null}
+                            <span style={{ fontSize: 9, color: "var(--text-muted)", flexShrink: 0 }}>V{prop.version}</span>
+                          </div>
+                          <div style={{ alignItems: "center", display: "flex", gap: 5, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                            {expire ? <span style={{ color: "#BA7517", fontSize: 10 }}>Expirée</span> : null}
+                            <span style={{ background: (st?.color ?? "#888") + "22", borderRadius: 99, color: st?.color ?? "#888", fontSize: 10, padding: "1px 6px" }}>
+                              {st?.label ?? prop.statut}
+                            </span>
+                            <select
+                              value={prop.statut}
+                              onChange={(e) => modifier(prop.id, { statut: e.target.value as StatutProposition })}
+                              style={{ fontSize: 10, padding: "2px 4px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.3)", background: "var(--bg-main)", color: "var(--text-main)" }}
+                            >
+                              {STATUTS_PROP.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                            <button type="button" onClick={() => supprimer(prop.id)} style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, border: "1px solid rgba(201,168,92,0.2)", background: "transparent", color: "var(--text-muted)", cursor: "pointer" }}>×</button>
+                          </div>
+                        </div>
+
+                        {/* Accordéon détail */}
+                        {isExpanded ? (
+                          <div style={{ border: "1px solid rgba(201,168,92,0.15)", borderTop: "none", borderRadius: "0 0 7px 7px", padding: "8px 10px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Client / Prospect</p>
+                                <input type="text" list="noms-prospects-edit" value={prop.nomClient} onChange={(e) => modifier(prop.id, { nomClient: e.target.value })} style={inputStyle} />
+                                <datalist id="noms-prospects-edit">
+                                  {tousLeNoms.map((n) => <option key={n.id} value={n.nom} />)}
+                                </datalist>
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Offre / service</p>
+                                <input type="text" value={prop.offre} onChange={(e) => modifier(prop.id, { offre: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($)</p>
+                                <input type="number" min={0} value={prop.montant} onChange={(e) => modifier(prop.id, { montant: Number(e.target.value) })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Version</p>
+                                <input type="number" min={1} value={prop.version} onChange={(e) => modifier(prop.id, { version: Math.max(1, Number(e.target.value)) })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date d'envoi</p>
+                                <input type="date" value={prop.dateEnvoi || ""} onChange={(e) => modifier(prop.id, { dateEnvoi: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date d'expiration</p>
+                                <input type="date" value={prop.dateExpiration || ""} onChange={(e) => modifier(prop.id, { dateExpiration: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div style={{ gridColumn: "1 / -1" }}>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Notes</p>
+                                <textarea value={prop.notes || ""} onChange={(e) => modifier(prop.id, { notes: e.target.value })} placeholder="Conditions, contexte, remarques…" style={{ ...inputStyle, minHeight: 48, resize: "vertical" }} />
+                              </div>
+                            </div>
+                            <p style={{ color: "var(--text-muted)", fontSize: 10, margin: 0 }}>
+                              Créée le {prop.dateCreation}
+                              {prop.dateEnvoi !== undefined && prop.dateEnvoi !== "" ? " · Envoyée le " + prop.dateEnvoi : ""}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p style={{ color: "var(--text-muted)", fontSize: 12, margin: "8px 0 0" }}>
+          Aucune proposition. Crée ta première proposition pour suivre tes devis.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CRMPanel({ prospects, onUpdate, propositions, onUpdatePropositions }: {
+  prospects: Prospect[];
+  onUpdate: (p: Prospect[]) => void;
+  propositions: Proposition[];
+  onUpdatePropositions: (p: Proposition[]) => void;
+}) {
   const [sousTab, setSousTab] = useState<CrmSousTab>("prospects");
   const [ajoutOpen, setAjoutOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -622,6 +924,7 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
         {([
           { key: "prospects" as CrmSousTab, label: "Prospects", count: prospectsActifs.filter((p) => p.statut !== "perdu").length },
           { key: "clients" as CrmSousTab, label: "Clients", count: clients.length },
+          { key: "propositions" as CrmSousTab, label: "Propositions", count: propositions.filter((p) => p.statut === "brouillon" || p.statut === "envoyee").length },
         ]).map(({ key, label, count }) => (
           <button
             key={key}
@@ -654,6 +957,15 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
         <ClientsPanel
           clients={clients}
           onUpdate={(updated) => onUpdate(prospects.map((p) => p.id === updated.id ? updated : p))}
+        />
+      ) : null}
+
+      {/* Vue Propositions */}
+      {sousTab === "propositions" ? (
+        <PropositionsPanel
+          propositions={propositions}
+          prospects={prospects}
+          onUpdate={onUpdatePropositions}
         />
       ) : null}
 
@@ -1281,6 +1593,7 @@ export default function FreelancePage() {
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
   const [offres, setOffres] = useState<Offre[]>([]);
+  const [propositions, setPropositions] = useState<Proposition[]>([]);
   const [taches, setTaches] = useState<Tache[]>([]);
   const [nouvelleTache, setNouvelleTache] = useState("");
 
@@ -1294,6 +1607,7 @@ export default function FreelancePage() {
     setCalc(lireLS(FL_CALC, defaultCalc));
     setMode500(lireLS(FL_MODE500, defaultMode500));
     setOffres(lireLS<Offre[]>(FL_OFFERS, []));
+    setPropositions(lireLS<Proposition[]>(FL_PROPOSITIONS, []));
     setTaches(lireLS<Tache[]>(FL_TACHES, []));
   }, []);
 
@@ -1304,6 +1618,7 @@ export default function FreelancePage() {
   useEffect(() => { ecrireLS(FL_CALC, calc); }, [calc]);
   useEffect(() => { ecrireLS(FL_MODE500, mode500); }, [mode500]);
   useEffect(() => { ecrireLS(FL_OFFERS, offres); }, [offres]);
+  useEffect(() => { ecrireLS(FL_PROPOSITIONS, propositions); }, [propositions]);
   useEffect(() => { ecrireLS(FL_TACHES, taches); }, [taches]);
 
   function toggleOpt(group: OptionGroup, value: string) {
@@ -1697,7 +2012,7 @@ export default function FreelancePage() {
         {/* ── CRM ── */}
         {activeTab === "crm" ? (
           <SystemPanel ariaLabel="CRM Prospects" compact>
-            <CRMPanel prospects={prospects} onUpdate={setProspects} />
+            <CRMPanel prospects={prospects} onUpdate={setProspects} propositions={propositions} onUpdatePropositions={setPropositions} />
           </SystemPanel>
         ) : null}
 
