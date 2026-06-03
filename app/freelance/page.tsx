@@ -37,6 +37,7 @@ type Prospect = {
   valeur_estimee?: number;
   date_dernier_contact?: string;
   prochaine_action?: string;
+  projet_en_cours?: string;
 };
 type SprintActif = { objectif: number; dateDebut: string; revenusEncaisses: number; revenusAttente: number; prospectsContactes: number; clientsObtenus: number; };
 type OptionGroup = "objectifs" | "tons" | "longueurs";
@@ -362,6 +363,10 @@ function FicheProspect({ p, onUpdate, onClose }: {
           <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Type de projet</p>
           <input type="text" value={ef.type_projet || ""} onChange={(e) => f("type_projet", e.target.value)} placeholder="Court / long / urgent…" style={inputStyle} />
         </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Projet en cours (si client gagné)</p>
+          <input type="text" value={ef.projet_en_cours || ""} onChange={(e) => f("projet_en_cours", e.target.value)} placeholder="ex: Biographie chapitre 3, révision manuscrit…" style={inputStyle} />
+        </div>
         <div>
           <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($)</p>
           <input type="number" min={0} value={ef.montant} onChange={(e) => f("montant", Number(e.target.value))} style={inputStyle} />
@@ -432,10 +437,157 @@ function FicheProspect({ p, onUpdate, onClose }: {
   );
 }
 
+type CrmSousTab = "prospects" | "clients";
+
+function ClientsPanel({ clients, onUpdate }: { clients: Prospect[]; onUpdate: (updated: Prospect) => void }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const nonEncaisses = clients.filter((c) => !c.encaisse);
+  const encaisses = clients.filter((c) => c.encaisse);
+  const totalNonEncaisse = nonEncaisses.reduce((acc, c) => acc + (c.valeur_estimee || c.montant || 0), 0);
+  const totalEncaisse = encaisses.reduce((acc, c) => acc + (c.valeur_estimee || c.montant || 0), 0);
+
+  if (clients.length === 0) {
+    return (
+      <div style={{ padding: "16px 0" }}>
+        <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0, textAlign: "center" }}>
+          Aucun client encore. Marque un prospect comme "Gagné" dans le CRM pour le voir apparaître ici.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Résumé compact */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+        <div style={{ background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.20)", borderRadius: 7, padding: "6px 12px" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.07em" }}>À encaisser</p>
+          <strong style={{ color: "#1D9E75", fontSize: 16 }}>{totalNonEncaisse > 0 ? totalNonEncaisse + " $" : nonEncaisses.length + " client" + (nonEncaisses.length > 1 ? "s" : "")}</strong>
+        </div>
+        {totalEncaisse > 0 ? (
+          <div style={{ background: "rgba(255,250,238,0.03)", border: "1px solid rgba(201,168,92,0.12)", borderRadius: 7, padding: "6px 12px" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.07em" }}>Encaissé</p>
+            <strong style={{ color: "var(--text-soft)", fontSize: 16 }}>{totalEncaisse} $</strong>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Liste clients */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {clients
+          .sort((a, b) => Number(a.encaisse) - Number(b.encaisse))
+          .map((c) => {
+            const valeur = c.valeur_estimee || c.montant || 0;
+            const isExpanded = expandedId === c.id;
+
+            return (
+              <div key={c.id}>
+                {/* Ligne compacte */}
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: c.encaisse ? "rgba(255,255,255,0.01)" : "rgba(29,158,117,0.05)",
+                    border: "1px solid " + (c.encaisse ? "rgba(201,168,92,0.08)" : "rgba(29,158,117,0.20)"),
+                    borderRadius: isExpanded ? "7px 7px 0 0" : 7,
+                    cursor: "pointer",
+                    display: "flex",
+                    gap: 8,
+                    justifyContent: "space-between",
+                    opacity: c.encaisse ? 0.7 : 1,
+                    padding: "6px 9px",
+                  }}
+                  onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpandedId(isExpanded ? null : c.id); }}
+                  aria-expanded={isExpanded}
+                >
+                  <div style={{ alignItems: "center", display: "flex", gap: 8, flex: 1, minWidth: 0 }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 10, flexShrink: 0 }}>{isExpanded ? "▾" : "▸"}</span>
+                    <span style={{ color: "var(--text-main)", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nom}</span>
+                    {valeur > 0 ? <span style={{ color: "#1D9E75", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{valeur} $</span> : null}
+                    {c.projet_en_cours !== undefined && c.projet_en_cours !== "" ? (
+                      <span style={{ color: "var(--text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.projet_en_cours}</span>
+                    ) : null}
+                  </div>
+                  <div style={{ alignItems: "center", display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                    <span style={{ fontSize: 10, color: c.encaisse ? "var(--text-muted)" : "#1D9E75" }}>
+                      {c.encaisse ? "Encaissé" : "À encaisser"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ ...c, encaisse: !c.encaisse })}
+                      style={{
+                        background: c.encaisse ? "transparent" : "rgba(29,158,117,0.12)",
+                        border: "1px solid " + (c.encaisse ? "rgba(201,168,92,0.20)" : "rgba(29,158,117,0.40)"),
+                        borderRadius: 5,
+                        color: c.encaisse ? "var(--text-muted)" : "#1D9E75",
+                        cursor: "pointer",
+                        fontSize: 10,
+                        padding: "2px 8px",
+                      }}
+                    >
+                      {c.encaisse ? "Annuler" : "✓ Encaisser"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Accordéon détails client */}
+                {isExpanded ? (
+                  <div style={{ border: "1px solid rgba(201,168,92,0.15)", borderTop: "none", borderRadius: "0 0 7px 7px", padding: "8px 10px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                      <div>
+                        <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Projet en cours</p>
+                        <input
+                          type="text"
+                          value={c.projet_en_cours || ""}
+                          onChange={(e) => onUpdate({ ...c, projet_en_cours: e.target.value })}
+                          placeholder="ex: Manuscrit chapitre 3…"
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Valeur ($)</p>
+                        <input
+                          type="number"
+                          min={0}
+                          value={c.valeur_estimee || c.montant || 0}
+                          onChange={(e) => onUpdate({ ...c, valeur_estimee: Number(e.target.value) })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Notes</p>
+                        <textarea
+                          value={c.notes || ""}
+                          onChange={(e) => onUpdate({ ...c, notes: e.target.value })}
+                          placeholder="Historique, besoins, contexte…"
+                          style={{ ...inputStyle, minHeight: 48, resize: "vertical" }}
+                        />
+                      </div>
+                    </div>
+                    {c.email !== undefined && c.email !== "" ? <p style={{ color: "var(--text-muted)", fontSize: 11, margin: "0 0 2px" }}>✉ {c.email}</p> : null}
+                    {c.telephone !== undefined && c.telephone !== "" ? <p style={{ color: "var(--text-muted)", fontSize: 11, margin: "0 0 2px" }}>📞 {c.telephone}</p> : null}
+                    {c.linkedin !== undefined && c.linkedin !== "" ? <p style={{ color: "var(--text-muted)", fontSize: 11, margin: 0 }}>🔗 {c.linkedin}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
 function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p: Prospect[]) => void }) {
+  const [sousTab, setSousTab] = useState<CrmSousTab>("prospects");
   const [ajoutOpen, setAjoutOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nv, setNv] = useState<Partial<Prospect>>({ statut: "a_contacter", montant: 0 });
+
+  const clients = prospects.filter((p) => p.statut === "gagne");
+  const prospectsActifs = prospects.filter((p) => p.statut !== "gagne");
 
   function ajouter() {
     if (nv.nom === undefined || nv.nom.trim() === "") return;
@@ -456,20 +608,60 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
   }
 
   // Tri : actifs en tête, puis par date de contact desc
-  const prospectsTries = [...prospects].sort((a, b) => {
+  const prospectsTries = [...prospectsActifs].sort((a, b) => {
     const actifA = a.statut !== "gagne" && a.statut !== "perdu" ? 0 : 1;
     const actifB = b.statut !== "gagne" && b.statut !== "perdu" ? 0 : 1;
     if (actifA !== actifB) return actifA - actifB;
     return new Date(b.dateContact).getTime() - new Date(a.dateContact).getTime();
   });
 
-  const actifs = prospects.filter((p) => p.statut !== "gagne" && p.statut !== "perdu").length;
-
   return (
     <div>
+      {/* Sous-onglets Prospects / Clients */}
+      <div style={{ borderBottom: "1px solid rgba(201,168,92,0.12)", display: "flex", gap: 0, marginBottom: 10 }}>
+        {([
+          { key: "prospects" as CrmSousTab, label: "Prospects", count: prospectsActifs.filter((p) => p.statut !== "perdu").length },
+          { key: "clients" as CrmSousTab, label: "Clients", count: clients.length },
+        ]).map(({ key, label, count }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => { setSousTab(key); setAjoutOpen(false); setExpandedId(null); }}
+            style={{
+              background: "none",
+              border: "none",
+              borderBottom: sousTab === key ? "2px solid rgba(201,168,92,0.7)" : "2px solid transparent",
+              color: sousTab === key ? "var(--text-main)" : "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: sousTab === key ? 600 : 400,
+              marginBottom: -1,
+              padding: "4px 12px 6px",
+            }}
+          >
+            {label}
+            {count > 0 ? (
+              <span style={{ background: "rgba(201,168,92,0.15)", borderRadius: 99, color: "var(--text-muted)", fontSize: 10, marginLeft: 5, padding: "1px 5px" }}>
+                {count}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {/* Vue Clients */}
+      {sousTab === "clients" ? (
+        <ClientsPanel
+          clients={clients}
+          onUpdate={(updated) => onUpdate(prospects.map((p) => p.id === updated.id ? updated : p))}
+        />
+      ) : null}
+
+      {/* Vue Prospects */}
+      {sousTab === "prospects" ? <>
       <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
         <p className="label-meta" style={{ margin: 0 }}>
-          {prospects.length} prospect{prospects.length > 1 ? "s" : ""} · {actifs} actif{actifs > 1 ? "s" : ""}
+          {prospectsActifs.filter((p) => p.statut !== "perdu").length} actif{prospectsActifs.filter((p) => p.statut !== "perdu").length > 1 ? "s" : ""}{prospectsActifs.filter((p) => p.statut === "perdu").length > 0 ? " · " + prospectsActifs.filter((p) => p.statut === "perdu").length + " perdu" + (prospectsActifs.filter((p) => p.statut === "perdu").length > 1 ? "s" : "") : ""}
         </p>
         <button style={btnSmall} type="button" onClick={() => setAjoutOpen(!ajoutOpen)}>{ajoutOpen ? "Annuler" : "+ Ajouter"}</button>
       </div>
@@ -577,6 +769,7 @@ function CRMPanel({ prospects, onUpdate }: { prospects: Prospect[]; onUpdate: (p
       ) : (
         <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>Aucun prospect. Commence à en ajouter.</p>
       )}
+      </> : null}
     </div>
   );
 }
@@ -1156,6 +1349,8 @@ export default function FreelancePage() {
   const actionsUrgentes: ActionItem[] = [];
 
   const actifs = prospects.filter((p) => p.statut !== "gagne" && p.statut !== "perdu");
+  const clientsGagnes = prospects.filter((p) => p.statut === "gagne");
+  const clientsNonEncaisses = clientsGagnes.filter((c) => !c.encaisse);
 
   // NIVEAU 1 — Relances explicites dépassées (date_prochaine_relance <= aujourd'hui)
   const relancesExplicites = actifs
@@ -1262,6 +1457,7 @@ export default function FreelancePage() {
                 { label: "Encaissé", value: sprint.revenusEncaisses + " $", accent: sprint.revenusEncaisses > 0 },
                 { label: "Manque", value: kpis.manque + " $", accent: kpis.manque === 0 },
                 { label: "Prévision", value: prevision + " $", accent: prevision > 0 },
+                { label: "Clients", value: clientsNonEncaisses.length > 0 ? clientsNonEncaisses.length + " à encaisser" : clientsGagnes.length + " total", accent: clientsNonEncaisses.length > 0 },
               ].map((k) => (
                 <div key={k.label} style={{ textAlign: "right" }}>
                   <p style={{ color: "var(--text-muted)", fontSize: 10, letterSpacing: "0.08em", margin: "0 0 1px", textTransform: "uppercase" }}>{k.label}</p>
