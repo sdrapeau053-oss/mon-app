@@ -966,42 +966,86 @@ export default function FreelancePage() {
   const totalRevenu = sprint.revenusEncaisses + sprint.revenusAttente;
   const pct = Math.min(100, sprint.objectif > 0 ? Math.round((totalRevenu / sprint.objectif) * 100) : 0);
 
-  // Centre d'actions — priorités calculées depuis les données existantes
-  const actionsUrgentes: { label: string; detail: string; urgence: "haute" | "normale" }[] = [];
-  if (relances.length > 0) {
-    actionsUrgentes.push({
-      label: `Relancer ${relances[0].nom}`,
-      detail: `J+${relances[0].jours} sans réponse · ${relances[0].montant > 0 ? relances[0].montant + " $" : relances[0].offre || "pas de montant"}`,
-      urgence: relances[0].jours >= 7 ? "haute" : "normale",
+  // ── Centre d'actions Phase 3 — logique explicite depuis les champs CRM ─────
+  const today = new Date().toISOString().split("T")[0];
+
+  type ActionItem = { label: string; detail: string; urgence: "critique" | "haute" | "normale"; valeur?: number };
+  const actionsUrgentes: ActionItem[] = [];
+
+  const actifs = prospects.filter((p) => p.statut !== "gagne" && p.statut !== "perdu");
+
+  // NIVEAU 1 — Relances explicites dépassées (date_prochaine_relance <= aujourd'hui)
+  const relancesExplicites = actifs
+    .filter((p) => p.date_prochaine_relance !== undefined && p.date_prochaine_relance !== "" && p.date_prochaine_relance <= today)
+    .sort((a, b) => {
+      // Tri : chaud > tiède > froid, puis élevé > moyen > faible, puis date asc
+      const scoreInteret = (n?: NiveauInteret) => n === "chaud" ? 2 : n === "tiède" ? 1 : 0;
+      const scorePot = (n?: PotentielProspect) => n === "élevé" ? 2 : n === "moyen" ? 1 : 0;
+      const diff = (scoreInteret(b.niveau_interet) + scorePot(b.potentiel)) - (scoreInteret(a.niveau_interet) + scorePot(a.potentiel));
+      if (diff !== 0) return diff;
+      return (a.date_prochaine_relance ?? "").localeCompare(b.date_prochaine_relance ?? "");
     });
-    if (relances.length > 1) {
-      actionsUrgentes.push({
-        label: `${relances.length - 1} autre${relances.length > 2 ? "s" : ""} relance${relances.length > 2 ? "s" : ""} en attente`,
-        detail: relances.slice(1).map((p) => p.nom).join(", "),
-        urgence: "normale",
-      });
-    }
-  }
-  const prospectsChauds = prospects.filter((p) => p.statut === "devis_envoye" || p.statut === "en_discussion");
-  if (prospectsChauds.length > 0) {
+
+  for (const p of relancesExplicites) {
+    const retard = Math.floor((new Date(today).getTime() - new Date(p.date_prochaine_relance!).getTime()) / 86400000);
+    const valeur = p.valeur_estimee || p.montant || 0;
+    const details: string[] = [];
+    if (p.prochaine_action !== undefined && p.prochaine_action !== "") details.push(p.prochaine_action);
+    if (valeur > 0) details.push(valeur + " $");
+    if (p.niveau_interet !== undefined) details.push(p.niveau_interet);
     actionsUrgentes.push({
-      label: `${prospectsChauds.length} prospect${prospectsChauds.length > 1 ? "s" : ""} chaud${prospectsChauds.length > 1 ? "s" : ""}`,
-      detail: prospectsChauds.map((p) => p.nom + (p.montant > 0 ? " (" + p.montant + " $)" : "")).join(", "),
+      label: "Relancer " + p.nom,
+      detail: (retard === 0 ? "Aujourd'hui" : "J+" + retard + " de retard") + (details.length > 0 ? " · " + details.join(" · ") : ""),
+      urgence: retard >= 3 ? "critique" : retard >= 1 ? "haute" : "normale",
+      valeur,
+    });
+  }
+
+  // NIVEAU 2 — Prospects chauds sans date de relance planifiée (opportunités en suspens)
+  const chaudsSansPlan = actifs.filter(
+    (p) => (p.niveau_interet === "chaud" || p.statut === "devis_envoye")
+      && (p.date_prochaine_relance === undefined || p.date_prochaine_relance === "")
+  );
+  if (chaudsSansPlan.length > 0) {
+    const valeurTotale = chaudsSansPlan.reduce((acc, p) => acc + (p.valeur_estimee || p.montant || 0), 0);
+    actionsUrgentes.push({
+      label: chaudsSansPlan.length === 1
+        ? "Planifier relance : " + chaudsSansPlan[0].nom
+        : chaudsSansPlan.length + " prospects chauds sans relance planifiée",
+      detail: chaudsSansPlan.map((p) => p.nom).join(", ") + (valeurTotale > 0 ? " · " + valeurTotale + " $ potentiel" : ""),
+      urgence: "haute",
+      valeur: valeurTotale,
+    });
+  }
+
+  // NIVEAU 3 — Prospects à potentiel élevé jamais contactés ou statut initial
+  const potentielEleve = actifs.filter(
+    (p) => p.potentiel === "élevé" && (p.statut === "a_contacter" || p.statut === "contacte")
+  );
+  if (potentielEleve.length > 0) {
+    actionsUrgentes.push({
+      label: potentielEleve.length === 1
+        ? "Avancer avec " + potentielEleve[0].nom + " (potentiel élevé)"
+        : potentielEleve.length + " prospects à potentiel élevé peu avancés",
+      detail: potentielEleve.map((p) => p.nom + (p.offre !== "" ? " — " + p.offre : "")).join(", "),
       urgence: "normale",
     });
   }
-  if (kpis.manque > 0 && sprint.prospectsContactes === 0) {
+
+  // NIVEAU 4 — Objectif sprint non commencé
+  if (kpis.manque > 0 && actifs.length === 0) {
     actionsUrgentes.push({
       label: "Commencer à prospecter",
-      detail: "Aucun prospect contacté — il manque " + kpis.manque + " $ pour atteindre l'objectif",
+      detail: "Aucun prospect actif — il manque " + kpis.manque + " $ pour atteindre l'objectif sprint",
       urgence: "haute",
     });
   }
-  const today = new Date().toISOString().split("T")[0];
+
+  // NIVEAU 5 — Tâches du jour non complétées
   const tachesDuJour = taches.filter((t) => t.date === today && !t.done);
   if (tachesDuJour.length > 0) {
     actionsUrgentes.push({
-      label: `${tachesDuJour.length} tâche${tachesDuJour.length > 1 ? "s" : ""} du jour en attente`,
+      label: tachesDuJour.length + " tâche" + (tachesDuJour.length > 1 ? "s" : "") + " du jour en attente",
       detail: tachesDuJour.slice(0, 3).map((t) => t.texte).join(" · "),
       urgence: "normale",
     });
@@ -1122,37 +1166,57 @@ export default function FreelancePage() {
 
             {/* Centre d'actions */}
             <SystemPanel ariaLabel="Centre d'actions" compact>
-              <p className="label-meta" style={{ margin: "0 0 8px" }}>Centre d'actions — que faire maintenant ?</p>
+              <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <p className="label-meta" style={{ margin: 0 }}>Que faire maintenant ?</p>
+                {actionsUrgentes.length > 0 ? (
+                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                    {actionsUrgentes.filter((a) => a.urgence === "critique").length > 0
+                      ? actionsUrgentes.filter((a) => a.urgence === "critique").length + " critique" + (actionsUrgentes.filter((a) => a.urgence === "critique").length > 1 ? "s" : "")
+                      : actionsUrgentes.length + " action" + (actionsUrgentes.length > 1 ? "s" : "")}
+                  </span>
+                ) : null}
+              </div>
               {actionsUrgentes.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  {actionsUrgentes.map((action, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        alignItems: "center",
-                        background: action.urgence === "haute" ? "rgba(201,168,92,0.08)" : "rgba(255,250,238,0.02)",
-                        border: `1px solid ${action.urgence === "haute" ? "rgba(201,168,92,0.28)" : "rgba(201,168,92,0.10)"}`,
-                        borderRadius: 7,
-                        display: "flex",
-                        gap: 10,
-                        padding: "7px 10px",
-                      }}
-                    >
-                      <span style={{ color: action.urgence === "haute" ? "var(--accent-gold)" : "var(--text-muted)", flexShrink: 0, fontSize: 11 }}>
-                        {action.urgence === "haute" ? "⚡" : "→"}
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ color: "var(--text-main)", fontSize: 12.5, fontWeight: 500 }}>{action.label}</span>
-                        {action.detail !== "" ? (
-                          <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 7 }}>{action.detail}</span>
-                        ) : null}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {actionsUrgentes.map((action, i) => {
+                    const isCritique = action.urgence === "critique";
+                    const isHaute = action.urgence === "haute";
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          alignItems: "flex-start",
+                          background: isCritique ? "rgba(216,90,48,0.07)" : isHaute ? "rgba(201,168,92,0.07)" : "rgba(255,250,238,0.02)",
+                          border: "1px solid " + (isCritique ? "rgba(216,90,48,0.30)" : isHaute ? "rgba(201,168,92,0.25)" : "rgba(201,168,92,0.09)"),
+                          borderRadius: 7,
+                          display: "flex",
+                          gap: 9,
+                          padding: "6px 9px",
+                        }}
+                      >
+                        <span style={{ color: isCritique ? "#D85A30" : isHaute ? "var(--accent-gold)" : "var(--text-muted)", flexShrink: 0, fontSize: 11, marginTop: 1 }}>
+                          {isCritique ? "🔴" : isHaute ? "⚡" : "→"}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            <span style={{ color: isCritique ? "#D85A30" : "var(--text-main)", fontSize: 12.5, fontWeight: isCritique || isHaute ? 600 : 500 }}>{action.label}</span>
+                            {action.valeur !== undefined && action.valeur > 0 ? (
+                              <span style={{ background: "rgba(29,158,117,0.12)", border: "1px solid rgba(29,158,117,0.25)", borderRadius: 99, color: "#1D9E75", fontSize: 10, fontWeight: 600, padding: "1px 6px" }}>
+                                {action.valeur} $
+                              </span>
+                            ) : null}
+                          </div>
+                          {action.detail !== "" ? (
+                            <p style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.4, margin: "2px 0 0" }}>{action.detail}</p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div style={{ background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.25)", borderRadius: 8, padding: "10px 12px" }}>
-                  <p style={{ color: "#1D9E75", fontSize: 13, margin: 0 }}>✓ Aucune action urgente — tu es à jour.</p>
+                  <p style={{ color: "#1D9E75", fontSize: 13, margin: 0 }}>✓ Aucune action due — tu es à jour.</p>
                 </div>
               )}
             </SystemPanel>
