@@ -73,7 +73,13 @@ type Revenu = {
   categorie: CategorieRevenu;
 };
 type RevenuSousTab = "historique" | "par_client" | "par_categorie";
-type CockpitSousTab = "vue" | "stats";
+type CockpitSousTab = "vue" | "stats" | "objectifs";
+type Objectifs = {
+  objectifMensuelCA: number;
+  objectifClientsMois: number;
+  objectifContactsSemaine: number;
+  objectifContactsMois: number;
+};
 type StatutProjet = "en_cours" | "en_pause" | "livre" | "facture" | "archive";
 type Projet = {
   id: string;
@@ -106,6 +112,7 @@ const FL_TACHES = "strate_fl_taches";
 const FL_PROPOSITIONS = "freelance-propositions";
 const FL_PROJETS = "freelance-projets";
 const FL_REVENUS = "freelance-revenus";
+const FL_OBJECTIFS = "strate_fl_objectifs";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -115,6 +122,7 @@ const defaultState: GhostwritingState = { clientText: "", objectifs: [], tons: [
 const defaultCalc: CalcState = { offre: "", prix: 150, taux: 10, objectif: 500, jours: 5 };
 const defaultMode500: Mode500State = { objectif: 500, jours: 5, competences: "", tempsParJour: "", contexte: "" };
 const defaultOffre: Omit<Offre, "id"> = { nom: "", prix: 0, description: "", canal: "", ventes: 0, actif: true };
+const defaultObjectifs: Objectifs = { objectifMensuelCA: 0, objectifClientsMois: 2, objectifContactsSemaine: 5, objectifContactsMois: 20 };
 
 const options = {
   objectifs: ["raconter une histoire personnelle", "clarifier un message", "ecrire un texte emotionnel"],
@@ -2201,6 +2209,8 @@ export default function FreelancePage() {
   const [sprintEdit, setSprintEdit] = useState(false);
   const [outilsSousTab, setOutilsSousTab] = useState<OutilsSousTab>("ghostwriting");
   const [cockpitSousTab, setCockpitSousTab] = useState<CockpitSousTab>("vue");
+  const [objectifs, setObjectifs] = useState<Objectifs>(defaultObjectifs);
+  const [objectifsEdit, setObjectifsEdit] = useState(false);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
@@ -2225,6 +2235,7 @@ export default function FreelancePage() {
     setProjets(lireLS<Projet[]>(FL_PROJETS, []));
     setRevenus(lireLS<Revenu[]>(FL_REVENUS, []));
     setTaches(lireLS<Tache[]>(FL_TACHES, []));
+    setObjectifs(lireLS<Objectifs>(FL_OBJECTIFS, defaultObjectifs));
   }, []);
 
   // Persistance automatique
@@ -2238,6 +2249,7 @@ export default function FreelancePage() {
   useEffect(() => { ecrireLS(FL_PROJETS, projets); }, [projets]);
   useEffect(() => { ecrireLS(FL_REVENUS, revenus); }, [revenus]);
   useEffect(() => { ecrireLS(FL_TACHES, taches); }, [taches]);
+  useEffect(() => { ecrireLS(FL_OBJECTIFS, objectifs); }, [objectifs]);
 
   function toggleOpt(group: OptionGroup, value: string) {
     setForm((c) => ({ ...c, [group]: c[group].includes(value) ? c[group].filter((i) => i !== value) : [value] }));
@@ -2461,6 +2473,7 @@ export default function FreelancePage() {
               {([
                 { key: "vue" as CockpitSousTab, label: "Vue d'ensemble" },
                 { key: "stats" as CockpitSousTab, label: "Statistiques" },
+                { key: "objectifs" as CockpitSousTab, label: "Objectifs" },
               ]).map(({ key, label }) => (
                 <button
                   key={key}
@@ -2766,6 +2779,145 @@ export default function FreelancePage() {
                       Pas encore assez de données. Ajoute des prospects, propositions, projets et revenus pour voir les statistiques.
                     </p>
                   )}
+                </SystemPanel>
+              );
+            })() : null}
+
+            {/* ── OBJECTIFS ── */}
+            {cockpitSousTab === "objectifs" ? (() => {
+              const moisActuel = today.slice(0, 7);
+
+              // Revenus réels du mois en cours
+              const revenusMoisActuel = revenus
+                .filter((r) => r.mois === moisActuel)
+                .reduce((acc, r) => acc + r.montant, 0);
+
+              // Clients gagnés ce mois
+              const clientsMoisActuel = prospects.filter(
+                (p) => p.statut === "gagne" && (p.date_dernier_contact || p.dateContact).slice(0, 7) === moisActuel
+              ).length;
+
+              // Contacts ce mois (prospects contactés ce mois)
+              const contactsMoisActuel = prospects.filter(
+                (p) => p.dateContact.slice(0, 7) === moisActuel
+              ).length;
+
+              // Contacts cette semaine (lundi → dimanche)
+              const todayDate = new Date(today);
+              const jourSemaine = todayDate.getDay() === 0 ? 6 : todayDate.getDay() - 1; // lundi = 0
+              const lundiStr = new Date(todayDate.getTime() - jourSemaine * 86400000).toISOString().split("T")[0];
+              const contactsSemaine = prospects.filter((p) => p.dateContact >= lundiStr && p.dateContact <= today).length;
+
+              // Progression CA
+              const caObjectif = objectifs.objectifMensuelCA;
+              const caPct = caObjectif > 0 ? Math.min(100, Math.round((revenusMoisActuel / caObjectif) * 100)) : null;
+              const caRestant = caObjectif > 0 ? Math.max(0, caObjectif - revenusMoisActuel) : null;
+
+              type ObjRow = { label: string; realise: number; objectif: number; unit: string; };
+              const lignes: ObjRow[] = [
+                { label: "Contacts / semaine", realise: contactsSemaine, objectif: objectifs.objectifContactsSemaine, unit: "" },
+                { label: "Contacts / mois", realise: contactsMoisActuel, objectif: objectifs.objectifContactsMois, unit: "" },
+                { label: "Nouveaux clients / mois", realise: clientsMoisActuel, objectif: objectifs.objectifClientsMois, unit: "" },
+              ];
+
+              return (
+                <SystemPanel ariaLabel="Objectifs" compact>
+                  {/* Objectif CA */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ color: "var(--text-soft)", fontSize: 12 }}>CA mensuel cible</span>
+                      <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                        {caPct !== null && (
+                          <span style={{ color: caPct >= 100 ? "#1D9E75" : "var(--text-muted)", fontSize: 11 }}>
+                            {revenusMoisActuel} $ / {caObjectif} $ — {caPct}%
+                          </span>
+                        )}
+                        {caObjectif === 0 && (
+                          <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Non défini</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setObjectifsEdit((v) => !v)}
+                          style={{ background: "none", border: "1px solid rgba(201,168,92,0.25)", borderRadius: 5, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, padding: "2px 8px" }}
+                        >
+                          {objectifsEdit ? "Fermer" : "Modifier"}
+                        </button>
+                      </div>
+                    </div>
+                    {caPct !== null && (
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 4, height: 8, overflow: "hidden", width: "100%" }}>
+                        <div style={{ background: caPct >= 100 ? "#1D9E75" : "rgba(201,168,92,0.6)", borderRadius: 4, height: "100%", transition: "width 0.3s", width: caPct + "%" }} />
+                      </div>
+                    )}
+                    {caRestant !== null && caRestant > 0 && (
+                      <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "3px 0 0" }}>
+                        Encore {caRestant} $ à encaisser ce mois
+                      </p>
+                    )}
+                    {caObjectif > 0 && revenusMoisActuel >= caObjectif && (
+                      <p style={{ color: "#1D9E75", fontSize: 10, margin: "3px 0 0" }}>✓ Objectif atteint ce mois</p>
+                    )}
+                  </div>
+
+                  {/* Formulaire d'édition */}
+                  {objectifsEdit && (
+                    <div style={{ background: "rgba(201,168,92,0.04)", border: "1px solid rgba(201,168,92,0.12)", borderRadius: 8, marginBottom: 12, padding: "10px 12px" }}>
+                      <p style={{ color: "var(--text-soft)", fontSize: 12, fontWeight: 600, margin: "0 0 8px" }}>Modifier les objectifs</p>
+                      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                        {(
+                          [
+                            { field: "objectifMensuelCA" as keyof Objectifs, label: "CA mensuel ($)" },
+                            { field: "objectifClientsMois" as keyof Objectifs, label: "Clients / mois" },
+                            { field: "objectifContactsSemaine" as keyof Objectifs, label: "Contacts / semaine" },
+                            { field: "objectifContactsMois" as keyof Objectifs, label: "Contacts / mois" },
+                          ] as { field: keyof Objectifs; label: string }[]
+                        ).map(({ field, label }) => (
+                          <label key={field} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <span style={{ color: "var(--text-muted)", fontSize: 10 }}>{label}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={objectifs[field]}
+                              onChange={(e) => setObjectifs((o) => ({ ...o, [field]: Number(e.target.value) }))}
+                              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(201,168,92,0.2)", borderRadius: 5, color: "var(--text-main)", fontSize: 13, padding: "4px 8px", width: "100%" }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lignes contacts / clients */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {lignes.map((l) => {
+                      const pct = l.objectif > 0 ? Math.min(100, Math.round((l.realise / l.objectif) * 100)) : null;
+                      const ok = l.objectif > 0 && l.realise >= l.objectif;
+                      return (
+                        <div
+                          key={l.label}
+                          style={{
+                            background: "rgba(255,250,238,0.02)",
+                            border: "1px solid rgba(201,168,92,0.09)",
+                            borderRadius: 7,
+                            padding: "6px 10px",
+                          }}
+                        >
+                          <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                            <span style={{ color: "var(--text-soft)", fontSize: 12 }}>{l.label}</span>
+                            <span style={{ color: ok ? "#1D9E75" : "var(--text-main)", fontSize: 13, fontWeight: 600 }}>
+                              {l.realise}{l.objectif > 0 ? " / " + l.objectif : ""}
+                              {ok ? " ✓" : ""}
+                            </span>
+                          </div>
+                          {pct !== null && (
+                            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 3, height: 5, overflow: "hidden" }}>
+                              <div style={{ background: ok ? "#1D9E75" : "rgba(201,168,92,0.5)", borderRadius: 3, height: "100%", width: pct + "%" }} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </SystemPanel>
               );
             })() : null}
