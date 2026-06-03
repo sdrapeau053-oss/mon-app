@@ -11,6 +11,23 @@ import {
 } from "@/components/system-ui";
 import { BackLink } from "@/components/ui/back-link";
 
+interface PerteMemoireVivante {
+  souvenirs: string[];
+  phrases: string[];
+  lieux: string[];
+  objets: string[];
+  ceQuiReste: string[];
+}
+
+interface PerteJournalEntry {
+  id: string;
+  date: string;
+  emotion: string;
+  intensite: number;
+  declencheur?: string;
+  texte: string;
+}
+
 interface PerteDossier {
   id: string;
   titre: string;
@@ -21,6 +38,8 @@ interface PerteDossier {
   notes?: string;
   pertesSecondaires?: string[];
   pertesAssociees?: string[];
+  journal?: PerteJournalEntry[];
+  memoireVivante?: PerteMemoireVivante;
   dateCreation: string;
 }
 
@@ -134,6 +153,63 @@ export default function PertesDossiersPage() {
     setDossiers(readDossiers());
   }, []);
 
+  const transversale = useMemo(() => {
+    if (dossiers.length === 0) return null;
+
+    const withIntensite = dossiers.filter(
+      (d) => typeof d.intensiteActuelle === "number" && Number.isFinite(d.intensiteActuelle),
+    );
+    const intensiteMoyenne =
+      withIntensite.length > 0
+        ? Math.round((withIntensite.reduce((sum, d) => sum + Number(d.intensiteActuelle), 0) / withIntensite.length) * 10) / 10
+        : null;
+
+    const plusIntense =
+      withIntensite.length > 0
+        ? withIntensite.reduce((max, d) => (Number(d.intensiteActuelle) > Number(max.intensiteActuelle) ? d : max))
+        : null;
+
+    const typeCounts: Record<string, number> = {};
+    for (const d of dossiers) {
+      typeCounts[d.typePerte] = (typeCounts[d.typePerte] || 0) + 1;
+    }
+    const typesSorted = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    const totalPertesAssociees = dossiers.reduce(
+      (sum, d) => sum + (Array.isArray(d.pertesAssociees) ? d.pertesAssociees.length : 0),
+      0,
+    );
+
+    const totalJournal = dossiers.reduce(
+      (sum, d) => sum + (Array.isArray(d.journal) ? d.journal.length : 0),
+      0,
+    );
+
+    const totalMemoire = dossiers.reduce((sum, d) => {
+      if (!d.memoireVivante) return sum;
+      const m = d.memoireVivante;
+      return (
+        sum +
+        (Array.isArray(m.souvenirs) ? m.souvenirs.length : 0) +
+        (Array.isArray(m.phrases) ? m.phrases.length : 0) +
+        (Array.isArray(m.lieux) ? m.lieux.length : 0) +
+        (Array.isArray(m.objets) ? m.objets.length : 0) +
+        (Array.isArray(m.ceQuiReste) ? m.ceQuiReste.length : 0)
+      );
+    }, 0);
+
+    return {
+      intensiteMoyenne,
+      plusIntense,
+      totalJournal,
+      totalMemoire,
+      totalPertesAssociees,
+      typesSorted,
+    };
+  }, [dossiers]);
+
   const filteredDossiers = useMemo(() => {
     const normalizedSearch = searchQuery.toLocaleLowerCase("fr-CA").trim();
 
@@ -212,6 +288,152 @@ export default function PertesDossiersPage() {
           </SystemPanel>
         ) : (
           <>
+            {transversale ? (
+              <SystemPanel ariaLabel="Vue transversale des dossiers" compact>
+                <SystemSectionHeader eyebrow="Lecture globale" title="Vue transversale" />
+                <SystemGrid gap={12} min={200}>
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 5,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Dossiers</p>
+                    <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 400 }}>
+                      {dossiers.length}
+                    </strong>
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      perte{dossiers.length > 1 ? "s" : ""} enregistrée{dossiers.length > 1 ? "s" : ""}
+                    </p>
+                  </article>
+
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 5,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Intensité moyenne</p>
+                    <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 400 }}>
+                      {transversale.intensiteMoyenne !== null ? `${transversale.intensiteMoyenne}/10` : "—"}
+                    </strong>
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      sur les dossiers évalués
+                    </p>
+                  </article>
+
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 5,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Pertes associées</p>
+                    <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 400 }}>
+                      {transversale.totalPertesAssociees}
+                    </strong>
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      au total dans tous les dossiers
+                    </p>
+                  </article>
+
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 5,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Entrées journal</p>
+                    <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 400 }}>
+                      {transversale.totalJournal}
+                    </strong>
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      entrée{transversale.totalJournal > 1 ? "s" : ""} au total
+                    </p>
+                  </article>
+
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 5,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Éléments mémoire</p>
+                    <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 400 }}>
+                      {transversale.totalMemoire}
+                    </strong>
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      élément{transversale.totalMemoire > 1 ? "s" : ""} de mémoire vivante
+                    </p>
+                  </article>
+
+                  {transversale.plusIntense ? (
+                    <article
+                      style={{
+                        background: "rgba(201,168,92,0.07)",
+                        border: "1px solid rgba(201,168,92,0.22)",
+                        borderRadius: 12,
+                        display: "grid",
+                        gap: 5,
+                        padding: 14,
+                      }}
+                    >
+                      <p className="label-meta" style={{ margin: 0 }}>Dossier le plus intense</p>
+                      <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 400, lineHeight: 1.2 }}>
+                        {transversale.plusIntense.titre}
+                      </strong>
+                      <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                        Intensité {transversale.plusIntense.intensiteActuelle}/10
+                      </p>
+                    </article>
+                  ) : null}
+                </SystemGrid>
+
+                {transversale.typesSorted.length > 0 ? (
+                  <div style={{ marginTop: 14 }}>
+                    <p className="label-meta" style={{ margin: "0 0 8px" }}>Types les plus fréquents</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {transversale.typesSorted.map(([type, count]) => (
+                        <span
+                          key={type}
+                          style={{
+                            background: "rgba(201,168,92,0.10)",
+                            border: "1px solid rgba(201,168,92,0.24)",
+                            borderRadius: 999,
+                            color: "var(--text-soft)",
+                            fontSize: 12.5,
+                            padding: "6px 12px",
+                          }}
+                        >
+                          {type} <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>×{count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </SystemPanel>
+            ) : null}
+
             <SystemPanel ariaLabel="Filtres des pertes" compact>
               <SystemGrid gap={10} min={240}>
                 <label style={dashboardFieldStyle}>
