@@ -98,7 +98,18 @@ type Projet = {
   livrable?: string;
 };
 type MainTab = "cockpit" | "crm" | "pipeline" | "projets" | "revenus" | "offres" | "outils";
-type OutilsSousTab = "ghostwriting" | "mode500";
+type OutilsSousTab = "ghostwriting" | "mode500" | "messages";
+type CanalMessage = "linkedin" | "email" | "facebook" | "autre";
+type TypeMessage = "premier_contact" | "relance" | "suivi_devis" | "remerciement" | "client_recurrent" | "autre";
+type MessageTemplate = {
+  id: string;
+  titre: string;
+  canal: CanalMessage;
+  type: TypeMessage;
+  contenu: string;
+  dateCreation: string;
+  derniereModification: string;
+};
 
 // ── Clés localStorage ────────────────────────────────────────────────────────
 
@@ -113,6 +124,7 @@ const FL_PROPOSITIONS = "freelance-propositions";
 const FL_PROJETS = "freelance-projets";
 const FL_REVENUS = "freelance-revenus";
 const FL_OBJECTIFS = "strate_fl_objectifs";
+const FL_MESSAGES = "strate_fl_messages";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -2211,6 +2223,13 @@ export default function FreelancePage() {
   const [cockpitSousTab, setCockpitSousTab] = useState<CockpitSousTab>("vue");
   const [objectifs, setObjectifs] = useState<Objectifs>(defaultObjectifs);
   const [objectifsEdit, setObjectifsEdit] = useState(false);
+  const [messages, setMessages] = useState<MessageTemplate[]>([]);
+  const [msgFiltreCanal, setMsgFiltreCanal] = useState<CanalMessage | "tous">("tous");
+  const [msgFiltreType, setMsgFiltreType] = useState<TypeMessage | "tous">("tous");
+  const [msgEditId, setMsgEditId] = useState<string | null>(null);
+  const [msgForm, setMsgForm] = useState<Omit<MessageTemplate, "id" | "dateCreation" | "derniereModification">>({ titre: "", canal: "linkedin", type: "premier_contact", contenu: "" });
+  const [msgAjout, setMsgAjout] = useState(false);
+  const [msgCopied, setMsgCopied] = useState<string | null>(null);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
@@ -2236,6 +2255,7 @@ export default function FreelancePage() {
     setRevenus(lireLS<Revenu[]>(FL_REVENUS, []));
     setTaches(lireLS<Tache[]>(FL_TACHES, []));
     setObjectifs(lireLS<Objectifs>(FL_OBJECTIFS, defaultObjectifs));
+    setMessages(lireLS<MessageTemplate[]>(FL_MESSAGES, []));
   }, []);
 
   // Persistance automatique
@@ -2250,6 +2270,7 @@ export default function FreelancePage() {
   useEffect(() => { ecrireLS(FL_REVENUS, revenus); }, [revenus]);
   useEffect(() => { ecrireLS(FL_TACHES, taches); }, [taches]);
   useEffect(() => { ecrireLS(FL_OBJECTIFS, objectifs); }, [objectifs]);
+  useEffect(() => { ecrireLS(FL_MESSAGES, messages); }, [messages]);
 
   function toggleOpt(group: OptionGroup, value: string) {
     setForm((c) => ({ ...c, [group]: c[group].includes(value) ? c[group].filter((i) => i !== value) : [value] }));
@@ -2977,6 +2998,7 @@ export default function FreelancePage() {
               {([
                 { key: "ghostwriting" as OutilsSousTab, label: "Ghostwriting" },
                 { key: "mode500" as OutilsSousTab, label: "Mode 500" },
+                { key: "messages" as OutilsSousTab, label: "Messages" },
               ]).map(({ key, label }) => (
                 <button
                   key={key}
@@ -3080,6 +3102,194 @@ export default function FreelancePage() {
             {outilsSousTab === "mode500" ? <SystemPanel ariaLabel="Mode 500" compact>
               <Mode500Panel mode500={mode500} onUpdate={setMode500} />
             </SystemPanel> : null}
+
+            {/* ── MESSAGES ── */}
+            {outilsSousTab === "messages" ? (() => {
+              const CANAUX: { value: CanalMessage; label: string }[] = [
+                { value: "linkedin", label: "LinkedIn" },
+                { value: "email", label: "Email" },
+                { value: "facebook", label: "Facebook" },
+                { value: "autre", label: "Autre" },
+              ];
+              const TYPES: { value: TypeMessage; label: string }[] = [
+                { value: "premier_contact", label: "Premier contact" },
+                { value: "relance", label: "Relance" },
+                { value: "suivi_devis", label: "Suivi devis" },
+                { value: "remerciement", label: "Remerciement" },
+                { value: "client_recurrent", label: "Client récurrent" },
+                { value: "autre", label: "Autre" },
+              ];
+
+              const msgFiltre = messages.filter((m) => {
+                if (msgFiltreCanal !== "tous" && m.canal !== msgFiltreCanal) return false;
+                if (msgFiltreType !== "tous" && m.type !== msgFiltreType) return false;
+                return true;
+              });
+
+              const inputS: React.CSSProperties = { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(201,168,92,0.2)", borderRadius: 5, color: "var(--text-main)", fontSize: 12, padding: "4px 8px", width: "100%" };
+              const selectS: React.CSSProperties = { ...inputS, cursor: "pointer" };
+
+              function sauvegarderMsg() {
+                if (msgForm.titre.trim() === "" || msgForm.contenu.trim() === "") return;
+                const now = today;
+                if (msgEditId !== null) {
+                  setMessages((prev) => prev.map((m) => m.id === msgEditId ? { ...m, ...msgForm, derniereModification: now } : m));
+                  setMsgEditId(null);
+                } else {
+                  setMessages((prev) => [{ id: genId(), dateCreation: now, derniereModification: now, ...msgForm }, ...prev]);
+                  setMsgAjout(false);
+                }
+                setMsgForm({ titre: "", canal: "linkedin", type: "premier_contact", contenu: "" });
+              }
+
+              function ouvrirEdit(m: MessageTemplate) {
+                setMsgEditId(m.id);
+                setMsgAjout(false);
+                setMsgForm({ titre: m.titre, canal: m.canal, type: m.type, contenu: m.contenu });
+              }
+
+              function annuler() {
+                setMsgEditId(null);
+                setMsgAjout(false);
+                setMsgForm({ titre: "", canal: "linkedin", type: "premier_contact", contenu: "" });
+              }
+
+              const formulaireVisible = msgAjout || msgEditId !== null;
+
+              return (
+                <SystemPanel ariaLabel="Bibliothèque de messages" compact>
+                  {/* En-tête : filtres + bouton ajout */}
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    <select value={msgFiltreCanal} onChange={(e) => setMsgFiltreCanal(e.target.value as CanalMessage | "tous")} style={{ ...selectS, width: "auto" }}>
+                      <option value="tous">Tous les canaux</option>
+                      {CANAUX.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                    <select value={msgFiltreType} onChange={(e) => setMsgFiltreType(e.target.value as TypeMessage | "tous")} style={{ ...selectS, width: "auto" }}>
+                      <option value="tous">Tous les types</option>
+                      {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => { setMsgAjout((v) => !v); setMsgEditId(null); setMsgForm({ titre: "", canal: "linkedin", type: "premier_contact", contenu: "" }); }}
+                      style={{ background: formulaireVisible && msgEditId === null ? "rgba(201,168,92,0.15)" : "rgba(201,168,92,0.08)", border: "1px solid rgba(201,168,92,0.3)", borderRadius: 6, color: "var(--text-soft)", cursor: "pointer", fontSize: 12, marginLeft: "auto", padding: "4px 12px" }}
+                    >
+                      {msgAjout ? "Annuler" : "+ Nouveau"}
+                    </button>
+                  </div>
+
+                  {/* Formulaire ajout / édition */}
+                  {formulaireVisible && (
+                    <div style={{ background: "rgba(201,168,92,0.04)", border: "1px solid rgba(201,168,92,0.15)", borderRadius: 8, marginBottom: 10, padding: "10px 12px" }}>
+                      <p style={{ color: "var(--text-soft)", fontSize: 12, fontWeight: 600, margin: "0 0 8px" }}>
+                        {msgEditId !== null ? "Modifier le modèle" : "Nouveau modèle"}
+                      </p>
+                      <div style={{ display: "grid", gap: 6, gridTemplateColumns: "1fr 1fr" }}>
+                        <label style={{ gridColumn: "1 / -1" }}>
+                          <span style={{ color: "var(--text-muted)", display: "block", fontSize: 10, marginBottom: 2 }}>Titre *</span>
+                          <input type="text" placeholder="ex: Premier contact LinkedIn ghostwriting" value={msgForm.titre} onChange={(e) => setMsgForm((f) => ({ ...f, titre: e.target.value }))} style={inputS} />
+                        </label>
+                        <label>
+                          <span style={{ color: "var(--text-muted)", display: "block", fontSize: 10, marginBottom: 2 }}>Canal</span>
+                          <select value={msgForm.canal} onChange={(e) => setMsgForm((f) => ({ ...f, canal: e.target.value as CanalMessage }))} style={selectS}>
+                            {CANAUX.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span style={{ color: "var(--text-muted)", display: "block", fontSize: 10, marginBottom: 2 }}>Type</span>
+                          <select value={msgForm.type} onChange={(e) => setMsgForm((f) => ({ ...f, type: e.target.value as TypeMessage }))} style={selectS}>
+                            {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                        </label>
+                        <label style={{ gridColumn: "1 / -1" }}>
+                          <span style={{ color: "var(--text-muted)", display: "block", fontSize: 10, marginBottom: 2 }}>Contenu *</span>
+                          <textarea
+                            placeholder="Rédige ton modèle ici. Tu peux utiliser des espaces réservés comme [NOM], [OFFRE], [LIEN]…"
+                            value={msgForm.contenu}
+                            onChange={(e) => setMsgForm((f) => ({ ...f, contenu: e.target.value }))}
+                            style={{ ...inputS, minHeight: 100, resize: "vertical" }}
+                          />
+                        </label>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 8 }}>
+                        <button type="button" onClick={annuler} style={{ background: "none", border: "1px solid rgba(201,168,92,0.2)", borderRadius: 5, color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "4px 12px" }}>Annuler</button>
+                        <button type="button" onClick={sauvegarderMsg} style={{ background: "rgba(201,168,92,0.15)", border: "1px solid rgba(201,168,92,0.35)", borderRadius: 5, color: "var(--text-main)", cursor: "pointer", fontSize: 12, fontWeight: 600, padding: "4px 14px" }}>
+                          {msgEditId !== null ? "Enregistrer" : "Ajouter"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Liste des templates */}
+                  {msgFiltre.length === 0 ? (
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      {messages.length === 0 ? "Aucun modèle. Clique sur « + Nouveau » pour créer ton premier message." : "Aucun résultat pour ces filtres."}
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {msgFiltre.map((m) => {
+                        const canalLabel = CANAUX.find((c) => c.value === m.canal)?.label ?? m.canal;
+                        const typeLabel = TYPES.find((t) => t.value === m.type)?.label ?? m.type;
+                        const enEdition = msgEditId === m.id;
+                        return (
+                          <div
+                            key={m.id}
+                            style={{
+                              background: enEdition ? "rgba(201,168,92,0.05)" : "rgba(255,250,238,0.02)",
+                              border: "1px solid rgba(201,168,92,0.12)",
+                              borderRadius: 8,
+                              padding: "8px 10px",
+                            }}
+                          >
+                            {/* En-tête template */}
+                            <div style={{ alignItems: "flex-start", display: "flex", justifyContent: "space-between" }}>
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ color: "var(--text-main)", fontSize: 13, fontWeight: 600, margin: 0 }}>{m.titre}</p>
+                                <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "2px 0 0" }}>
+                                  {canalLabel} · {typeLabel}
+                                </p>
+                              </div>
+                              <div style={{ alignItems: "center", display: "flex", flexShrink: 0, gap: 4, marginLeft: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(m.contenu).catch(() => {});
+                                    setMsgCopied(m.id);
+                                    setTimeout(() => setMsgCopied(null), 1500);
+                                  }}
+                                  style={{ background: "rgba(29,158,117,0.1)", border: "1px solid rgba(29,158,117,0.25)", borderRadius: 5, color: "#1D9E75", cursor: "pointer", fontSize: 11, padding: "2px 8px" }}
+                                >
+                                  {msgCopied === m.id ? "Copié ✓" : "Copier"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => enEdition ? annuler() : ouvrirEdit(m)}
+                                  style={{ background: "none", border: "1px solid rgba(201,168,92,0.2)", borderRadius: 5, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, padding: "2px 8px" }}
+                                >
+                                  {enEdition ? "✕" : "Éditer"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { if (confirm("Supprimer ce modèle ?")) setMessages((prev) => prev.filter((x) => x.id !== m.id)); }}
+                                  style={{ background: "none", border: "1px solid rgba(216,90,48,0.2)", borderRadius: 5, color: "#D85A30", cursor: "pointer", fontSize: 11, padding: "2px 8px" }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                            {/* Aperçu contenu */}
+                            {!enEdition && (
+                              <p style={{ color: "var(--text-soft)", fontSize: 11, lineHeight: 1.5, margin: "6px 0 0", whiteSpace: "pre-wrap" }}>
+                                {m.contenu.length > 200 ? m.contenu.slice(0, 200) + "…" : m.contenu}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </SystemPanel>
+              );
+            })() : null}
           </>
         ) : null}
 
