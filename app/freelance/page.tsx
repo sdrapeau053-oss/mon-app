@@ -61,6 +61,18 @@ type Proposition = {
   notes?: string;
   version: number;
 };
+type CategorieRevenu = "ghostwriting" | "revision" | "biographie" | "seo" | "contenu_web" | "autre";
+type Revenu = {
+  id: string;
+  projetId?: string;
+  nomClient: string;
+  description: string;
+  montant: number;
+  date: string;
+  mois: string;           // "YYYY-MM" — calculé à la création
+  categorie: CategorieRevenu;
+};
+type RevenuSousTab = "historique" | "par_client" | "par_categorie";
 type StatutProjet = "en_cours" | "en_pause" | "livre" | "facture" | "archive";
 type Projet = {
   id: string;
@@ -78,7 +90,7 @@ type Projet = {
   notes?: string;
   livrable?: string;
 };
-type MainTab = "cockpit" | "crm" | "pipeline" | "projets" | "offres" | "outils";
+type MainTab = "cockpit" | "crm" | "pipeline" | "projets" | "revenus" | "offres" | "outils";
 type OutilsSousTab = "ghostwriting" | "mode500";
 
 // ── Clés localStorage ────────────────────────────────────────────────────────
@@ -92,6 +104,7 @@ const FL_OFFERS = "strate_fl_offers";
 const FL_TACHES = "strate_fl_taches";
 const FL_PROPOSITIONS = "freelance-propositions";
 const FL_PROJETS = "freelance-projets";
+const FL_REVENUS = "freelance-revenus";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -1412,6 +1425,271 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
   );
 }
 
+// ── Revenus ──────────────────────────────────────────────────────────────────
+
+const CATEGORIES_REVENU: { value: CategorieRevenu; label: string }[] = [
+  { value: "ghostwriting",  label: "Ghostwriting" },
+  { value: "revision",      label: "Révision / correction" },
+  { value: "biographie",    label: "Biographie" },
+  { value: "seo",           label: "SEO / web" },
+  { value: "contenu_web",   label: "Contenu web" },
+  { value: "autre",         label: "Autre" },
+];
+
+function moisLabel(mois: string): string {
+  const [an, m] = mois.split("-");
+  const noms = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+  return (noms[parseInt(m, 10) - 1] ?? m) + " " + an;
+}
+
+function RevenusPanel({ revenus, projets, onUpdate }: {
+  revenus: Revenu[];
+  projets: Projet[];
+  onUpdate: (r: Revenu[]) => void;
+}) {
+  const [ajoutOpen, setAjoutOpen] = useState(false);
+  const [sousTab, setSousTab] = useState<RevenuSousTab>("historique");
+  const [form, setForm] = useState<Omit<Revenu, "id" | "mois">>({
+    nomClient: "",
+    description: "",
+    montant: 0,
+    date: new Date().toISOString().split("T")[0],
+    categorie: "ghostwriting",
+  });
+
+  const moisActuel = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const anneeActuelle = moisActuel.slice(0, 4);
+
+  function ajouter() {
+    if (form.nomClient.trim() === "" || form.montant <= 0) return;
+    const mois = form.date.slice(0, 7);
+    onUpdate([{ id: genId(), mois, ...form }, ...revenus]);
+    setForm((f) => ({ ...f, nomClient: "", description: "", montant: 0, projetId: undefined }));
+    setAjoutOpen(false);
+  }
+
+  function supprimer(id: string) {
+    onUpdate(revenus.filter((r) => r.id !== id));
+  }
+
+  // KPIs globaux
+  const revenusMoisActuel = revenus.filter((r) => r.mois === moisActuel);
+  const totalMois = revenusMoisActuel.reduce((acc, r) => acc + r.montant, 0);
+  const totalAnnee = revenus.filter((r) => r.mois.startsWith(anneeActuelle)).reduce((acc, r) => acc + r.montant, 0);
+  const nbMoisAvecRevenus = new Set(revenus.map((r) => r.mois)).size;
+
+  // Regroupement par mois (historique)
+  const parMois = revenus.reduce<Record<string, Revenu[]>>((acc, r) => {
+    if (!acc[r.mois]) acc[r.mois] = [];
+    acc[r.mois].push(r);
+    return acc;
+  }, {});
+  const moisTries = Object.keys(parMois).sort((a, b) => b.localeCompare(a));
+
+  // Regroupement par client
+  const parClient = revenus.reduce<Record<string, { total: number; nb: number }>>((acc, r) => {
+    if (!acc[r.nomClient]) acc[r.nomClient] = { total: 0, nb: 0 };
+    acc[r.nomClient].total += r.montant;
+    acc[r.nomClient].nb += 1;
+    return acc;
+  }, {});
+  const clientsTries = Object.entries(parClient).sort((a, b) => b[1].total - a[1].total);
+
+  // Regroupement par catégorie
+  const parCat = revenus.reduce<Record<string, number>>((acc, r) => {
+    acc[r.categorie] = (acc[r.categorie] ?? 0) + r.montant;
+    return acc;
+  }, {});
+  const catTriees = Object.entries(parCat).sort((a, b) => b[1] - a[1]);
+  const totalCat = Object.values(parCat).reduce((a, b) => a + b, 0);
+
+  return (
+    <div>
+      {/* KPIs compacts */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+        <div style={{ background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.20)", borderRadius: 7, padding: "5px 12px" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>Ce mois</p>
+          <strong style={{ color: "#1D9E75", fontSize: 16 }}>{totalMois > 0 ? totalMois + " $" : "0 $"}</strong>
+        </div>
+        <div style={{ background: "rgba(59,139,212,0.08)", border: "1px solid rgba(59,139,212,0.20)", borderRadius: 7, padding: "5px 12px" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>{anneeActuelle}</p>
+          <strong style={{ color: "#3B8BD4", fontSize: 16 }}>{totalAnnee > 0 ? totalAnnee + " $" : "0 $"}</strong>
+        </div>
+        {nbMoisAvecRevenus > 1 ? (
+          <div style={{ background: "rgba(255,250,238,0.03)", border: "1px solid rgba(201,168,92,0.12)", borderRadius: 7, padding: "5px 12px" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>Moy. mensuelle</p>
+            <strong style={{ color: "var(--text-soft)", fontSize: 16 }}>{Math.round(totalAnnee / nbMoisAvecRevenus)} $</strong>
+          </div>
+        ) : null}
+      </div>
+
+      {/* En-tête + ajout */}
+      <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <p className="label-meta" style={{ margin: 0 }}>
+          {revenus.length === 0 ? "Aucun revenu enregistré" : revenus.length + " encaissement" + (revenus.length > 1 ? "s" : "")}
+        </p>
+        <button type="button" style={btnSmall} onClick={() => setAjoutOpen(!ajoutOpen)}>
+          {ajoutOpen ? "Annuler" : "+ Ajouter"}
+        </button>
+      </div>
+
+      {/* Formulaire ajout */}
+      {ajoutOpen ? (
+        <div style={{ background: "rgba(201,168,92,0.05)", border: "1px solid rgba(201,168,92,0.18)", borderRadius: 8, display: "grid", gap: 6, marginBottom: 10, padding: "10px 12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Client *</p>
+              <input type="text" placeholder="Nom du client" value={form.nomClient} onChange={(e) => setForm((f) => ({ ...f, nomClient: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($) *</p>
+              <input type="number" min={1} value={form.montant || ""} onChange={(e) => setForm((f) => ({ ...f, montant: Number(e.target.value) }))} style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Description</p>
+              <input type="text" placeholder="ex: Révision chapitre 1-3, Ghostwriting page LinkedIn…" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date d'encaissement</p>
+              <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Catégorie</p>
+              <select value={form.categorie} onChange={(e) => setForm((f) => ({ ...f, categorie: e.target.value as CategorieRevenu }))} style={inputStyle}>
+                {CATEGORIES_REVENU.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            {projets.filter((p) => p.statut === "facture" || p.statut === "livre").length > 0 ? (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Projet lié (optionnel)</p>
+                <select value={form.projetId || ""} onChange={(e) => setForm((f) => ({ ...f, projetId: e.target.value || undefined }))} style={inputStyle}>
+                  <option value="">— Aucun —</option>
+                  {projets.filter((p) => p.statut === "facture" || p.statut === "livre").map((p) => (
+                    <option key={p.id} value={p.id}>{p.nomClient} · {p.nom} · {p.montant} $</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </div>
+          <button className="btn-primary" type="button" onClick={ajouter} style={{ fontSize: 12, padding: "5px" }}>Enregistrer</button>
+        </div>
+      ) : null}
+
+      {/* Sous-onglets de lecture */}
+      {revenus.length > 0 ? (
+        <>
+          <div style={{ borderBottom: "1px solid rgba(201,168,92,0.12)", display: "flex", marginBottom: 10 }}>
+            {([
+              { key: "historique" as RevenuSousTab, label: "Historique" },
+              { key: "par_client" as RevenuSousTab, label: "Par client" },
+              { key: "par_categorie" as RevenuSousTab, label: "Par catégorie" },
+            ]).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSousTab(key)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  borderBottom: sousTab === key ? "2px solid rgba(201,168,92,0.7)" : "2px solid transparent",
+                  color: sousTab === key ? "var(--text-main)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: sousTab === key ? 600 : 400,
+                  marginBottom: -1,
+                  padding: "4px 12px 6px",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Vue Historique — par mois */}
+          {sousTab === "historique" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {moisTries.map((mois) => {
+                const items = parMois[mois].sort((a, b) => b.date.localeCompare(a.date));
+                const totalM = items.reduce((acc, r) => acc + r.montant, 0);
+                return (
+                  <div key={mois}>
+                    <div style={{ alignItems: "baseline", display: "flex", gap: 8, marginBottom: 5 }}>
+                      <p className="label-meta" style={{ fontSize: 10, letterSpacing: "0.08em", margin: 0, textTransform: "uppercase" }}>{moisLabel(mois)}</p>
+                      <strong style={{ color: mois === moisActuel ? "#1D9E75" : "var(--text-soft)", fontSize: 13 }}>{totalM} $</strong>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {items.map((r) => {
+                        const cat = CATEGORIES_REVENU.find((c) => c.value === r.categorie);
+                        return (
+                          <div key={r.id} style={{ alignItems: "center", background: "rgba(255,250,238,0.02)", border: "1px solid rgba(201,168,92,0.09)", borderRadius: 6, display: "flex", gap: 8, justifyContent: "space-between", padding: "5px 8px" }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ color: "var(--text-main)", fontSize: 12, fontWeight: 600 }}>{r.nomClient}</span>
+                              {r.description !== "" ? <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description}</span> : null}
+                              <span style={{ background: "rgba(201,168,92,0.10)", borderRadius: 99, color: "var(--text-muted)", fontSize: 9, marginLeft: 6, padding: "1px 5px" }}>{cat?.label ?? r.categorie}</span>
+                            </div>
+                            <div style={{ alignItems: "center", display: "flex", flexShrink: 0, gap: 8 }}>
+                              <strong style={{ color: "#1D9E75", fontSize: 12 }}>{r.montant} $</strong>
+                              <span style={{ color: "var(--text-muted)", fontSize: 10 }}>{r.date}</span>
+                              <button type="button" onClick={() => supprimer(r.id)} style={{ background: "transparent", border: "1px solid rgba(201,168,92,0.15)", borderRadius: 4, color: "var(--text-muted)", cursor: "pointer", fontSize: 10, padding: "1px 5px" }}>×</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* Vue Par client */}
+          {sousTab === "par_client" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {clientsTries.map(([nom, data]) => (
+                <div key={nom} style={{ alignItems: "center", background: "rgba(255,250,238,0.02)", border: "1px solid rgba(201,168,92,0.09)", borderRadius: 7, display: "flex", gap: 10, justifyContent: "space-between", padding: "7px 10px" }}>
+                  <div>
+                    <span style={{ color: "var(--text-main)", fontSize: 13, fontWeight: 600 }}>{nom}</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 7 }}>{data.nb} encaissement{data.nb > 1 ? "s" : ""}</span>
+                  </div>
+                  <strong style={{ color: "#1D9E75", fontSize: 14 }}>{data.total} $</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Vue Par catégorie */}
+          {sousTab === "par_categorie" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {catTriees.map(([cat, total]) => {
+                const label = CATEGORIES_REVENU.find((c) => c.value === cat)?.label ?? cat;
+                const pct = totalCat > 0 ? Math.round((total / totalCat) * 100) : 0;
+                return (
+                  <div key={cat} style={{ background: "rgba(255,250,238,0.02)", border: "1px solid rgba(201,168,92,0.09)", borderRadius: 7, padding: "7px 10px" }}>
+                    <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ color: "var(--text-soft)", fontSize: 12, fontWeight: 500 }}>{label}</span>
+                      <div style={{ alignItems: "baseline", display: "flex", gap: 8 }}>
+                        <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{pct}%</span>
+                        <strong style={{ color: "#1D9E75", fontSize: 13 }}>{total} $</strong>
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(201,168,92,0.10)", borderRadius: 2, height: 3, overflow: "hidden" }}>
+                      <div style={{ background: "#1D9E75", borderRadius: 2, height: "100%", width: pct + "%" }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p style={{ color: "var(--text-muted)", fontSize: 12, margin: "8px 0 0" }}>
+          Aucun revenu enregistré. Ajoute ton premier encaissement.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Projets ──────────────────────────────────────────────────────────────────
 
 const STATUTS_PROJET: { value: StatutProjet; label: string; color: string }[] = [
@@ -1927,6 +2205,7 @@ export default function FreelancePage() {
   const [offres, setOffres] = useState<Offre[]>([]);
   const [propositions, setPropositions] = useState<Proposition[]>([]);
   const [projets, setProjets] = useState<Projet[]>([]);
+  const [revenus, setRevenus] = useState<Revenu[]>([]);
   const [taches, setTaches] = useState<Tache[]>([]);
   const [nouvelleTache, setNouvelleTache] = useState("");
 
@@ -1942,6 +2221,7 @@ export default function FreelancePage() {
     setOffres(lireLS<Offre[]>(FL_OFFERS, []));
     setPropositions(lireLS<Proposition[]>(FL_PROPOSITIONS, []));
     setProjets(lireLS<Projet[]>(FL_PROJETS, []));
+    setRevenus(lireLS<Revenu[]>(FL_REVENUS, []));
     setTaches(lireLS<Tache[]>(FL_TACHES, []));
   }, []);
 
@@ -1954,6 +2234,7 @@ export default function FreelancePage() {
   useEffect(() => { ecrireLS(FL_OFFERS, offres); }, [offres]);
   useEffect(() => { ecrireLS(FL_PROPOSITIONS, propositions); }, [propositions]);
   useEffect(() => { ecrireLS(FL_PROJETS, projets); }, [projets]);
+  useEffect(() => { ecrireLS(FL_REVENUS, revenus); }, [revenus]);
   useEffect(() => { ecrireLS(FL_TACHES, taches); }, [taches]);
 
   function toggleOpt(group: OptionGroup, value: string) {
@@ -2085,6 +2366,7 @@ export default function FreelancePage() {
     { key: "crm", label: "CRM", badge: actifs.filter((p) => p.statut !== "gagne").length || undefined },
     { key: "pipeline", label: "Pipeline" },
     { key: "projets", label: "Projets", badge: projets.filter((p) => p.statut === "en_cours").length || undefined },
+    { key: "revenus", label: "Revenus" },
     { key: "offres", label: "Offres" },
     { key: "outils", label: "Outils IA" },
   ];
@@ -2368,6 +2650,13 @@ export default function FreelancePage() {
               propositions={propositions}
               onUpdate={setProjets}
             />
+          </SystemPanel>
+        ) : null}
+
+        {/* ── REVENUS ── */}
+        {activeTab === "revenus" ? (
+          <SystemPanel ariaLabel="Revenus" compact>
+            <RevenusPanel revenus={revenus} projets={projets} onUpdate={setRevenus} />
           </SystemPanel>
         ) : null}
 
