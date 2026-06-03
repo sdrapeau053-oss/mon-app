@@ -73,6 +73,7 @@ type Revenu = {
   categorie: CategorieRevenu;
 };
 type RevenuSousTab = "historique" | "par_client" | "par_categorie";
+type CockpitSousTab = "vue" | "stats";
 type StatutProjet = "en_cours" | "en_pause" | "livre" | "facture" | "archive";
 type Projet = {
   id: string;
@@ -2199,6 +2200,7 @@ export default function FreelancePage() {
   const [sprint, setSprint] = useState<SprintActif>(defaultSprint);
   const [sprintEdit, setSprintEdit] = useState(false);
   const [outilsSousTab, setOutilsSousTab] = useState<OutilsSousTab>("ghostwriting");
+  const [cockpitSousTab, setCockpitSousTab] = useState<CockpitSousTab>("vue");
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
@@ -2454,6 +2456,36 @@ export default function FreelancePage() {
         {/* ── COCKPIT ── */}
         {activeTab === "cockpit" ? (
           <>
+            {/* Sous-onglets Cockpit */}
+            <div style={{ borderBottom: "1px solid rgba(201,168,92,0.12)", display: "flex", marginBottom: 10 }}>
+              {([
+                { key: "vue" as CockpitSousTab, label: "Vue d'ensemble" },
+                { key: "stats" as CockpitSousTab, label: "Statistiques" },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setCockpitSousTab(key)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    borderBottom: cockpitSousTab === key ? "2px solid rgba(201,168,92,0.7)" : "2px solid transparent",
+                    color: cockpitSousTab === key ? "var(--text-main)" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: cockpitSousTab === key ? 600 : 400,
+                    marginBottom: -1,
+                    padding: "4px 14px 6px",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── VUE D'ENSEMBLE ── */}
+            {cockpitSousTab === "vue" ? <>
+
             {/* KPIs détaillés */}
             <SystemPanel ariaLabel="KPIs sprint" compact>
               <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -2624,6 +2656,119 @@ export default function FreelancePage() {
                 />
               </SystemPanel>
             </SystemGrid>
+
+            </> : null}
+
+            {/* ── STATISTIQUES ── */}
+            {cockpitSousTab === "stats" ? (() => {
+              // Tous les calculs croisés — aucune nouvelle clé, aucune duplication
+              const totalPropositions = propositions.length;
+              const propsAcceptees = propositions.filter((p) => p.statut === "acceptee").length;
+              const tauxProp = totalPropositions > 0 ? Math.round((propsAcceptees / totalPropositions) * 100) : null;
+
+              const clientsGagnesStats = prospects.filter((p) => p.statut === "gagne");
+              const delaisConversion = clientsGagnesStats
+                .map((p) => {
+                  const dc = new Date(p.date_dernier_contact || p.dateContact);
+                  const d0 = new Date(p.dateContact);
+                  return Math.floor((dc.getTime() - d0.getTime()) / 86400000);
+                })
+                .filter((d) => d > 0);
+              const delaiMoyen = delaisConversion.length > 0
+                ? Math.round(delaisConversion.reduce((a, b) => a + b, 0) / delaisConversion.length)
+                : null;
+
+              const valeurMoyenneProjet = projets.length > 0
+                ? Math.round(projets.reduce((acc, p) => acc + p.montant, 0) / projets.length)
+                : null;
+
+              const valeurMoyenneClient = clientsGagnesStats.length > 0
+                ? Math.round(clientsGagnesStats.reduce((acc, c) => acc + (c.valeur_estimee || c.montant || 0), 0) / clientsGagnesStats.length)
+                : null;
+
+              const projetsEnRetard = projets.filter((p) => {
+                return p.statut === "en_cours" && p.dateLivraison !== undefined && p.dateLivraison !== "" && p.dateLivraison < today;
+              }).length;
+
+              // Mois le plus productif
+              const parMoisRev = revenus.reduce<Record<string, number>>((acc, r) => {
+                acc[r.mois] = (acc[r.mois] ?? 0) + r.montant;
+                return acc;
+              }, {});
+              const moisTopEntry = Object.entries(parMoisRev).sort((a, b) => b[1] - a[1])[0];
+              const moisTop = moisTopEntry ? { mois: moisTopEntry[0], montant: moisTopEntry[1] } : null;
+
+              // Client le plus rentable
+              const parClientRev = revenus.reduce<Record<string, number>>((acc, r) => {
+                acc[r.nomClient] = (acc[r.nomClient] ?? 0) + r.montant;
+                return acc;
+              }, {});
+              const clientTopEntry = Object.entries(parClientRev).sort((a, b) => b[1] - a[1])[0];
+              const clientTop = clientTopEntry ? { nom: clientTopEntry[0], montant: clientTopEntry[1] } : null;
+
+              // Catégorie la plus rentable
+              const parCatRev = revenus.reduce<Record<string, number>>((acc, r) => {
+                acc[r.categorie] = (acc[r.categorie] ?? 0) + r.montant;
+                return acc;
+              }, {});
+              const catTopEntry = Object.entries(parCatRev).sort((a, b) => b[1] - a[1])[0];
+              const catTop = catTopEntry
+                ? { label: CATEGORIES_REVENU.find((c) => c.value === catTopEntry[0])?.label ?? catTopEntry[0], montant: catTopEntry[1] }
+                : null;
+
+              // Pipeline potentiel vs revenus encaissés
+              const pipelinePotentiel = actifs.reduce((acc, p) => acc + (p.valeur_estimee || p.montant || 0), 0);
+              const totalEncaisse = revenus.reduce((acc, r) => acc + r.montant, 0);
+
+              type StatRow = { label: string; value: string; sub?: string; accent?: boolean };
+              const rows: StatRow[] = [];
+
+              if (tauxProp !== null) rows.push({ label: "Taux propositions acceptées", value: tauxProp + "%", sub: propsAcceptees + " / " + totalPropositions, accent: tauxProp >= 50 });
+              if (delaiMoyen !== null) rows.push({ label: "Délai moyen prospect → client", value: delaiMoyen + "j", sub: "basé sur " + delaisConversion.length + " client" + (delaisConversion.length > 1 ? "s" : "") });
+              if (valeurMoyenneProjet !== null) rows.push({ label: "Valeur moyenne / projet", value: valeurMoyenneProjet + " $", sub: projets.length + " projet" + (projets.length > 1 ? "s" : "") });
+              if (valeurMoyenneClient !== null) rows.push({ label: "Valeur moyenne / client", value: valeurMoyenneClient + " $", sub: clientsGagnesStats.length + " client" + (clientsGagnesStats.length > 1 ? "s" : "") });
+              if (projetsEnRetard > 0) rows.push({ label: "Projets en retard", value: String(projetsEnRetard), accent: false, sub: "date de livraison dépassée" });
+              if (moisTop !== null) rows.push({ label: "Mois le plus productif", value: moisTop.montant + " $", sub: moisLabel(moisTop.mois), accent: true });
+              if (clientTop !== null) rows.push({ label: "Client le plus rentable", value: clientTop.montant + " $", sub: clientTop.nom, accent: true });
+              if (catTop !== null) rows.push({ label: "Catégorie principale", value: catTop.montant + " $", sub: catTop.label, accent: true });
+              if (pipelinePotentiel > 0) rows.push({ label: "Pipeline potentiel", value: pipelinePotentiel + " $", sub: actifs.length + " prospect" + (actifs.length > 1 ? "s" : "") + " actifs" });
+              if (totalEncaisse > 0) rows.push({ label: "Total encaissé (historique)", value: totalEncaisse + " $", sub: revenus.length + " encaissement" + (revenus.length > 1 ? "s" : ""), accent: true });
+
+              return (
+                <SystemPanel ariaLabel="Statistiques" compact>
+                  {rows.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {rows.map((row, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            alignItems: "center",
+                            background: "rgba(255,250,238,0.02)",
+                            border: "1px solid rgba(201,168,92,0.09)",
+                            borderRadius: 7,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "6px 10px",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ color: "var(--text-soft)", fontSize: 12, margin: 0 }}>{row.label}</p>
+                            {row.sub !== undefined ? <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "1px 0 0" }}>{row.sub}</p> : null}
+                          </div>
+                          <strong style={{ color: row.accent === false ? "#D85A30" : row.accent ? "#1D9E75" : "var(--text-main)", flexShrink: 0, fontSize: 14, marginLeft: 12 }}>
+                            {row.value}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                      Pas encore assez de données. Ajoute des prospects, propositions, projets et revenus pour voir les statistiques.
+                    </p>
+                  )}
+                </SystemPanel>
+              );
+            })() : null}
           </>
         ) : null}
 
