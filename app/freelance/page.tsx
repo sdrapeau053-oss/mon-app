@@ -1224,31 +1224,83 @@ export default function FreelancePage() {
             {/* Relances + Tâches côte à côte */}
             <SystemGrid gap={10} min={300}>
               <SystemPanel ariaLabel="Relances" compact>
-                <p className="label-meta" style={{ margin: "0 0 7px" }}>Relances automatiques</p>
-                {relances.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    {relances.slice(0, 6).map((p) => {
-                      const st = STATUTS.find((s) => s.value === p.statut);
-                      return (
-                        <div key={p.id} style={{ alignItems: "center", background: "rgba(186,117,23,0.08)", border: "1px solid rgba(186,117,23,0.25)", borderRadius: 7, display: "flex", gap: 8, justifyContent: "space-between", padding: "5px 9px" }}>
-                          <div style={{ minWidth: 0 }}>
-                            <span style={{ color: "var(--text-main)", fontSize: 12.5, fontWeight: 500 }}>{p.nom}</span>
-                            <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 6 }}>J+{p.jours}</span>
-                            {p.montant > 0 ? <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 5 }}>{p.montant} $</span> : null}
-                          </div>
-                          <span style={{ background: (st ? st.color : "#888") + "22", borderRadius: 99, color: st ? st.color : "#888", flexShrink: 0, fontSize: 10, padding: "1px 7px" }}>
-                            {st ? st.label : p.statut}
-                          </span>
+                {(() => {
+                  // Logique alignée avec le Centre d'actions : date_prochaine_relance
+                  // Fallback sur dateContact+3j uniquement si aucun prospect n'a de date planifiée
+                  const avecDate = actifs.filter((p) => p.date_prochaine_relance !== undefined && p.date_prochaine_relance !== "");
+                  const useExplicite = avecDate.length > 0;
+
+                  const listeRelances = useExplicite
+                    ? actifs
+                        .filter((p) => p.date_prochaine_relance !== undefined && p.date_prochaine_relance !== "")
+                        .map((p) => {
+                          const retard = Math.floor((new Date(today).getTime() - new Date(p.date_prochaine_relance!).getTime()) / 86400000);
+                          return { ...p, retard };
+                        })
+                        .sort((a, b) => b.retard - a.retard)
+                    : relances.map((p) => ({ ...p, retard: p.jours }));
+
+                  const label = useExplicite ? "Relances planifiées" : "Relances — J+3 sans réponse";
+
+                  return (
+                    <>
+                      <p className="label-meta" style={{ margin: "0 0 7px" }}>{label}</p>
+                      {listeRelances.length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {listeRelances.slice(0, 6).map((p) => {
+                            const st = STATUTS.find((s) => s.value === p.statut);
+                            const enRetard = p.retard > 0;
+                            const critique = p.retard >= 3;
+                            return (
+                              <div
+                                key={p.id}
+                                style={{
+                                  alignItems: "center",
+                                  background: critique ? "rgba(216,90,48,0.06)" : enRetard ? "rgba(186,117,23,0.07)" : "rgba(255,250,238,0.03)",
+                                  border: "1px solid " + (critique ? "rgba(216,90,48,0.25)" : enRetard ? "rgba(186,117,23,0.22)" : "rgba(201,168,92,0.12)"),
+                                  borderRadius: 7,
+                                  display: "flex",
+                                  gap: 8,
+                                  justifyContent: "space-between",
+                                  padding: "5px 9px",
+                                }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <span style={{ color: critique ? "#D85A30" : "var(--text-main)", fontSize: 12.5, fontWeight: 500 }}>{p.nom}</span>
+                                  <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 6 }}>
+                                    {p.retard === 0 ? "Aujourd'hui" : p.retard > 0 ? "J+" + p.retard : "Dans " + Math.abs(p.retard) + "j"}
+                                  </span>
+                                  {(p.valeur_estimee || p.montant) > 0 ? (
+                                    <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 5 }}>
+                                      {p.valeur_estimee || p.montant} $
+                                    </span>
+                                  ) : null}
+                                  {p.prochaine_action !== undefined && p.prochaine_action !== "" ? (
+                                    <p style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.3, margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      → {p.prochaine_action}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <span style={{ background: (st ? st.color : "#888") + "22", borderRadius: 99, color: st ? st.color : "#888", flexShrink: 0, fontSize: 10, padding: "1px 7px" }}>
+                                  {st ? st.label : p.statut}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {listeRelances.length > 6 ? (
+                            <p style={{ color: "var(--text-muted)", fontSize: 11, margin: 0 }}>
+                              + {listeRelances.length - 6} autre{listeRelances.length - 6 > 1 ? "s" : ""}
+                            </p>
+                          ) : null}
                         </div>
-                      );
-                    })}
-                    {relances.length > 6 ? (
-                      <p style={{ color: "var(--text-muted)", fontSize: 11, margin: 0 }}>+ {relances.length - 6} autre{relances.length - 6 > 1 ? "s" : ""} relance{relances.length - 6 > 1 ? "s" : ""}</p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>Aucune relance due.</p>
-                )}
+                      ) : (
+                        <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                          {useExplicite ? "Aucune relance planifiée." : "Aucune relance due."}
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </SystemPanel>
               <SystemPanel ariaLabel="Tâches" compact>
                 <TachesDuJourPanel
