@@ -61,7 +61,24 @@ type Proposition = {
   notes?: string;
   version: number;
 };
-type MainTab = "cockpit" | "crm" | "pipeline" | "offres" | "outils";
+type StatutProjet = "en_cours" | "en_pause" | "livre" | "facture" | "archive";
+type Projet = {
+  id: string;
+  nom: string;
+  clientId: string;
+  nomClient: string;
+  propositionId?: string;
+  offre: string;
+  montant: number;
+  statut: StatutProjet;
+  dateDebut: string;
+  dateLivraison?: string;
+  dateFacture?: string;
+  description?: string;
+  notes?: string;
+  livrable?: string;
+};
+type MainTab = "cockpit" | "crm" | "pipeline" | "projets" | "offres" | "outils";
 type OutilsSousTab = "ghostwriting" | "mode500";
 
 // ── Clés localStorage ────────────────────────────────────────────────────────
@@ -74,6 +91,7 @@ const FL_HISTORY = "freelance-mode-500-history";
 const FL_OFFERS = "strate_fl_offers";
 const FL_TACHES = "strate_fl_taches";
 const FL_PROPOSITIONS = "freelance-propositions";
+const FL_PROJETS = "freelance-projets";
 const STORAGE_KEY = "freelance-ghostwriting-last-input";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -1394,6 +1412,318 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
   );
 }
 
+// ── Projets ──────────────────────────────────────────────────────────────────
+
+const STATUTS_PROJET: { value: StatutProjet; label: string; color: string }[] = [
+  { value: "en_cours",  label: "En cours",  color: "#3B8BD4" },
+  { value: "en_pause",  label: "En pause",  color: "#BA7517" },
+  { value: "livre",     label: "Livré",     color: "#7F77DD" },
+  { value: "facture",   label: "Facturé",   color: "#1D9E75" },
+  { value: "archive",   label: "Archivé",   color: "#888780" },
+];
+
+const GROUPES_PROJET: { key: StatutProjet[]; label: string; archivé?: boolean }[] = [
+  { key: ["en_cours"],          label: "En cours" },
+  { key: ["en_pause"],          label: "En pause" },
+  { key: ["livre"],             label: "Livrés" },
+  { key: ["facture"],           label: "Facturés" },
+  { key: ["archive"],           label: "Archivés", archivé: true },
+];
+
+const defaultProjet: Omit<Projet, "id" | "dateDebut"> = {
+  nom: "",
+  clientId: "",
+  nomClient: "",
+  offre: "",
+  montant: 0,
+  statut: "en_cours",
+};
+
+function ProjetsPanel({ projets, clients, propositions, onUpdate }: {
+  projets: Projet[];
+  clients: Prospect[];         // statut === "gagne"
+  propositions: Proposition[];
+  onUpdate: (p: Projet[]) => void;
+}) {
+  const [ajoutOpen, setAjoutOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [afficherArchives, setAfficherArchives] = useState(false);
+  const [form, setForm] = useState<Omit<Projet, "id" | "dateDebut">>(defaultProjet);
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // Propositions acceptées disponibles pour lien
+  const propsAcceptees = propositions.filter((p) => p.statut === "acceptee");
+
+  function ajouter() {
+    if (form.nomClient.trim() === "" || form.nom.trim() === "") return;
+    const client = clients.find((c) => c.nom.toLowerCase() === form.nomClient.toLowerCase());
+    onUpdate([{
+      id: genId(),
+      dateDebut: today,
+      ...form,
+      clientId: client ? client.id : "",
+    }, ...projets]);
+    setForm(defaultProjet);
+    setAjoutOpen(false);
+  }
+
+  function modifier(id: string, champs: Partial<Projet>) {
+    onUpdate(projets.map((p) => p.id === id ? { ...p, ...champs } : p));
+  }
+
+  function supprimer(id: string) {
+    onUpdate(projets.filter((p) => p.id !== id));
+    if (expandedId === id) setExpandedId(null);
+  }
+
+  // KPIs
+  const enCours = projets.filter((p) => p.statut === "en_cours");
+  const montantEnCours = enCours.reduce((acc, p) => acc + p.montant, 0);
+  const montantFacture = projets.filter((p) => p.statut === "facture").reduce((acc, p) => acc + p.montant, 0);
+  const enRetard = enCours.filter((p) => p.dateLivraison !== undefined && p.dateLivraison !== "" && p.dateLivraison < today);
+
+  const projetsVisibles = afficherArchives ? projets : projets.filter((p) => p.statut !== "archive");
+
+  return (
+    <div>
+      {/* KPIs compacts */}
+      {projets.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          {enCours.length > 0 ? (
+            <div style={{ background: "rgba(59,139,212,0.08)", border: "1px solid rgba(59,139,212,0.20)", borderRadius: 7, padding: "5px 10px" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>En cours</p>
+              <strong style={{ color: "#3B8BD4", fontSize: 15 }}>{enCours.length}{montantEnCours > 0 ? " · " + montantEnCours + " $" : ""}</strong>
+            </div>
+          ) : null}
+          {montantFacture > 0 ? (
+            <div style={{ background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.20)", borderRadius: 7, padding: "5px 10px" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>Facturé</p>
+              <strong style={{ color: "#1D9E75", fontSize: 15 }}>{montantFacture} $</strong>
+            </div>
+          ) : null}
+          {enRetard.length > 0 ? (
+            <div style={{ background: "rgba(216,90,48,0.08)", border: "1px solid rgba(216,90,48,0.25)", borderRadius: 7, padding: "5px 10px" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 1px", textTransform: "uppercase" }}>En retard</p>
+              <strong style={{ color: "#D85A30", fontSize: 15 }}>{enRetard.length}</strong>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* En-tête + bouton ajout */}
+      <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <p className="label-meta" style={{ margin: 0 }}>
+          {projets.length === 0 ? "Aucun projet" : projetsVisibles.filter((p) => p.statut !== "archive").length + " projet" + (projetsVisibles.filter((p) => p.statut !== "archive").length > 1 ? "s" : "") + " actifs"}
+        </p>
+        <div style={{ display: "flex", gap: 6 }}>
+          {projets.filter((p) => p.statut === "archive").length > 0 ? (
+            <button type="button" style={btnSmall} onClick={() => setAfficherArchives(!afficherArchives)}>
+              {afficherArchives ? "Masquer archivés" : "Voir archivés"}
+            </button>
+          ) : null}
+          <button type="button" style={btnSmall} onClick={() => setAjoutOpen(!ajoutOpen)}>
+            {ajoutOpen ? "Annuler" : "+ Nouveau"}
+          </button>
+        </div>
+      </div>
+
+      {/* Formulaire ajout */}
+      {ajoutOpen ? (
+        <div style={{ background: "rgba(201,168,92,0.05)", border: "1px solid rgba(201,168,92,0.18)", borderRadius: 8, display: "grid", gap: 6, marginBottom: 10, padding: "10px 12px" }}>
+          <p className="label-meta" style={{ fontSize: 10, margin: 0 }}>Nouveau projet</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Nom du projet *</p>
+              <input type="text" placeholder="ex: Biographie Chapitre 1-3, Révision manuscrit…" value={form.nom} onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Client *</p>
+              <input
+                type="text"
+                list="clients-projets"
+                placeholder="Nom du client gagné…"
+                value={form.nomClient}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const match = clients.find((c) => c.nom.toLowerCase() === val.toLowerCase());
+                  setForm((f) => ({ ...f, nomClient: val, clientId: match ? match.id : "" }));
+                }}
+                style={inputStyle}
+              />
+              <datalist id="clients-projets">
+                {clients.map((c) => <option key={c.id} value={c.nom} />)}
+              </datalist>
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Offre / type</p>
+              <input type="text" placeholder="Révision, biographie…" value={form.offre} onChange={(e) => setForm((f) => ({ ...f, offre: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($)</p>
+              <input type="number" min={0} value={form.montant} onChange={(e) => setForm((f) => ({ ...f, montant: Number(e.target.value) }))} style={inputStyle} />
+            </div>
+            <div>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date de livraison</p>
+              <input type="date" value={form.dateLivraison || ""} onChange={(e) => setForm((f) => ({ ...f, dateLivraison: e.target.value }))} style={inputStyle} />
+            </div>
+            {propsAcceptees.length > 0 ? (
+              <div>
+                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Proposition liée</p>
+                <select value={form.propositionId || ""} onChange={(e) => setForm((f) => ({ ...f, propositionId: e.target.value || undefined }))} style={inputStyle}>
+                  <option value="">— Aucune —</option>
+                  {propsAcceptees.map((p) => <option key={p.id} value={p.id}>{p.nomClient} · {p.offre} · {p.montant} $</option>)}
+                </select>
+              </div>
+            ) : null}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Livrable attendu</p>
+              <input type="text" placeholder="ex: 3 chapitres révisés, manuscrit complet…" value={form.livrable || ""} onChange={(e) => setForm((f) => ({ ...f, livrable: e.target.value }))} style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Notes</p>
+              <textarea placeholder="Contexte, attentes client, contraintes…" value={form.notes || ""} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} />
+            </div>
+          </div>
+          <button className="btn-primary" type="button" onClick={ajouter} style={{ fontSize: 12, padding: "5px" }}>Créer le projet</button>
+        </div>
+      ) : null}
+
+      {/* Liste groupée */}
+      {projetsVisibles.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {GROUPES_PROJET.filter((g) => !g.archivé || afficherArchives).map((groupe) => {
+            const items = projetsVisibles.filter((p) => groupe.key.includes(p.statut))
+              .sort((a, b) => (a.dateLivraison ?? "9999") < (b.dateLivraison ?? "9999") ? -1 : 1);
+            if (items.length === 0) return null;
+
+            return (
+              <div key={groupe.label}>
+                <p className="label-meta" style={{ fontSize: 10, letterSpacing: "0.08em", margin: "0 0 5px", textTransform: "uppercase" }}>
+                  {groupe.label} <span style={{ color: "var(--text-muted)" }}>({items.length})</span>
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {items.map((projet) => {
+                    const st = STATUTS_PROJET.find((s) => s.value === projet.statut);
+                    const isExpanded = expandedId === projet.id;
+                    const retard = projet.dateLivraison !== undefined && projet.dateLivraison !== "" && projet.dateLivraison < today && projet.statut === "en_cours";
+                    const propLiee = projet.propositionId !== undefined ? propositions.find((p) => p.id === projet.propositionId) : undefined;
+
+                    return (
+                      <div key={projet.id}>
+                        {/* Ligne compacte */}
+                        <div
+                          style={{
+                            alignItems: "center",
+                            background: retard ? "rgba(216,90,48,0.05)" : projet.statut === "en_cours" ? "rgba(59,139,212,0.04)" : "rgba(255,250,238,0.02)",
+                            border: "1px solid " + (retard ? "rgba(216,90,48,0.25)" : projet.statut === "en_cours" ? "rgba(59,139,212,0.15)" : "rgba(201,168,92,0.09)"),
+                            borderRadius: isExpanded ? "7px 7px 0 0" : 7,
+                            cursor: "pointer",
+                            display: "flex",
+                            gap: 8,
+                            justifyContent: "space-between",
+                            padding: "6px 9px",
+                          }}
+                          onClick={() => setExpandedId(isExpanded ? null : projet.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpandedId(isExpanded ? null : projet.id); }}
+                          aria-expanded={isExpanded}
+                        >
+                          <div style={{ alignItems: "center", display: "flex", flex: 1, gap: 7, minWidth: 0 }}>
+                            <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: 10 }}>{isExpanded ? "▾" : "▸"}</span>
+                            <span style={{ color: retard ? "#D85A30" : "var(--text-main)", fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{projet.nom}</span>
+                            <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: 11 }}>{projet.nomClient}</span>
+                            {projet.montant > 0 ? <span style={{ color: projet.statut === "facture" ? "#1D9E75" : "var(--text-soft)", flexShrink: 0, fontSize: 11, fontWeight: 600 }}>{projet.montant} $</span> : null}
+                            {projet.dateLivraison !== undefined && projet.dateLivraison !== "" ? (
+                              <span style={{ color: retard ? "#D85A30" : "var(--text-muted)", flexShrink: 0, fontSize: 10 }}>
+                                {retard ? "⚠ " : ""}Livraison {projet.dateLivraison}
+                              </span>
+                            ) : null}
+                            {projet.livrable !== undefined && projet.livrable !== "" ? (
+                              <span style={{ color: "var(--text-muted)", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {projet.livrable}</span>
+                            ) : null}
+                          </div>
+                          <div style={{ alignItems: "center", display: "flex", flexShrink: 0, gap: 5 }} onClick={(e) => e.stopPropagation()}>
+                            <span style={{ background: (st?.color ?? "#888") + "22", borderRadius: 99, color: st?.color ?? "#888", fontSize: 10, padding: "1px 6px" }}>
+                              {st?.label ?? projet.statut}
+                            </span>
+                            <select
+                              value={projet.statut}
+                              onChange={(e) => modifier(projet.id, { statut: e.target.value as StatutProjet })}
+                              style={{ background: "var(--bg-main)", border: "1px solid rgba(201,168,92,0.3)", borderRadius: 4, color: "var(--text-main)", fontSize: 10, padding: "2px 4px" }}
+                            >
+                              {STATUTS_PROJET.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                            <button type="button" onClick={() => supprimer(projet.id)} style={{ background: "transparent", border: "1px solid rgba(201,168,92,0.2)", borderRadius: 4, color: "var(--text-muted)", cursor: "pointer", fontSize: 10, padding: "2px 5px" }}>×</button>
+                          </div>
+                        </div>
+
+                        {/* Accordéon détail */}
+                        {isExpanded ? (
+                          <div style={{ border: "1px solid rgba(201,168,92,0.15)", borderTop: "none", borderRadius: "0 0 7px 7px", padding: "8px 10px" }}>
+                            <div style={{ display: "grid", gap: 6, gridTemplateColumns: "1fr 1fr", marginBottom: 6 }}>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Nom du projet</p>
+                                <input type="text" value={projet.nom} onChange={(e) => modifier(projet.id, { nom: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Client</p>
+                                <input type="text" list="clients-projets-edit" value={projet.nomClient} onChange={(e) => modifier(projet.id, { nomClient: e.target.value })} style={inputStyle} />
+                                <datalist id="clients-projets-edit">
+                                  {clients.map((c) => <option key={c.id} value={c.nom} />)}
+                                </datalist>
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Offre / type</p>
+                                <input type="text" value={projet.offre} onChange={(e) => modifier(projet.id, { offre: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($)</p>
+                                <input type="number" min={0} value={projet.montant} onChange={(e) => modifier(projet.id, { montant: Number(e.target.value) })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date de livraison</p>
+                                <input type="date" value={projet.dateLivraison || ""} onChange={(e) => modifier(projet.id, { dateLivraison: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Date de facturation</p>
+                                <input type="date" value={projet.dateFacture || ""} onChange={(e) => modifier(projet.id, { dateFacture: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div style={{ gridColumn: "1 / -1" }}>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Livrable attendu</p>
+                                <input type="text" value={projet.livrable || ""} onChange={(e) => modifier(projet.id, { livrable: e.target.value })} style={inputStyle} />
+                              </div>
+                              <div style={{ gridColumn: "1 / -1" }}>
+                                <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Notes</p>
+                                <textarea value={projet.notes || ""} onChange={(e) => modifier(projet.id, { notes: e.target.value })} style={{ ...inputStyle, minHeight: 48, resize: "vertical" }} />
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              <p style={{ color: "var(--text-muted)", fontSize: 10, margin: 0 }}>Débuté le {projet.dateDebut}</p>
+                              {propLiee !== undefined ? (
+                                <p style={{ color: "var(--text-muted)", fontSize: 10, margin: 0 }}>· Proposition : {propLiee.offre} {propLiee.montant > 0 ? "— " + propLiee.montant + " $" : ""}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p style={{ color: "var(--text-muted)", fontSize: 12, margin: "8px 0 0" }}>
+          Aucun projet. Crée un projet depuis un client gagné.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Pipeline commercial ──────────────────────────────────────────────────────
 
 const PIPELINE_COLONNES: { statut: StatutProspect; label: string; color: string }[] = [
@@ -1596,6 +1926,7 @@ export default function FreelancePage() {
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
   const [offres, setOffres] = useState<Offre[]>([]);
   const [propositions, setPropositions] = useState<Proposition[]>([]);
+  const [projets, setProjets] = useState<Projet[]>([]);
   const [taches, setTaches] = useState<Tache[]>([]);
   const [nouvelleTache, setNouvelleTache] = useState("");
 
@@ -1610,6 +1941,7 @@ export default function FreelancePage() {
     setMode500(lireLS(FL_MODE500, defaultMode500));
     setOffres(lireLS<Offre[]>(FL_OFFERS, []));
     setPropositions(lireLS<Proposition[]>(FL_PROPOSITIONS, []));
+    setProjets(lireLS<Projet[]>(FL_PROJETS, []));
     setTaches(lireLS<Tache[]>(FL_TACHES, []));
   }, []);
 
@@ -1621,6 +1953,7 @@ export default function FreelancePage() {
   useEffect(() => { ecrireLS(FL_MODE500, mode500); }, [mode500]);
   useEffect(() => { ecrireLS(FL_OFFERS, offres); }, [offres]);
   useEffect(() => { ecrireLS(FL_PROPOSITIONS, propositions); }, [propositions]);
+  useEffect(() => { ecrireLS(FL_PROJETS, projets); }, [projets]);
   useEffect(() => { ecrireLS(FL_TACHES, taches); }, [taches]);
 
   function toggleOpt(group: OptionGroup, value: string) {
@@ -1751,6 +2084,7 @@ export default function FreelancePage() {
     { key: "cockpit", label: "Cockpit" },
     { key: "crm", label: "CRM", badge: actifs.filter((p) => p.statut !== "gagne").length || undefined },
     { key: "pipeline", label: "Pipeline" },
+    { key: "projets", label: "Projets", badge: projets.filter((p) => p.statut === "en_cours").length || undefined },
     { key: "offres", label: "Offres" },
     { key: "outils", label: "Outils IA" },
   ];
@@ -2022,6 +2356,18 @@ export default function FreelancePage() {
         {activeTab === "pipeline" ? (
           <SystemPanel ariaLabel="Pipeline commercial" compact>
             <PipelinePanel prospects={prospects} today={today} />
+          </SystemPanel>
+        ) : null}
+
+        {/* ── PROJETS ── */}
+        {activeTab === "projets" ? (
+          <SystemPanel ariaLabel="Projets" compact>
+            <ProjetsPanel
+              projets={projets}
+              clients={clientsGagnes}
+              propositions={propositions}
+              onUpdate={setProjets}
+            />
           </SystemPanel>
         ) : null}
 
