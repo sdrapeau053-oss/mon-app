@@ -2230,6 +2230,7 @@ export default function FreelancePage() {
   const [msgForm, setMsgForm] = useState<Omit<MessageTemplate, "id" | "dateCreation" | "derniereModification">>({ titre: "", canal: "linkedin", type: "premier_contact", contenu: "" });
   const [msgAjout, setMsgAjout] = useState(false);
   const [msgCopied, setMsgCopied] = useState<string | null>(null);
+  const [recherche, setRecherche] = useState("");
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
@@ -2443,6 +2444,131 @@ export default function FreelancePage() {
             <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "3px 0 0" }}>{pct}% de l'objectif · {kpis.joursRestants}j restants</p>
           </div>
         </header>
+
+        {/* ── RECHERCHE GLOBALE ── */}
+        {(() => {
+          const q = recherche.trim().toLowerCase();
+          const actif = q.length >= 2;
+
+          type ResultatRecherche = { id: string; label: string; sous: string; onglet: MainTab; sousOnglet?: string };
+
+          const resultats: { categorie: string; items: ResultatRecherche[] }[] = actif ? (() => {
+            function match(...champs: (string | undefined | null)[]): boolean {
+              return champs.some((c) => c && c.toLowerCase().includes(q));
+            }
+
+            const resProspects: ResultatRecherche[] = prospects
+              .filter((p) => match(p.nom, p.offre, p.canal, p.notes, p.email, p.type_projet, p.prochaine_action))
+              .slice(0, 5)
+              .map((p) => ({
+                id: p.id,
+                label: p.nom,
+                sous: p.offre + (p.canal ? " · " + p.canal : "") + " — " + (STATUTS.find((s) => s.value === p.statut)?.label ?? p.statut),
+                onglet: "crm" as MainTab,
+              }));
+
+            const resProjets: ResultatRecherche[] = projets
+              .filter((p) => match(p.nom, p.nomClient, p.offre, p.description, p.notes, p.livrable))
+              .slice(0, 5)
+              .map((p) => ({
+                id: p.id,
+                label: p.nom,
+                sous: p.nomClient + " · " + p.offre,
+                onglet: "projets" as MainTab,
+              }));
+
+            const resPropositions: ResultatRecherche[] = propositions
+              .filter((p) => match(p.nomClient, p.offre, p.notes))
+              .slice(0, 5)
+              .map((p) => ({
+                id: p.id,
+                label: p.nomClient,
+                sous: p.offre + " · " + p.montant + " $",
+                onglet: "crm" as MainTab,
+              }));
+
+            const resRevenus: ResultatRecherche[] = revenus
+              .filter((r) => match(r.nomClient, r.description))
+              .slice(0, 5)
+              .map((r) => ({
+                id: r.id,
+                label: r.nomClient,
+                sous: r.description + " · " + r.montant + " $",
+                onglet: "revenus" as MainTab,
+              }));
+
+            const resMessages: ResultatRecherche[] = messages
+              .filter((m) => match(m.titre, m.contenu, m.canal, m.type))
+              .slice(0, 5)
+              .map((m) => ({
+                id: m.id,
+                label: m.titre,
+                sous: m.canal + " · " + m.type.replace(/_/g, " "),
+                onglet: "outils" as MainTab,
+              }));
+
+            return [
+              { categorie: "Prospects / Clients", items: resProspects },
+              { categorie: "Projets", items: resProjets },
+              { categorie: "Propositions", items: resPropositions },
+              { categorie: "Revenus", items: resRevenus },
+              { categorie: "Messages", items: resMessages },
+            ].filter((g) => g.items.length > 0);
+          })() : [];
+
+          const totalResultats = resultats.reduce((acc, g) => acc + g.items.length, 0);
+
+          return (
+            <div style={{ marginBottom: 10 }}>
+              {/* Champ de recherche */}
+              <div style={{ alignItems: "center", display: "flex", gap: 6 }}>
+                <div style={{ alignItems: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(201,168,92,0.18)", borderRadius: 7, display: "flex", flex: 1, gap: 6, padding: "5px 10px" }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: 13 }}>🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Rechercher prospects, projets, revenus, messages…"
+                    value={recherche}
+                    onChange={(e) => setRecherche(e.target.value)}
+                    style={{ background: "none", border: "none", color: "var(--text-main)", flex: 1, fontSize: 12, outline: "none" }}
+                  />
+                  {recherche.length > 0 && (
+                    <button type="button" onClick={() => setRecherche("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Résultats */}
+              {actif && (
+                <div style={{ background: "rgba(18,18,18,0.97)", border: "1px solid rgba(201,168,92,0.15)", borderRadius: 8, marginTop: 4, padding: "8px 10px" }}>
+                  {totalResultats === 0 ? (
+                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>Aucun résultat pour « {q} »</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {resultats.map((groupe) => (
+                        <div key={groupe.categorie}>
+                          <p style={{ color: "var(--text-muted)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", margin: "0 0 4px", textTransform: "uppercase" }}>{groupe.categorie}</p>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {groupe.items.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => { setActiveTab(item.onglet); setRecherche(""); }}
+                                style={{ alignItems: "flex-start", background: "rgba(201,168,92,0.05)", border: "1px solid rgba(201,168,92,0.08)", borderRadius: 6, cursor: "pointer", display: "flex", flexDirection: "column", padding: "5px 8px", textAlign: "left", width: "100%" }}
+                              >
+                                <span style={{ color: "var(--text-main)", fontSize: 12, fontWeight: 500 }}>{item.label}</span>
+                                <span style={{ color: "var(--text-muted)", fontSize: 10 }}>{item.sous}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── NAVIGATION ONGLETS ── */}
         <div
