@@ -46,7 +46,7 @@ type Mode500State = { objectif: number; jours: number; competences: string; temp
 type PlanHistorique = { id: string; date: string; resume: string; contenu: string; };
 type Offre = { id: string; nom: string; prix: number; description: string; canal: string; ventes: number; actif: boolean; };
 type Tache = { id: string; texte: string; done: boolean; date: string; };
-type MainTab = "cockpit" | "crm" | "offres" | "outils";
+type MainTab = "cockpit" | "crm" | "pipeline" | "offres" | "outils";
 
 // ── Clés localStorage ────────────────────────────────────────────────────────
 
@@ -888,6 +888,189 @@ function Mode500Panel({ mode500, onUpdate }: { mode500: Mode500State; onUpdate: 
   );
 }
 
+// ── Pipeline commercial ──────────────────────────────────────────────────────
+
+const PIPELINE_COLONNES: { statut: StatutProspect; label: string; color: string }[] = [
+  { statut: "a_contacter", label: "À contacter", color: "#888780" },
+  { statut: "contacte", label: "Contacté", color: "#3B8BD4" },
+  { statut: "en_discussion", label: "En discussion", color: "#BA7517" },
+  { statut: "devis_envoye", label: "Devis envoyé", color: "#7F77DD" },
+  { statut: "gagne", label: "Gagné", color: "#1D9E75" },
+];
+
+function PipelinePanel({ prospects, today }: { prospects: Prospect[]; today: string }) {
+  const [afficherPerdus, setAfficherPerdus] = useState(false);
+
+  const liste = afficherPerdus ? prospects : prospects.filter((p) => p.statut !== "perdu");
+  const perdus = prospects.filter((p) => p.statut === "perdu");
+
+  // Score de tri interne : chaud+élevé en tête
+  function score(p: Prospect) {
+    const interet = p.niveau_interet === "chaud" ? 2 : p.niveau_interet === "tiède" ? 1 : 0;
+    const pot = p.potentiel === "élevé" ? 2 : p.potentiel === "moyen" ? 1 : 0;
+    return interet + pot;
+  }
+
+  return (
+    <div>
+      {/* En-tête pipeline */}
+      <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+        <p className="label-meta" style={{ margin: 0 }}>
+          {liste.filter((p) => p.statut !== "perdu").length} prospect{liste.filter((p) => p.statut !== "perdu").length > 1 ? "s" : ""} actifs
+          {perdus.length > 0 ? (
+            <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 8 }}>
+              · {perdus.length} perdu{perdus.length > 1 ? "s" : ""}
+            </span>
+          ) : null}
+        </p>
+        {perdus.length > 0 ? (
+          <button type="button" onClick={() => setAfficherPerdus(!afficherPerdus)} style={{ ...btnSmall }}>
+            {afficherPerdus ? "Masquer perdus" : "Afficher perdus"}
+          </button>
+        ) : null}
+      </div>
+
+      {/* Grille colonnes */}
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6 }}>
+        {PIPELINE_COLONNES.filter((col) => afficherPerdus || col.statut !== "perdu").map((col) => {
+          const cartes = liste
+            .filter((p) => p.statut === col.statut)
+            .sort((a, b) => score(b) - score(a));
+          const totalVal = cartes.reduce((acc, p) => acc + (p.valeur_estimee || p.montant || 0), 0);
+
+          return (
+            <div
+              key={col.statut}
+              style={{
+                background: "rgba(255,250,238,0.02)",
+                border: "1px solid rgba(201,168,92,0.10)",
+                borderRadius: 8,
+                display: "flex",
+                flexDirection: "column",
+                flexShrink: 0,
+                gap: 6,
+                minWidth: 170,
+                padding: "8px 8px 10px",
+                width: "calc(20% - 7px)",
+              }}
+            >
+              {/* En-tête colonne */}
+              <div style={{ alignItems: "center", display: "flex", gap: 6, marginBottom: 2 }}>
+                <span style={{ background: col.color + "22", borderRadius: 99, color: col.color, fontSize: 10, fontWeight: 700, padding: "1px 7px" }}>
+                  {col.label}
+                </span>
+                <span style={{ color: "var(--text-muted)", fontSize: 10, marginLeft: "auto" }}>
+                  {cartes.length}
+                </span>
+              </div>
+              {totalVal > 0 ? (
+                <p style={{ color: col.color, fontSize: 11, fontWeight: 600, margin: "0 0 2px" }}>{totalVal} $</p>
+              ) : null}
+
+              {/* Cartes */}
+              {cartes.length > 0 ? (
+                cartes.map((p) => {
+                  const retardRelance = p.date_prochaine_relance !== undefined && p.date_prochaine_relance !== ""
+                    ? Math.floor((new Date(today).getTime() - new Date(p.date_prochaine_relance).getTime()) / 86400000)
+                    : null;
+                  const valeur = p.valeur_estimee || p.montant || 0;
+                  const pot = POTENTIELS.find((x) => x.value === p.potentiel);
+                  const interet = NIVEAUX_INTERET.find((x) => x.value === p.niveau_interet);
+
+                  return (
+                    <div
+                      key={p.id}
+                      style={{
+                        background: "rgba(255,250,238,0.03)",
+                        border: "1px solid rgba(201,168,92,0.12)",
+                        borderRadius: 6,
+                        padding: "7px 8px",
+                      }}
+                    >
+                      <p style={{ color: "var(--text-main)", fontSize: 12, fontWeight: 600, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {p.nom}
+                      </p>
+                      {valeur > 0 ? (
+                        <p style={{ color: "#1D9E75", fontSize: 11, fontWeight: 600, margin: "0 0 3px" }}>{valeur} $</p>
+                      ) : null}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 3 }}>
+                        {pot ? <span style={{ background: pot.color + "20", borderRadius: 99, color: pot.color, fontSize: 9, padding: "1px 5px" }}>{pot.label}</span> : null}
+                        {interet ? <span style={{ background: interet.color + "20", borderRadius: 99, color: interet.color, fontSize: 9, padding: "1px 5px" }}>{interet.label}</span> : null}
+                      </div>
+                      {p.offre !== "" ? (
+                        <p style={{ color: "var(--text-muted)", fontSize: 10, margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.offre}</p>
+                      ) : null}
+                      {p.prochaine_action !== undefined && p.prochaine_action !== "" ? (
+                        <p style={{ color: "var(--text-soft)", fontSize: 10, lineHeight: 1.3, margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          → {p.prochaine_action}
+                        </p>
+                      ) : null}
+                      {retardRelance !== null && retardRelance >= 0 ? (
+                        <p style={{ color: retardRelance >= 3 ? "#D85A30" : "#BA7517", fontSize: 10, margin: "3px 0 0" }}>
+                          {retardRelance === 0 ? "Relance aujourd'hui" : "Relance J+" + retardRelance}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })
+              ) : (
+                <p style={{ color: "var(--text-muted)", fontSize: 11, margin: "4px 0 0" }}>—</p>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Colonne Perdus si visible */}
+        {afficherPerdus ? (() => {
+          const col = { statut: "perdu" as StatutProspect, label: "Perdu", color: "#D85A30" };
+          const cartes = liste.filter((p) => p.statut === col.statut);
+          return (
+            <div
+              style={{
+                background: "rgba(216,90,48,0.02)",
+                border: "1px solid rgba(216,90,48,0.10)",
+                borderRadius: 8,
+                display: "flex",
+                flexDirection: "column",
+                flexShrink: 0,
+                gap: 6,
+                minWidth: 170,
+                opacity: 0.7,
+                padding: "8px 8px 10px",
+                width: "calc(20% - 7px)",
+              }}
+            >
+              <div style={{ alignItems: "center", display: "flex", gap: 6, marginBottom: 2 }}>
+                <span style={{ background: col.color + "22", borderRadius: 99, color: col.color, fontSize: 10, fontWeight: 700, padding: "1px 7px" }}>{col.label}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 10, marginLeft: "auto" }}>{cartes.length}</span>
+              </div>
+              {cartes.map((p) => (
+                <div key={p.id} style={{ background: "rgba(255,250,238,0.02)", border: "1px solid rgba(201,168,92,0.08)", borderRadius: 6, padding: "6px 8px" }}>
+                  <p style={{ color: "var(--text-muted)", fontSize: 12, fontWeight: 600, margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nom}</p>
+                  {p.offre !== "" ? <p style={{ color: "var(--text-muted)", fontSize: 10, margin: 0 }}>{p.offre}</p> : null}
+                </div>
+              ))}
+              {cartes.length === 0 ? <p style={{ color: "var(--text-muted)", fontSize: 11, margin: "4px 0 0" }}>—</p> : null}
+            </div>
+          );
+        })() : null}
+      </div>
+
+      {/* Totaux globaux */}
+      {prospects.length > 0 ? (() => {
+        const totalActifs = prospects.filter((p) => p.statut !== "perdu" && p.statut !== "gagne").reduce((acc, p) => acc + (p.valeur_estimee || p.montant || 0), 0);
+        const totalGagne = prospects.filter((p) => p.statut === "gagne").reduce((acc, p) => acc + (p.valeur_estimee || p.montant || 0), 0);
+        return (
+          <div style={{ borderTop: "1px solid rgba(201,168,92,0.12)", display: "flex", gap: 18, marginTop: 10, paddingTop: 8 }}>
+            {totalActifs > 0 ? <p style={{ color: "var(--text-soft)", fontSize: 12, margin: 0 }}>Pipeline actif : <strong style={{ color: "#BA7517" }}>{totalActifs} $</strong></p> : null}
+            {totalGagne > 0 ? <p style={{ color: "var(--text-soft)", fontSize: 12, margin: 0 }}>Gagné : <strong style={{ color: "#1D9E75" }}>{totalGagne} $</strong></p> : null}
+          </div>
+        );
+      })() : null}
+    </div>
+  );
+}
+
 // ── Page principale ──────────────────────────────────────────────────────────
 
 export default function FreelancePage() {
@@ -1054,7 +1237,8 @@ export default function FreelancePage() {
   // Navigation tabs
   const tabs: { key: MainTab; label: string; badge?: number }[] = [
     { key: "cockpit", label: "Cockpit" },
-    { key: "crm", label: "CRM", badge: prospects.filter((p) => p.statut !== "gagne" && p.statut !== "perdu").length || undefined },
+    { key: "crm", label: "CRM", badge: actifs.filter((p) => p.statut !== "gagne").length || undefined },
+    { key: "pipeline", label: "Pipeline" },
     { key: "offres", label: "Offres" },
     { key: "outils", label: "Outils IA" },
   ];
@@ -1318,6 +1502,13 @@ export default function FreelancePage() {
         {activeTab === "crm" ? (
           <SystemPanel ariaLabel="CRM Prospects" compact>
             <CRMPanel prospects={prospects} onUpdate={setProspects} />
+          </SystemPanel>
+        ) : null}
+
+        {/* ── PIPELINE ── */}
+        {activeTab === "pipeline" ? (
+          <SystemPanel ariaLabel="Pipeline commercial" compact>
+            <PipelinePanel prospects={prospects} today={today} />
           </SystemPanel>
         ) : null}
 
