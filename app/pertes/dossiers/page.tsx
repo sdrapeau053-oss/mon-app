@@ -28,6 +28,15 @@ interface PerteJournalEntry {
   texte: string;
 }
 
+interface PerteTimelineEvent {
+  id: string;
+  date?: string;
+  titre: string;
+  type: string;
+  intensite?: number;
+  note?: string;
+}
+
 interface PerteDossier {
   id: string;
   titre: string;
@@ -38,8 +47,10 @@ interface PerteDossier {
   notes?: string;
   pertesSecondaires?: string[];
   pertesAssociees?: string[];
+  timeline?: PerteTimelineEvent[];
   journal?: PerteJournalEntry[];
   memoireVivante?: PerteMemoireVivante;
+  prochaineEtape?: string;
   dateCreation: string;
 }
 
@@ -367,6 +378,78 @@ export default function PertesDossiersPage() {
       .slice(0, 5);
 
     return { groupesParIntensite, groupesParType, pertesAssoCommunes, pertesSecCommunes };
+  }, [dossiers]);
+
+  const signaux = useMemo(() => {
+    if (dossiers.length === 0) return null;
+
+    // Helpers locaux
+    function memoireCount(d: PerteDossier) {
+      const m = d.memoireVivante;
+      if (!m) return 0;
+      return (
+        (Array.isArray(m.souvenirs) ? m.souvenirs.length : 0) +
+        (Array.isArray(m.phrases) ? m.phrases.length : 0) +
+        (Array.isArray(m.lieux) ? m.lieux.length : 0) +
+        (Array.isArray(m.objets) ? m.objets.length : 0) +
+        (Array.isArray(m.ceQuiReste) ? m.ceQuiReste.length : 0)
+      );
+    }
+
+    function docCount(d: PerteDossier) {
+      return (
+        (Array.isArray(d.pertesAssociees) ? d.pertesAssociees.length : 0) +
+        (Array.isArray(d.timeline) ? d.timeline.length : 0) +
+        (Array.isArray(d.journal) ? d.journal.length : 0) +
+        memoireCount(d)
+      );
+    }
+
+    // 1. Haute intensité (≥7) sans pertes associées nommées
+    const hauteIntensiteSansAssociees = dossiers.filter(
+      (d) =>
+        typeof d.intensiteActuelle === "number" &&
+        Number(d.intensiteActuelle) >= 7 &&
+        (!Array.isArray(d.pertesAssociees) || d.pertesAssociees.length === 0),
+    );
+
+    // 2. Journal actif mais mémoire vivante vide
+    const journalSansMemoire = dossiers.filter(
+      (d) =>
+        Array.isArray(d.journal) &&
+        d.journal.length > 0 &&
+        memoireCount(d) === 0,
+    );
+
+    // 3. Mémoire vivante active mais aucune prochaine étape
+    const memoireSansProchaineEtape = dossiers.filter(
+      (d) => memoireCount(d) > 0 && !d.prochaineEtape?.trim(),
+    );
+
+    // 4. Sans aucun événement timeline
+    const sanstimeline = dossiers.filter(
+      (d) => !Array.isArray(d.timeline) || d.timeline.length === 0,
+    );
+
+    // 5. Très peu documentés (0 élément dans toutes les sections)
+    const peuDocumentes = dossiers.filter((d) => docCount(d) === 0);
+
+    // 6. Substantiels à forte intensité (≥3 sections + intensité ≥7)
+    const substantielsForteIntensite = dossiers.filter(
+      (d) =>
+        typeof d.intensiteActuelle === "number" &&
+        Number(d.intensiteActuelle) >= 7 &&
+        docCount(d) >= 3,
+    );
+
+    return {
+      hauteIntensiteSansAssociees,
+      journalSansMemoire,
+      memoireSansProchaineEtape,
+      peuDocumentes,
+      sanstimeline,
+      substantielsForteIntensite,
+    };
   }, [dossiers]);
 
   const filteredDossiers = useMemo(() => {
@@ -970,6 +1053,260 @@ export default function PertesDossiersPage() {
                     ) : (
                       <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
                         Aucune perte associée identique dans plusieurs dossiers pour le moment.
+                      </p>
+                    )}
+                  </article>
+
+                </SystemGrid>
+              </SystemPanel>
+            ) : null}
+
+            {signaux ? (
+              <SystemPanel ariaLabel="Signaux transversaux" compact>
+                <SystemSectionHeader eyebrow="Attention structurelle" title="Signaux transversaux" />
+                <SystemGrid gap={14} min={280}>
+
+                  {/* Haute intensité sans pertes associées */}
+                  <article
+                    style={{
+                      background: signaux.hauteIntensiteSansAssociees.length > 0
+                        ? "rgba(201,168,92,0.07)"
+                        : "rgba(255,250,238,0.03)",
+                      border: `1px solid ${signaux.hauteIntensiteSansAssociees.length > 0 ? "rgba(201,168,92,0.28)" : "rgba(201,168,92,0.14)"}`,
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                      <p className="label-meta" style={{ margin: 0 }}>Haute intensité sans pertes nommées</p>
+                      <span style={{ background: "rgba(201,168,92,0.18)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>
+                        {signaux.hauteIntensiteSansAssociees.length}
+                      </span>
+                    </div>
+                    {signaux.hauteIntensiteSansAssociees.length > 0 ? (
+                      <div style={{ display: "grid", gap: 5 }}>
+                        {signaux.hauteIntensiteSansAssociees.map((d) => (
+                          <Link
+                            key={d.id}
+                            href={`/pertes/dossiers/${d.id}`}
+                            style={{
+                              color: "var(--text-soft)",
+                              fontSize: 13,
+                              lineHeight: 1.4,
+                              textDecoration: "none",
+                            }}
+                          >
+                            → {d.titre}
+                            <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                              Intensité {d.intensiteActuelle}/10
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucun dossier dans ce cas.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Journal actif, mémoire vide */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                      <p className="label-meta" style={{ margin: 0 }}>Journal actif, mémoire vivante vide</p>
+                      <span style={{ background: "rgba(201,168,92,0.18)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>
+                        {signaux.journalSansMemoire.length}
+                      </span>
+                    </div>
+                    {signaux.journalSansMemoire.length > 0 ? (
+                      <div style={{ display: "grid", gap: 5 }}>
+                        {signaux.journalSansMemoire.map((d) => (
+                          <Link
+                            key={d.id}
+                            href={`/pertes/dossiers/${d.id}`}
+                            style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.4, textDecoration: "none" }}
+                          >
+                            → {d.titre}
+                            <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                              {d.journal?.length} entrée{(d.journal?.length ?? 0) > 1 ? "s" : ""} journal
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucun dossier dans ce cas.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Mémoire active, pas de prochaine étape */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                      <p className="label-meta" style={{ margin: 0 }}>Mémoire vivante active, étape manquante</p>
+                      <span style={{ background: "rgba(201,168,92,0.18)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>
+                        {signaux.memoireSansProchaineEtape.length}
+                      </span>
+                    </div>
+                    {signaux.memoireSansProchaineEtape.length > 0 ? (
+                      <div style={{ display: "grid", gap: 5 }}>
+                        {signaux.memoireSansProchaineEtape.map((d) => (
+                          <Link
+                            key={d.id}
+                            href={`/pertes/dossiers/${d.id}`}
+                            style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.4, textDecoration: "none" }}
+                          >
+                            → {d.titre}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucun dossier dans ce cas.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Sans timeline */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                      <p className="label-meta" style={{ margin: 0 }}>Sans timeline</p>
+                      <span style={{ background: "rgba(201,168,92,0.18)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>
+                        {signaux.sanstimeline.length}
+                      </span>
+                    </div>
+                    {signaux.sanstimeline.length > 0 ? (
+                      <div style={{ display: "grid", gap: 5 }}>
+                        {signaux.sanstimeline.slice(0, 6).map((d) => (
+                          <Link
+                            key={d.id}
+                            href={`/pertes/dossiers/${d.id}`}
+                            style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.4, textDecoration: "none" }}
+                          >
+                            → {d.titre}
+                          </Link>
+                        ))}
+                        {signaux.sanstimeline.length > 6 ? (
+                          <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+                            + {signaux.sanstimeline.length - 6} autre{signaux.sanstimeline.length - 6 > 1 ? "s" : ""}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Tous les dossiers ont au moins un événement timeline.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Très peu documentés */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                      <p className="label-meta" style={{ margin: 0 }}>Très peu documentés</p>
+                      <span style={{ background: "rgba(201,168,92,0.18)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>
+                        {signaux.peuDocumentes.length}
+                      </span>
+                    </div>
+                    <p style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, margin: 0 }}>
+                      Aucune perte associée, timeline, journal ni mémoire
+                    </p>
+                    {signaux.peuDocumentes.length > 0 ? (
+                      <div style={{ display: "grid", gap: 5 }}>
+                        {signaux.peuDocumentes.map((d) => (
+                          <Link
+                            key={d.id}
+                            href={`/pertes/dossiers/${d.id}`}
+                            style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.4, textDecoration: "none" }}
+                          >
+                            → {d.titre}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucun dossier dans ce cas.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Substantiels à forte intensité */}
+                  <article
+                    style={{
+                      background: signaux.substantielsForteIntensite.length > 0
+                        ? "rgba(201,168,92,0.07)"
+                        : "rgba(255,250,238,0.03)",
+                      border: `1px solid ${signaux.substantielsForteIntensite.length > 0 ? "rgba(201,168,92,0.28)" : "rgba(201,168,92,0.14)"}`,
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                      <p className="label-meta" style={{ margin: 0 }}>Substantiels à forte intensité</p>
+                      <span style={{ background: "rgba(201,168,92,0.18)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>
+                        {signaux.substantielsForteIntensite.length}
+                      </span>
+                    </div>
+                    <p style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, margin: 0 }}>
+                      3+ éléments documentés et intensité ≥ 7/10
+                    </p>
+                    {signaux.substantielsForteIntensite.length > 0 ? (
+                      <div style={{ display: "grid", gap: 5 }}>
+                        {signaux.substantielsForteIntensite.map((d) => (
+                          <Link
+                            key={d.id}
+                            href={`/pertes/dossiers/${d.id}`}
+                            style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.4, textDecoration: "none" }}
+                          >
+                            → {d.titre}
+                            <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                              Intensité {d.intensiteActuelle}/10
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucun dossier dans ce cas pour le moment.
                       </p>
                     )}
                   </article>
