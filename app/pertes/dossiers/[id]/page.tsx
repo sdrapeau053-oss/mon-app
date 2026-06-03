@@ -13,6 +13,7 @@ import {
 import { BackLink } from "@/components/ui/back-link";
 
 type TabKey = "overview" | "map" | "evolution" | "priorities" | "anchors" | "recap" | "review" | "balance" | "lost" | "timeline" | "journal" | "memory";
+type TabGroup = "dossier" | "traces" | "lecture";
 type MemoireField = keyof PerteMemoireVivante;
 
 interface PerteDossier {
@@ -60,19 +61,37 @@ interface PerteMemoireVivante {
 
 const STORAGE_KEY = "pertes-humaines-dossiers";
 
-const tabs: { key: TabKey; label: string }[] = [
-  { key: "overview", label: "Vue d'ensemble" },
-  { key: "map", label: "Cartographie" },
-  { key: "evolution", label: "Évolution" },
-  { key: "priorities", label: "Priorités" },
-  { key: "anchors", label: "Ancrages" },
-  { key: "recap", label: "Récapitulatif" },
-  { key: "review", label: "À relire" },
-  { key: "balance", label: "Bilan" },
-  { key: "lost", label: "Ce que j'ai perdu" },
-  { key: "timeline", label: "Timeline" },
-  { key: "journal", label: "Journal" },
-  { key: "memory", label: "Mémoire" },
+const tabGroups: { key: TabGroup; label: string; tabs: { key: TabKey; label: string }[] }[] = [
+  {
+    key: "dossier",
+    label: "Dossier",
+    tabs: [
+      { key: "overview", label: "Vue d'ensemble" },
+      { key: "lost", label: "Ce que j'ai perdu" },
+      { key: "review", label: "À relire" },
+      { key: "balance", label: "Bilan" },
+    ],
+  },
+  {
+    key: "traces",
+    label: "Traces",
+    tabs: [
+      { key: "timeline", label: "Timeline" },
+      { key: "journal", label: "Journal" },
+      { key: "memory", label: "Mémoire" },
+      { key: "evolution", label: "Évolution" },
+    ],
+  },
+  {
+    key: "lecture",
+    label: "Lecture",
+    tabs: [
+      { key: "map", label: "Cartographie" },
+      { key: "priorities", label: "Priorités" },
+      { key: "anchors", label: "Ancrages" },
+      { key: "recap", label: "Récapitulatif" },
+    ],
+  },
 ];
 
 const dashboardButtonStyle = {
@@ -248,6 +267,7 @@ export default function PerteDossierDetailPage() {
   const [dossier, setDossier] = useState<PerteDossier | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [activeGroup, setActiveGroup] = useState<TabGroup>("dossier");
   const [toast, setToast] = useState("");
   const [perteAssocieeDraft, setPerteAssocieeDraft] = useState("");
   const [perteAssocieeError, setPerteAssocieeError] = useState("");
@@ -1045,40 +1065,109 @@ export default function PerteDossierDetailPage() {
           </SystemPanel>
         ) : null}
 
-        <nav
-          aria-label="Onglets de la fiche"
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 16,
-            overflowX: "auto",
-            paddingBottom: 4,
-          }}
-        >
-          {tabs.map((tab) => {
-            const active = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  background: active ? "rgba(201,168,92,0.82)" : "rgba(255,250,238,0.035)",
-                  border: active ? "1px solid rgba(201,168,92,0.78)" : "1px solid rgba(201,168,92,0.16)",
-                  borderRadius: 999,
-                  color: active ? "#17130d" : "var(--accent-gold)",
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  fontSize: 12,
-                  fontWeight: active ? 700 : 500,
-                  minHeight: 34,
-                  padding: "7px 12px",
-                }}
-                type="button"
-              >
-                {tab.label}{typeof tabCounts[tab.key] === "number" ? ` (${tabCounts[tab.key]})` : ""}
-              </button>
-            );
-          })}
+        <nav aria-label="Navigation de la fiche" style={{ marginBottom: 14 }}>
+          {/* Niveau 1 — Groupes */}
+          <div
+            style={{
+              display: "flex",
+              gap: 5,
+              marginBottom: 6,
+              overflowX: "auto",
+              paddingBottom: 2,
+            }}
+          >
+            {tabGroups.map((group) => {
+              const groupActive = activeGroup === group.key;
+              const groupTotal = group.tabs.reduce(
+                (sum, t) => sum + (typeof tabCounts[t.key] === "number" ? (tabCounts[t.key] as number) : 0),
+                0,
+              );
+              return (
+                <button
+                  key={group.key}
+                  onClick={() => {
+                    setActiveGroup(group.key);
+                    const alreadyInGroup = group.tabs.some((t) => t.key === activeTab);
+                    if (!alreadyInGroup) setActiveTab(group.tabs[0].key);
+                  }}
+                  style={{
+                    background: groupActive ? "rgba(201,168,92,0.88)" : "rgba(255,250,238,0.04)",
+                    border: groupActive ? "1px solid rgba(201,168,92,0.80)" : "1px solid rgba(201,168,92,0.20)",
+                    borderRadius: 999,
+                    color: groupActive ? "#17130d" : "var(--accent-gold)",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    fontSize: 11.5,
+                    fontWeight: groupActive ? 700 : 500,
+                    letterSpacing: "0.03em",
+                    minHeight: 30,
+                    padding: "5px 13px",
+                    textTransform: "uppercase",
+                  }}
+                  type="button"
+                >
+                  {group.label}
+                  {groupTotal > 0 ? (
+                    <span
+                      style={{
+                        background: groupActive ? "rgba(23,19,13,0.18)" : "rgba(201,168,92,0.18)",
+                        borderRadius: 999,
+                        fontSize: 10,
+                        marginLeft: 6,
+                        padding: "1px 5px",
+                      }}
+                    >
+                      {groupTotal}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Niveau 2 — Onglets du groupe actif */}
+          <div
+            style={{
+              borderBottom: "1px solid rgba(201,168,92,0.12)",
+              display: "flex",
+              gap: 3,
+              overflowX: "auto",
+              paddingBottom: 0,
+            }}
+          >
+            {(tabGroups.find((g) => g.key === activeGroup)?.tabs ?? []).map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    borderBottom: active ? "2px solid var(--accent-gold)" : "2px solid transparent",
+                    borderRadius: 0,
+                    color: active ? "var(--accent-gold)" : "var(--text-soft)",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    fontSize: 12.5,
+                    fontWeight: active ? 600 : 400,
+                    marginBottom: -1,
+                    minHeight: 34,
+                    padding: "6px 12px",
+                    transition: "color 0.12s, border-color 0.12s",
+                  }}
+                  type="button"
+                >
+                  {tab.label}
+                  {typeof tabCounts[tab.key] === "number" && (tabCounts[tab.key] as number) > 0 ? (
+                    <span style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 4 }}>
+                      {tabCounts[tab.key]}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
         </nav>
 
         {activeTab === "overview" ? (
