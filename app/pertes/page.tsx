@@ -128,18 +128,21 @@ const explorationCards: ExplorationCard[] = [
   },
 ];
 
-const actionButtonStyle = {
+const btnStyle = {
   alignItems: "center",
   borderRadius: 999,
   display: "inline-flex",
-  fontSize: 13,
+  fontSize: 12.5,
   justifyContent: "center",
   lineHeight: 1,
-  minHeight: 38,
-  padding: "9px 15px",
+  minHeight: 32,
+  padding: "7px 13px",
   textAlign: "center",
   whiteSpace: "nowrap",
 } as const;
+
+// kept for backward compat inside recommandation
+const actionButtonStyle = btnStyle;
 
 export default function PertesPage() {
   const [dossiers, setDossiers] = useState<OrientationDossier[]>([]);
@@ -263,416 +266,233 @@ export default function PertesPage() {
 
   return (
     <main className="internal-page">
-      <SystemPageShell maxWidth={1120} padding="24px 18px 56px">
-        <header className="internal-header" style={{ marginBottom: 18 }}>
-          <BackLink href="/" label="Retour à STRATE" />
-          <p className="internal-kicker">Cartographie intérieure</p>
-          <h1 className="internal-title" style={{ fontStyle: "italic" }}>
-            Pertes humaines
-          </h1>
-          <p className="internal-subtitle" style={{ maxWidth: 760 }}>
-            Comprendre ce que vous traversez, même quand la perte n&apos;a pas de nom.
-          </p>
-        </header>
+      <SystemPageShell maxWidth={1040} padding="18px 18px 44px">
 
-        <SystemPanel ariaLabel="Introduction pertes humaines" compact>
-          <div style={{ display: "grid", gap: 18 }}>
-            <div style={{ display: "grid", gap: 10, maxWidth: 760 }}>
-              <p className="editorial-body" style={{ margin: 0 }}>
-                Certaines pertes ne ressemblent pas à un décès.
-              </p>
-              <p className="editorial-body" style={{ margin: 0 }}>
-                Certaines personnes sont encore vivantes, mais quelque chose a déjà disparu.
-              </p>
-              <p className="editorial-body" style={{ margin: 0 }}>
-                Parfois, ce n&apos;est pas une seule perte : c&apos;est une accumulation.
+        {/* ── SECTION 1 : Hero compact ─────────────────────────── */}
+        <header style={{ marginBottom: 14 }}>
+          <BackLink href="/" label="Retour à STRATE" />
+          <div style={{ alignItems: "flex-end", display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginTop: 8 }}>
+            <div>
+              <p className="internal-kicker" style={{ marginBottom: 2 }}>Cartographie intérieure</p>
+              <h1 className="internal-title" style={{ fontStyle: "italic", marginBottom: 4 }}>Pertes humaines</h1>
+              <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+                Comprendre ce que vous traversez, même quand la perte n&apos;a pas de nom.
               </p>
             </div>
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              <Link
-                className="internal-button-primary"
-                href="/pertes/cartographie"
-                style={actionButtonStyle}
-              >
-                Commencer une cartographie
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              <Link className="internal-button-primary" href="/pertes/cartographie" style={btnStyle}>
+                + Nouvelle cartographie
               </Link>
-              <Link
-                className="internal-button"
-                href="/pertes/dossiers"
-                style={actionButtonStyle}
-              >
+              <Link className="internal-button" href="/pertes/dossiers" style={btnStyle}>
                 Voir mes pertes
               </Link>
             </div>
           </div>
-        </SystemPanel>
+        </header>
 
+        {/* ── SECTION 2 : Barre d'état compacte ───────────────── */}
         {orientation ? (
-          <SystemPanel ariaLabel="Centre d'orientation" compact style={{ marginTop: 18 }}>
-            <SystemSectionHeader eyebrow="État actuel" title="Centre d'orientation" />
-            <div style={{ display: "grid", gap: 14 }}>
-
-              {/* Compteurs rapides */}
-              <SystemGrid gap={10} min={160}>
-                <article
-                  style={{
-                    background: "rgba(255,250,238,0.03)",
-                    border: "1px solid rgba(201,168,92,0.14)",
-                    borderRadius: 12,
-                    display: "grid",
-                    gap: 4,
-                    padding: 14,
-                  }}
-                >
-                  <p className="label-meta" style={{ margin: 0 }}>Dossiers</p>
-                  <strong style={{ color: "var(--accent-gold)", fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 400 }}>
-                    {orientation.total}
-                  </strong>
-                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
-                    perte{orientation.total > 1 ? "s" : ""} enregistrée{orientation.total > 1 ? "s" : ""}
-                  </p>
-                </article>
-
-                <article
-                  style={{
-                    background: "rgba(255,250,238,0.03)",
-                    border: "1px solid rgba(201,168,92,0.14)",
-                    borderRadius: 12,
-                    display: "grid",
-                    gap: 4,
-                    padding: 14,
-                  }}
-                >
-                  <p className="label-meta" style={{ margin: 0 }}>Incomplets</p>
-                  <strong style={{ color: orientation.incomplets.length > 0 ? "var(--accent-gold)" : "var(--text-muted)", fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 400 }}>
-                    {orientation.incomplets.length}
-                  </strong>
-                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
-                    dossier{orientation.incomplets.length > 1 ? "s" : ""} peu documenté{orientation.incomplets.length > 1 ? "s" : ""}
-                  </p>
-                </article>
-
-                <article
-                  style={{
-                    background: "rgba(255,250,238,0.03)",
-                    border: "1px solid rgba(201,168,92,0.14)",
-                    borderRadius: 12,
-                    display: "grid",
-                    gap: 4,
-                    padding: 14,
-                  }}
-                >
-                  <p className="label-meta" style={{ margin: 0 }}>Sans étape</p>
-                  <strong style={{ color: orientation.sansProchaineEtape.length > 0 ? "var(--accent-gold)" : "var(--text-muted)", fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 400 }}>
-                    {orientation.sansProchaineEtape.length}
-                  </strong>
-                  <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
-                    sans prochaine étape définie
-                  </p>
-                </article>
-
-                {orientation.plusIntense ? (
-                  <article
-                    style={{
-                      background: "rgba(201,168,92,0.07)",
-                      border: "1px solid rgba(201,168,92,0.24)",
-                      borderRadius: 12,
-                      display: "grid",
-                      gap: 4,
-                      padding: 14,
-                    }}
-                  >
-                    <p className="label-meta" style={{ margin: 0 }}>Le plus intense</p>
-                    <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 400, lineHeight: 1.25 }}>
-                      {orientation.plusIntense.titre}
-                    </strong>
-                    <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
-                      Intensité {orientation.plusIntense.intensiteActuelle}/10
-                    </p>
-                  </article>
-                ) : null}
-              </SystemGrid>
-
-              {/* Dernière activité */}
-              {orientation.derniereActivite ? (
-                <div
-                  style={{
-                    background: "rgba(255,250,238,0.025)",
-                    border: "1px solid rgba(201,168,92,0.10)",
-                    borderRadius: 10,
-                    display: "grid",
-                    gap: 3,
-                    padding: "10px 14px",
-                  }}
-                >
-                  <p className="label-meta" style={{ margin: 0 }}>Dernière activité</p>
-                  <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                    {orientation.derniereActiviteLabel}
-                    {formatDateFrShort(orientation.derniereActivite) ? (
-                      <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                        · {formatDateFrShort(orientation.derniereActivite)}
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-              ) : null}
-
-              {/* Cartes d'action */}
-              <div>
-                <p className="label-meta" style={{ margin: "0 0 10px" }}>Actions disponibles</p>
-                <SystemGrid gap={10} min={200}>
-                  <Link
-                    href="/pertes/cartographie"
-                    style={{
-                      background: "rgba(201,168,92,0.10)",
-                      border: "1px solid rgba(201,168,92,0.28)",
-                      borderRadius: 12,
-                      color: "var(--text-main)",
-                      display: "grid",
-                      gap: 5,
-                      padding: 14,
-                      textDecoration: "none",
-                    }}
-                  >
-                    <StatusChip tone="warning">Créer</StatusChip>
-                    <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                      Démarrer une nouvelle cartographie de perte.
-                    </p>
-                  </Link>
-
-                  {orientation.incomplets.length > 0 ? (
-                    <Link
-                      href={`/pertes/dossiers/${orientation.incomplets[0].id}`}
-                      style={{
-                        background: "rgba(255,250,238,0.03)",
-                        border: "1px solid rgba(201,168,92,0.18)",
-                        borderRadius: 12,
-                        color: "var(--text-main)",
-                        display: "grid",
-                        gap: 5,
-                        padding: 14,
-                        textDecoration: "none",
-                      }}
-                    >
-                      <StatusChip tone="neutral">Continuer</StatusChip>
-                      <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                        Reprendre « {orientation.incomplets[0].titre} », encore peu documenté.
-                      </p>
-                    </Link>
-                  ) : null}
-
-                  <Link
-                    href="/pertes/dossiers"
-                    style={{
-                      background: "rgba(255,250,238,0.03)",
-                      border: "1px solid rgba(201,168,92,0.18)",
-                      borderRadius: 12,
-                      color: "var(--text-main)",
-                      display: "grid",
-                      gap: 5,
-                      padding: 14,
-                      textDecoration: "none",
-                    }}
-                  >
-                    <StatusChip tone="neutral">Explorer</StatusChip>
-                    <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                      Voir tous les dossiers, tendances et regroupements.
-                    </p>
-                  </Link>
-
-                  {orientation.plusIntense ? (
-                    <Link
-                      href={`/pertes/dossiers/${orientation.plusIntense.id}`}
-                      style={{
-                        background: "rgba(255,250,238,0.03)",
-                        border: "1px solid rgba(201,168,92,0.18)",
-                        borderRadius: 12,
-                        color: "var(--text-main)",
-                        display: "grid",
-                        gap: 5,
-                        padding: 14,
-                        textDecoration: "none",
-                      }}
-                    >
-                      <StatusChip tone="warning">Signaux</StatusChip>
-                      <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                        Ouvrir le dossier le plus intense : « {orientation.plusIntense.titre} ».
-                      </p>
-                    </Link>
-                  ) : null}
-                </SystemGrid>
+          <div
+            style={{
+              background: "rgba(255,250,238,0.03)",
+              border: "1px solid rgba(201,168,92,0.14)",
+              borderRadius: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 0,
+              marginBottom: 12,
+              overflow: "hidden",
+            }}
+          >
+            {[
+              { label: "Dossiers", value: String(orientation.total), accent: false },
+              { label: "Incomplets", value: String(orientation.incomplets.length), accent: orientation.incomplets.length > 0 },
+              { label: "Sans étape", value: String(orientation.sansProchaineEtape.length), accent: orientation.sansProchaineEtape.length > 0 },
+            ].map((stat, i) => (
+              <div
+                key={stat.label}
+                style={{
+                  borderLeft: i > 0 ? "1px solid rgba(201,168,92,0.12)" : undefined,
+                  display: "grid",
+                  gap: 1,
+                  padding: "10px 16px",
+                }}
+              >
+                <span style={{ color: "var(--text-muted)", fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase" }}>{stat.label}</span>
+                <span style={{ color: stat.accent ? "var(--accent-gold)" : "var(--text-soft)", fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 400 }}>
+                  {stat.value}
+                </span>
               </div>
-
-            </div>
-          </SystemPanel>
+            ))}
+            {orientation.plusIntense ? (
+              <Link
+                href={`/pertes/dossiers/${orientation.plusIntense.id}`}
+                style={{
+                  borderLeft: "1px solid rgba(201,168,92,0.12)",
+                  color: "var(--text-main)",
+                  display: "grid",
+                  flex: 1,
+                  gap: 1,
+                  minWidth: 140,
+                  padding: "10px 16px",
+                  textDecoration: "none",
+                }}
+              >
+                <span style={{ color: "var(--text-muted)", fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase" }}>Plus intense</span>
+                <span style={{ color: "var(--accent-gold)", fontSize: 13, lineHeight: 1.3 }}>
+                  {orientation.plusIntense.titre}
+                  <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>{orientation.plusIntense.intensiteActuelle}/10</span>
+                </span>
+              </Link>
+            ) : null}
+            {orientation.derniereActivite ? (
+              <div
+                style={{
+                  borderLeft: "1px solid rgba(201,168,92,0.12)",
+                  display: "grid",
+                  flex: 1,
+                  gap: 1,
+                  minWidth: 160,
+                  padding: "10px 16px",
+                }}
+              >
+                <span style={{ color: "var(--text-muted)", fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase" }}>Dernière activité</span>
+                <span style={{ color: "var(--text-soft)", fontSize: 12, lineHeight: 1.4 }}>
+                  {orientation.derniereActiviteLabel}
+                  {formatDateFrShort(orientation.derniereActivite) ? (
+                    <span style={{ color: "var(--text-muted)", display: "block", fontSize: 11 }}>
+                      {formatDateFrShort(orientation.derniereActivite)}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            ) : null}
+          </div>
         ) : loaded && dossiers.length === 0 ? (
-          <SystemPanel ariaLabel="Aucun dossier — orientation" compact style={{ marginTop: 18 }}>
-            <SystemSectionHeader eyebrow="Premier pas" title="Par où commencer ?" />
-            <p className="editorial-body" style={{ margin: "0 0 14px", maxWidth: 620 }}>
-              Vous n&apos;avez pas encore de dossier. Créez une première cartographie pour nommer ce que vous traversez.
+          <div
+            style={{
+              alignItems: "center",
+              background: "rgba(201,168,92,0.06)",
+              border: "1px solid rgba(201,168,92,0.20)",
+              borderRadius: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              justifyContent: "space-between",
+              marginBottom: 12,
+              padding: "12px 16px",
+            }}
+          >
+            <p style={{ color: "var(--text-soft)", fontSize: 13, margin: 0 }}>
+              Aucun dossier pour le moment. Créez votre première cartographie.
             </p>
-            <Link className="internal-button-primary" href="/pertes/cartographie" style={actionButtonStyle}>
-              Commencer une cartographie
+            <Link className="internal-button-primary" href="/pertes/cartographie" style={btnStyle}>
+              Commencer
             </Link>
-          </SystemPanel>
+          </div>
         ) : null}
 
-        <section style={{ marginTop: 18 }}>
-          <SystemSectionHeader eyebrow="Mode d'emploi" title="Guide d'utilisation" />
-
-          {/* Recommandation contextuelle */}
-          {recommandation ? (
-            <div
-              style={{
-                background: recommandation.tone === "warning"
-                  ? "rgba(201,168,92,0.09)"
-                  : "rgba(255,250,238,0.03)",
-                border: `1px solid ${recommandation.tone === "warning" ? "rgba(201,168,92,0.30)" : "rgba(201,168,92,0.16)"}`,
-                borderRadius: 12,
-                display: "grid",
-                gap: 10,
-                marginBottom: 14,
-                padding: 16,
-              }}
-            >
-              <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <StatusChip tone={recommandation.tone}>Recommandé maintenant</StatusChip>
-                  <span style={{ color: "var(--text-soft)", fontSize: 13 }}>{recommandation.etape}</span>
-                </div>
-              </div>
-              <p className="editorial-body" style={{ margin: 0, maxWidth: 680 }}>
+        {/* ── SECTION 3 : Action recommandée (1 ligne compacte) ── */}
+        {recommandation ? (
+          <div
+            style={{
+              alignItems: "center",
+              background: recommandation.tone === "warning" ? "rgba(201,168,92,0.08)" : "rgba(255,250,238,0.03)",
+              border: `1px solid ${recommandation.tone === "warning" ? "rgba(201,168,92,0.26)" : "rgba(201,168,92,0.14)"}`,
+              borderRadius: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 10,
+              justifyContent: "space-between",
+              marginBottom: 14,
+              padding: "10px 14px",
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, flex: 1, minWidth: 0 }}>
+              <StatusChip tone={recommandation.tone}>{recommandation.etape}</StatusChip>
+              <span style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.4 }}>
                 {recommandation.texte}
-              </p>
-              <Link
-                className={recommandation.tone === "warning" ? "internal-button-primary" : "internal-button"}
-                href={recommandation.cta}
-                style={actionButtonStyle}
-              >
-                {recommandation.ctaLabel}
-              </Link>
+              </span>
             </div>
-          ) : null}
+            <Link
+              className={recommandation.tone === "warning" ? "internal-button-primary" : "internal-button"}
+              href={recommandation.cta}
+              style={{ ...btnStyle, flexShrink: 0 }}
+            >
+              {recommandation.ctaLabel}
+            </Link>
+          </div>
+        ) : null}
 
-          {/* 4 blocs permanents */}
-          <SystemGrid gap={12} min={250}>
+        {/* ── SECTION 4 : Orientation — 4 étapes compactes ────── */}
+        <section style={{ marginBottom: 16 }}>
+          <p className="label-meta" style={{ margin: "0 0 8px" }}>Orientation</p>
+          <div style={{ border: "1px solid rgba(201,168,92,0.12)", borderRadius: 10, overflow: "hidden" }}>
             {[
-              {
-                cta: "/pertes/cartographie",
-                ctaLabel: "Créer un dossier",
-                description: "Choisissez un type de perte, nommez ce qui a disparu, situez l'intensité. C'est le point de départ.",
-                etape: "1",
-                titre: "Commencer un dossier",
-              },
-              {
-                cta: "/pertes/dossiers",
-                ctaLabel: "Voir mes dossiers",
-                description: "Ajoutez des pertes associées, une timeline, des entrées journal et des éléments de mémoire vivante pour enrichir votre dossier.",
-                etape: "2",
-                titre: "Enrichir une perte",
-              },
-              {
-                cta: "/pertes/dossiers",
-                ctaLabel: "Ouvrir un dossier",
-                description: "Utilisez les onglets Récapitulatif, Priorités et Ancrages pour relire votre dossier et mieux comprendre ce que vous traversez.",
-                etape: "3",
-                titre: "Relire et comprendre",
-              },
-              {
-                cta: "/pertes/dossiers",
-                ctaLabel: "Voir les tendances",
-                description: "Avec plusieurs dossiers, explorez les tendances récurrentes, les regroupements et les signaux transversaux.",
-                etape: "4",
-                titre: "Voir les tendances entre dossiers",
-              },
-            ].map((bloc) => (
-              <article
-                className="chapter-card"
+              { cta: "/pertes/cartographie", ctaLabel: "Créer", desc: "Nommez la perte, choisissez un type, situez l'intensité.", etape: "1", titre: "Commencer un dossier" },
+              { cta: "/pertes/dossiers", ctaLabel: "Enrichir", desc: "Ajoutez pertes associées, timeline, journal et mémoire.", etape: "2", titre: "Enrichir une perte" },
+              { cta: "/pertes/dossiers", ctaLabel: "Relire", desc: "Utilisez Récapitulatif, Priorités et Ancrages pour comprendre.", etape: "3", titre: "Relire et comprendre" },
+              { cta: "/pertes/dossiers", ctaLabel: "Analyser", desc: "Explorez tendances, regroupements et signaux entre dossiers.", etape: "4", titre: "Voir les tendances" },
+            ].map((bloc, i) => (
+              <div
                 key={bloc.etape}
-                style={{ display: "grid", gap: 8, marginBottom: 0, padding: 16 }}
+                style={{
+                  alignItems: "center",
+                  borderTop: i > 0 ? "1px solid rgba(201,168,92,0.10)" : undefined,
+                  display: "flex",
+                  gap: 12,
+                  padding: "9px 14px",
+                }}
               >
-                <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
-                  <span
-                    style={{
-                      background: "rgba(201,168,92,0.18)",
-                      borderRadius: 999,
-                      color: "var(--accent-gold)",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      minWidth: 22,
-                      padding: "3px 8px",
-                      textAlign: "center",
-                    }}
-                  >
-                    {bloc.etape}
-                  </span>
-                  <h2
-                    style={{
-                      color: "var(--text-main)",
-                      fontFamily: "var(--font-serif)",
-                      fontSize: 18,
-                      fontWeight: 400,
-                      lineHeight: 1.2,
-                      margin: 0,
-                    }}
-                  >
-                    {bloc.titre}
-                  </h2>
+                <span
+                  style={{
+                    background: "rgba(201,168,92,0.14)",
+                    borderRadius: 999,
+                    color: "var(--accent-gold)",
+                    flexShrink: 0,
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    padding: "2px 7px",
+                  }}
+                >
+                  {bloc.etape}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ color: "var(--text-main)", fontSize: 13, fontWeight: 500 }}>{bloc.titre}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: 12, marginLeft: 8 }}>{bloc.desc}</span>
                 </div>
-                <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-                  {bloc.description}
-                </p>
                 <Link
                   className="internal-button"
                   href={bloc.cta}
-                  style={{ ...actionButtonStyle, justifySelf: "start", marginTop: 4 }}
+                  style={{ ...btnStyle, flexShrink: 0, fontSize: 12, minHeight: 28, padding: "5px 11px" }}
                 >
                   {bloc.ctaLabel}
                 </Link>
-              </article>
+              </div>
             ))}
-          </SystemGrid>
+          </div>
         </section>
 
-        <section style={{ marginTop: 18 }}>
-          <SystemSectionHeader
-            eyebrow="Repères"
-            title="Ce module aide à explorer"
-          />
-          <SystemGrid gap={12} min={270}>
+        {/* ── SECTION 5 : Repères — grille compacte ───────────── */}
+        <section style={{ marginBottom: 16 }}>
+          <p className="label-meta" style={{ margin: "0 0 8px" }}>Ce module aide à explorer</p>
+          <SystemGrid gap={8} min={200}>
             {explorationCards.map((card) => (
               <article
-                className="chapter-card"
                 key={card.title}
                 style={{
+                  background: "rgba(255,250,238,0.025)",
+                  border: "1px solid rgba(201,168,92,0.11)",
+                  borderRadius: 9,
                   display: "grid",
-                  gap: 8,
-                  marginBottom: 0,
-                  minHeight: 118,
-                  padding: 16,
+                  gap: 4,
+                  padding: "10px 12px",
                 }}
               >
-                <h2
-                  style={{
-                    color: "var(--text-main)",
-                    fontFamily: "var(--font-serif)",
-                    fontSize: 19,
-                    fontWeight: 400,
-                    lineHeight: 1.18,
-                    margin: 0,
-                  }}
-                >
+                <h2 style={{ color: "var(--text-main)", fontSize: 13, fontWeight: 500, lineHeight: 1.3, margin: 0 }}>
                   {card.title}
                 </h2>
-                <p
-                  style={{
-                    color: "var(--text-soft)",
-                    fontSize: 13,
-                    lineHeight: 1.6,
-                    margin: 0,
-                  }}
-                >
+                <p style={{ color: "var(--text-muted)", fontSize: 12, lineHeight: 1.5, margin: 0 }}>
                   {card.text}
                 </p>
               </article>
@@ -680,30 +500,24 @@ export default function PertesPage() {
           </SystemGrid>
         </section>
 
-        <SystemPanel ariaLabel="Question centrale" compact style={{ marginTop: 18 }}>
-          <SystemSectionHeader
-            eyebrow="Question centrale"
-            title="Qu'avez-vous réellement perdu ?"
-          />
-          <p className="editorial-body" style={{ margin: 0, maxWidth: 760 }}>
-            Le point de départ n&apos;est pas toujours la personne. Parfois, on perd aussi
-            une sécurité, un rôle, une époque, un avenir ou une version de soi.
-          </p>
-        </SystemPanel>
-
-        <p
+        {/* ── SECTION 6 : Question + disclaimer ───────────────── */}
+        <div
           style={{
-            borderTop: "1px solid rgba(201,168,92,0.14)",
-            color: "var(--text-muted)",
-            fontSize: 12,
-            lineHeight: 1.7,
-            margin: "22px 0 0",
-            paddingTop: 14,
+            borderTop: "1px solid rgba(201,168,92,0.12)",
+            display: "grid",
+            gap: 6,
+            paddingTop: 12,
           }}
         >
-          Cet outil ne remplace pas un accompagnement professionnel. Il aide à
-          organiser et comprendre votre vécu.
-        </p>
+          <p style={{ color: "var(--text-soft)", fontSize: 13, fontStyle: "italic", margin: 0 }}>
+            Qu&apos;avez-vous réellement perdu ? Le point de départ n&apos;est pas toujours la personne —
+            parfois c&apos;est une sécurité, un rôle, un futur ou une version de soi.
+          </p>
+          <p style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.6, margin: 0 }}>
+            Cet outil ne remplace pas un accompagnement professionnel. Il aide à organiser et comprendre votre vécu.
+          </p>
+        </div>
+
       </SystemPageShell>
     </main>
   );
