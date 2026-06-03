@@ -305,6 +305,70 @@ export default function PertesDossiersPage() {
     return { moisSorted, pertesAssoTop, pertesSecTop, typeIntensite, wordsTop };
   }, [dossiers]);
 
+  const regroupements = useMemo(() => {
+    if (dossiers.length < 2) return null;
+
+    // 1. Groupes par type de perte (2+ dossiers)
+    const parTypeMap: Record<string, PerteDossier[]> = {};
+    for (const d of dossiers) {
+      if (!parTypeMap[d.typePerte]) parTypeMap[d.typePerte] = [];
+      parTypeMap[d.typePerte].push(d);
+    }
+    const groupesParType = Object.entries(parTypeMap)
+      .filter(([, list]) => list.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length);
+
+    // 2. Groupes par intensité (buckets)
+    const buckets: { label: string; min: number; max: number; items: PerteDossier[] }[] = [
+      { label: "Forte (7–10)", max: 10, min: 7, items: [] },
+      { label: "Modérée (4–6)", max: 6, min: 4, items: [] },
+      { label: "Douce (1–3)", max: 3, min: 1, items: [] },
+    ];
+    for (const d of dossiers) {
+      if (typeof d.intensiteActuelle !== "number" || !Number.isFinite(d.intensiteActuelle)) continue;
+      const v = Number(d.intensiteActuelle);
+      for (const bucket of buckets) {
+        if (v >= bucket.min && v <= bucket.max) {
+          bucket.items.push(d);
+          break;
+        }
+      }
+    }
+    const groupesParIntensite = buckets.filter((b) => b.items.length >= 2);
+
+    // 3. Pertes secondaires communes (même valeur dans 2+ dossiers)
+    const pertesSecMap: Record<string, PerteDossier[]> = {};
+    for (const d of dossiers) {
+      for (const p of (Array.isArray(d.pertesSecondaires) ? d.pertesSecondaires : [])) {
+        if (!pertesSecMap[p]) pertesSecMap[p] = [];
+        pertesSecMap[p].push(d);
+      }
+    }
+    const pertesSecCommunes = Object.entries(pertesSecMap)
+      .filter(([, list]) => list.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 5);
+
+    // 4. Pertes associées similaires (même valeur normalisée dans 2+ dossiers)
+    const pertesAssoMap: Record<string, PerteDossier[]> = {};
+    for (const d of dossiers) {
+      for (const p of (Array.isArray(d.pertesAssociees) ? d.pertesAssociees : [])) {
+        const key = p.toLocaleLowerCase("fr-CA").trim();
+        if (!key) continue;
+        if (!pertesAssoMap[key]) pertesAssoMap[key] = [];
+        if (!pertesAssoMap[key].some((x) => x.id === d.id)) {
+          pertesAssoMap[key].push(d);
+        }
+      }
+    }
+    const pertesAssoCommunes = Object.entries(pertesAssoMap)
+      .filter(([, list]) => list.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 5);
+
+    return { groupesParIntensite, groupesParType, pertesAssoCommunes, pertesSecCommunes };
+  }, [dossiers]);
+
   const filteredDossiers = useMemo(() => {
     const normalizedSearch = searchQuery.toLocaleLowerCase("fr-CA").trim();
 
@@ -698,6 +762,214 @@ export default function PertesDossiersPage() {
                     ) : (
                       <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
                         Pas assez de données pour calculer une répartition.
+                      </p>
+                    )}
+                  </article>
+
+                </SystemGrid>
+              </SystemPanel>
+            ) : null}
+
+            {regroupements ? (
+              <SystemPanel ariaLabel="Regroupements de pertes" compact>
+                <SystemSectionHeader eyebrow="Proximités locales" title="Regroupements de pertes" />
+                <SystemGrid gap={14} min={280}>
+
+                  {/* Par type */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Groupes par type de perte</p>
+                    {regroupements.groupesParType.length > 0 ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {regroupements.groupesParType.map(([type, list]) => (
+                          <div key={type} style={{ borderTop: "1px solid rgba(201,168,92,0.10)", paddingTop: 8 }}>
+                            <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ color: "var(--text-soft)", fontSize: 13, fontWeight: 500 }}>{type}</span>
+                              <span style={{ background: "rgba(201,168,92,0.15)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 600, padding: "2px 8px" }}>
+                                {list.length} dossier{list.length > 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {list.map((d) => (
+                                <span
+                                  key={d.id}
+                                  style={{
+                                    background: "rgba(255,250,238,0.04)",
+                                    border: "1px solid rgba(201,168,92,0.18)",
+                                    borderRadius: 8,
+                                    color: "var(--text-soft)",
+                                    fontSize: 12,
+                                    padding: "4px 9px",
+                                  }}
+                                >
+                                  {d.titre}
+                                  {typeof d.intensiteActuelle === "number" ? (
+                                    <span style={{ color: "var(--text-muted)", marginLeft: 5 }}>{d.intensiteActuelle}/10</span>
+                                  ) : null}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucun type de perte partagé entre plusieurs dossiers pour le moment.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Par intensité */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Groupes par intensité</p>
+                    {regroupements.groupesParIntensite.length > 0 ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {regroupements.groupesParIntensite.map((bucket) => (
+                          <div key={bucket.label} style={{ borderTop: "1px solid rgba(201,168,92,0.10)", paddingTop: 8 }}>
+                            <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ color: "var(--text-soft)", fontSize: 13, fontWeight: 500 }}>{bucket.label}</span>
+                              <span style={{ background: "rgba(201,168,92,0.15)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 600, padding: "2px 8px" }}>
+                                {bucket.items.length} dossier{bucket.items.length > 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {bucket.items.map((d) => (
+                                <span
+                                  key={d.id}
+                                  style={{
+                                    background: "rgba(255,250,238,0.04)",
+                                    border: "1px solid rgba(201,168,92,0.18)",
+                                    borderRadius: 8,
+                                    color: "var(--text-soft)",
+                                    fontSize: 12,
+                                    padding: "4px 9px",
+                                  }}
+                                >
+                                  {d.titre}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Pas assez de dossiers évalués pour former des groupes d'intensité.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Pertes secondaires communes */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Pertes secondaires communes</p>
+                    {regroupements.pertesSecCommunes.length > 0 ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {regroupements.pertesSecCommunes.map(([label, list]) => (
+                          <div key={label} style={{ borderTop: "1px solid rgba(201,168,92,0.10)", paddingTop: 8 }}>
+                            <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ color: "var(--text-soft)", fontSize: 13, fontWeight: 500 }}>{label}</span>
+                              <span style={{ background: "rgba(201,168,92,0.15)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 600, padding: "2px 8px" }}>
+                                {list.length} dossier{list.length > 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {list.map((d) => (
+                                <span
+                                  key={d.id}
+                                  style={{
+                                    background: "rgba(255,250,238,0.04)",
+                                    border: "1px solid rgba(201,168,92,0.18)",
+                                    borderRadius: 8,
+                                    color: "var(--text-soft)",
+                                    fontSize: 12,
+                                    padding: "4px 9px",
+                                  }}
+                                >
+                                  {d.titre}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucune perte secondaire partagée entre plusieurs dossiers pour le moment.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Pertes associées similaires */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Pertes associées similaires</p>
+                    {regroupements.pertesAssoCommunes.length > 0 ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {regroupements.pertesAssoCommunes.map(([label, list]) => (
+                          <div key={label} style={{ borderTop: "1px solid rgba(201,168,92,0.10)", paddingTop: 8 }}>
+                            <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ color: "var(--text-soft)", fontSize: 13, fontWeight: 500, textTransform: "capitalize" }}>{label}</span>
+                              <span style={{ background: "rgba(201,168,92,0.15)", borderRadius: 999, color: "var(--accent-gold)", fontSize: 11, fontWeight: 600, padding: "2px 8px" }}>
+                                {list.length} dossier{list.length > 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {list.map((d) => (
+                                <span
+                                  key={d.id}
+                                  style={{
+                                    background: "rgba(255,250,238,0.04)",
+                                    border: "1px solid rgba(201,168,92,0.18)",
+                                    borderRadius: 8,
+                                    color: "var(--text-soft)",
+                                    fontSize: 12,
+                                    padding: "4px 9px",
+                                  }}
+                                >
+                                  {d.titre}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucune perte associée identique dans plusieurs dossiers pour le moment.
                       </p>
                     )}
                   </article>
