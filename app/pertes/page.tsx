@@ -205,6 +205,62 @@ export default function PertesPage() {
     };
   }, [dossiers, loaded]);
 
+  const recommandation = useMemo(() => {
+    if (!loaded) return null;
+
+    if (dossiers.length === 0) {
+      return {
+        cta: "/pertes/cartographie",
+        ctaLabel: "Commencer une cartographie",
+        etape: "Commencer un dossier",
+        texte: "Vous n’avez pas encore de dossier. Commencez par nommer ce que vous traversez : donnez-lui un titre, un type, une date ou période.",
+        tone: "warning" as const,
+      };
+    }
+
+    const incomplets = dossiers.filter((d) => docTotal(d) < 2);
+    if (incomplets.length > 0) {
+      return {
+        cta: `/pertes/dossiers/${incomplets[0].id}`,
+        ctaLabel: `Enrichir « ${incomplets[0].titre} »`,
+        etape: "Enrichir une perte",
+        texte: `${incomplets.length > 1 ? `${incomplets.length} dossiers sont encore peu documentés.` : "Un dossier est encore peu documenté."} Ajoutez des pertes associées, des événements ou une entrée journal.`,
+        tone: "neutral" as const,
+      };
+    }
+
+    const intense = dossiers.find(
+      (d) => typeof d.intensiteActuelle === "number" && Number(d.intensiteActuelle) >= 7,
+    );
+    if (intense) {
+      return {
+        cta: `/pertes/dossiers/${intense.id}`,
+        ctaLabel: `Voir les signaux de « ${intense.titre} »`,
+        etape: "Lire et comprendre",
+        texte: `Le dossier « ${intense.titre} » porte une intensité élevée (${intense.intensiteActuelle}/10). Consultez ses signaux, priorités et ancrages.`,
+        tone: "warning" as const,
+      };
+    }
+
+    if (dossiers.length >= 2) {
+      return {
+        cta: "/pertes/dossiers",
+        ctaLabel: "Voir les tendances",
+        etape: "Voir les tendances entre dossiers",
+        texte: `Vous avez ${dossiers.length} dossiers. La vue transversale peut faire apparaître des motifs, des regroupements et des signaux communs.`,
+        tone: "neutral" as const,
+      };
+    }
+
+    return {
+      cta: "/pertes/dossiers",
+      ctaLabel: "Ouvrir mes dossiers",
+      etape: "Relire et comprendre",
+      texte: "Votre dossier est documenté. Prenez le temps de relire la timeline, le journal et les ancrages pour mieux comprendre ce que vous traversez.",
+      tone: "neutral" as const,
+    };
+  }, [dossiers, loaded]);
+
   return (
     <main className="internal-page">
       <SystemPageShell maxWidth={1120} padding="24px 18px 56px">
@@ -461,6 +517,123 @@ export default function PertesPage() {
             </Link>
           </SystemPanel>
         ) : null}
+
+        <section style={{ marginTop: 18 }}>
+          <SystemSectionHeader eyebrow="Mode d'emploi" title="Guide d'utilisation" />
+
+          {/* Recommandation contextuelle */}
+          {recommandation ? (
+            <div
+              style={{
+                background: recommandation.tone === "warning"
+                  ? "rgba(201,168,92,0.09)"
+                  : "rgba(255,250,238,0.03)",
+                border: `1px solid ${recommandation.tone === "warning" ? "rgba(201,168,92,0.30)" : "rgba(201,168,92,0.16)"}`,
+                borderRadius: 12,
+                display: "grid",
+                gap: 10,
+                marginBottom: 14,
+                padding: 16,
+              }}
+            >
+              <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <StatusChip tone={recommandation.tone}>Recommandé maintenant</StatusChip>
+                  <span style={{ color: "var(--text-soft)", fontSize: 13 }}>{recommandation.etape}</span>
+                </div>
+              </div>
+              <p className="editorial-body" style={{ margin: 0, maxWidth: 680 }}>
+                {recommandation.texte}
+              </p>
+              <Link
+                className={recommandation.tone === "warning" ? "internal-button-primary" : "internal-button"}
+                href={recommandation.cta}
+                style={actionButtonStyle}
+              >
+                {recommandation.ctaLabel}
+              </Link>
+            </div>
+          ) : null}
+
+          {/* 4 blocs permanents */}
+          <SystemGrid gap={12} min={250}>
+            {[
+              {
+                cta: "/pertes/cartographie",
+                ctaLabel: "Créer un dossier",
+                description: "Choisissez un type de perte, nommez ce qui a disparu, situez l'intensité. C'est le point de départ.",
+                etape: "1",
+                titre: "Commencer un dossier",
+              },
+              {
+                cta: "/pertes/dossiers",
+                ctaLabel: "Voir mes dossiers",
+                description: "Ajoutez des pertes associées, une timeline, des entrées journal et des éléments de mémoire vivante pour enrichir votre dossier.",
+                etape: "2",
+                titre: "Enrichir une perte",
+              },
+              {
+                cta: "/pertes/dossiers",
+                ctaLabel: "Ouvrir un dossier",
+                description: "Utilisez les onglets Récapitulatif, Priorités et Ancrages pour relire votre dossier et mieux comprendre ce que vous traversez.",
+                etape: "3",
+                titre: "Relire et comprendre",
+              },
+              {
+                cta: "/pertes/dossiers",
+                ctaLabel: "Voir les tendances",
+                description: "Avec plusieurs dossiers, explorez les tendances récurrentes, les regroupements et les signaux transversaux.",
+                etape: "4",
+                titre: "Voir les tendances entre dossiers",
+              },
+            ].map((bloc) => (
+              <article
+                className="chapter-card"
+                key={bloc.etape}
+                style={{ display: "grid", gap: 8, marginBottom: 0, padding: 16 }}
+              >
+                <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                  <span
+                    style={{
+                      background: "rgba(201,168,92,0.18)",
+                      borderRadius: 999,
+                      color: "var(--accent-gold)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      minWidth: 22,
+                      padding: "3px 8px",
+                      textAlign: "center",
+                    }}
+                  >
+                    {bloc.etape}
+                  </span>
+                  <h2
+                    style={{
+                      color: "var(--text-main)",
+                      fontFamily: "var(--font-serif)",
+                      fontSize: 18,
+                      fontWeight: 400,
+                      lineHeight: 1.2,
+                      margin: 0,
+                    }}
+                  >
+                    {bloc.titre}
+                  </h2>
+                </div>
+                <p style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                  {bloc.description}
+                </p>
+                <Link
+                  className="internal-button"
+                  href={bloc.cta}
+                  style={{ ...actionButtonStyle, justifySelf: "start", marginTop: 4 }}
+                >
+                  {bloc.ctaLabel}
+                </Link>
+              </article>
+            ))}
+          </SystemGrid>
+        </section>
 
         <section style={{ marginTop: 18 }}>
           <SystemSectionHeader
