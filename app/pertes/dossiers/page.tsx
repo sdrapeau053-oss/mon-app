@@ -85,6 +85,16 @@ const dashboardControlStyle = {
   width: "100%",
 } as const;
 
+const STOP_WORDS_FR = new Set([
+  "le","la","les","de","du","des","un","une","et","en","à","au","aux",
+  "je","tu","il","elle","nous","vous","ils","elles","que","qui","ce","se",
+  "sa","son","ses","ma","mon","mes","ta","ton","tes","dans","sur","par",
+  "pour","avec","pas","ne","plus","est","sont","était","a","ont","été",
+  "j","c","l","d","m","n","s","y","qu","me","te","lui","leur","leurs",
+  "aussi","mais","car","donc","or","ni","si","ça","cela","tout","très",
+  "bien","même","encore","comme","quand","alors","puis","dont","où",
+]);
+
 function isPerteDossier(value: unknown): value is PerteDossier {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<PerteDossier>;
@@ -208,6 +218,91 @@ export default function PertesDossiersPage() {
       totalPertesAssociees,
       typesSorted,
     };
+  }, [dossiers]);
+
+  const tendances = useMemo(() => {
+    if (dossiers.length === 0) return null;
+
+    // 1. Pertes secondaires les plus fréquentes
+    const pertesSecCounts: Record<string, number> = {};
+    for (const d of dossiers) {
+      for (const p of (Array.isArray(d.pertesSecondaires) ? d.pertesSecondaires : [])) {
+        pertesSecCounts[p] = (pertesSecCounts[p] || 0) + 1;
+      }
+    }
+    const pertesSecTop = Object.entries(pertesSecCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    // 2. Pertes associées récurrentes (présentes dans 2+ dossiers)
+    const pertesAssoCounts: Record<string, number> = {};
+    for (const d of dossiers) {
+      const seen = new Set<string>();
+      for (const p of (Array.isArray(d.pertesAssociees) ? d.pertesAssociees : [])) {
+        const key = p.toLocaleLowerCase("fr-CA").trim();
+        if (key && !seen.has(key)) {
+          pertesAssoCounts[key] = (pertesAssoCounts[key] || 0) + 1;
+          seen.add(key);
+        }
+      }
+    }
+    const pertesAssoTop = Object.entries(pertesAssoCounts)
+      .filter(([, count]) => count >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    // 3. Mots fréquents dans les entrées journal
+    const wordCounts: Record<string, number> = {};
+    for (const d of dossiers) {
+      for (const entry of (Array.isArray(d.journal) ? d.journal : [])) {
+        const words = entry.texte
+          .toLocaleLowerCase("fr-CA")
+          .replace(/[^a-zàâäéèêëîïôùûüçœæ\s]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length > 3 && !STOP_WORDS_FR.has(w));
+        for (const w of words) {
+          wordCounts[w] = (wordCounts[w] || 0) + 1;
+        }
+      }
+    }
+    const wordsTop = Object.entries(wordCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    // 4. Intensité moyenne par type de perte
+    const typeIntensiteMap: Record<string, number[]> = {};
+    for (const d of dossiers) {
+      if (typeof d.intensiteActuelle === "number" && Number.isFinite(d.intensiteActuelle)) {
+        if (!typeIntensiteMap[d.typePerte]) typeIntensiteMap[d.typePerte] = [];
+        typeIntensiteMap[d.typePerte].push(Number(d.intensiteActuelle));
+      }
+    }
+    const typeIntensite = Object.entries(typeIntensiteMap)
+      .map(([type, values]) => ({
+        count: values.length,
+        moyenne: Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10,
+        type,
+      }))
+      .sort((a, b) => b.moyenne - a.moyenne)
+      .slice(0, 5);
+
+    // 5. Répartition par mois de création
+    const moisCounts: Record<string, number> = {};
+    for (const d of dossiers) {
+      try {
+        const parsed = new Date(d.dateCreation);
+        if (!Number.isFinite(parsed.getTime())) continue;
+        const key = parsed.toLocaleDateString("fr-CA", { month: "long", year: "numeric" });
+        moisCounts[key] = (moisCounts[key] || 0) + 1;
+      } catch {
+        // date invalide, on ignore
+      }
+    }
+    const moisSorted = Object.entries(moisCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+
+    return { moisSorted, pertesAssoTop, pertesSecTop, typeIntensite, wordsTop };
   }, [dossiers]);
 
   const filteredDossiers = useMemo(() => {
@@ -431,6 +526,183 @@ export default function PertesDossiersPage() {
                     </div>
                   </div>
                 ) : null}
+              </SystemPanel>
+            ) : null}
+
+            {tendances ? (
+              <SystemPanel ariaLabel="Tendances récurrentes entre dossiers" compact>
+                <SystemSectionHeader eyebrow="Motifs répétés" title="Tendances récurrentes" />
+                <SystemGrid gap={14} min={280}>
+
+                  {/* Pertes secondaires fréquentes */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Pertes secondaires fréquentes</p>
+                    {tendances.pertesSecTop.length > 0 ? (
+                      <ol style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0, paddingLeft: 18 }}>
+                        {tendances.pertesSecTop.map(([label, count]) => (
+                          <li key={label} style={{ marginBottom: 4 }}>
+                            {label}
+                            <span style={{ color: "var(--accent-gold)", fontWeight: 600, marginLeft: 6 }}>×{count}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Pas assez de données pour le moment.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Pertes associées récurrentes */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Pertes associées récurrentes</p>
+                    <p style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, margin: 0 }}>
+                      Présentes dans 2 dossiers ou plus
+                    </p>
+                    {tendances.pertesAssoTop.length > 0 ? (
+                      <ol style={{ color: "var(--text-soft)", fontSize: 13, lineHeight: 1.6, margin: 0, paddingLeft: 18 }}>
+                        {tendances.pertesAssoTop.map(([label, count]) => (
+                          <li key={label} style={{ marginBottom: 4 }}>
+                            {label}
+                            <span style={{ color: "var(--accent-gold)", fontWeight: 600, marginLeft: 6 }}>×{count}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Aucune perte associée ne revient dans plusieurs dossiers pour le moment.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Mots fréquents journal */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Mots fréquents dans le journal</p>
+                    {tendances.wordsTop.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                        {tendances.wordsTop.map(([word, count]) => (
+                          <span
+                            key={word}
+                            style={{
+                              background: "rgba(201,168,92,0.09)",
+                              border: "1px solid rgba(201,168,92,0.20)",
+                              borderRadius: 999,
+                              color: "var(--text-soft)",
+                              fontSize: 12.5,
+                              padding: "5px 11px",
+                            }}
+                          >
+                            {word}
+                            <span style={{ color: "var(--accent-gold)", fontWeight: 600, marginLeft: 5 }}>×{count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Pas assez d'entrées journal pour analyser les mots fréquents.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Intensité par type */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Intensité moyenne par type</p>
+                    {tendances.typeIntensite.length > 0 ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {tendances.typeIntensite.map(({ type, moyenne, count }) => (
+                          <div key={type} style={{ display: "grid", gap: 3 }}>
+                            <div style={{ alignItems: "center", display: "flex", gap: 8, justifyContent: "space-between" }}>
+                              <span style={{ color: "var(--text-soft)", fontSize: 12.5, lineHeight: 1.4 }}>{type}</span>
+                              <span style={{ color: "var(--accent-gold)", flexShrink: 0, fontWeight: 600, fontSize: 12.5 }}>
+                                {moyenne}/10
+                                <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: 4 }}>
+                                  ({count} dossier{count > 1 ? "s" : ""})
+                                </span>
+                              </span>
+                            </div>
+                            <div style={{ background: "rgba(255,255,255,.06)", borderRadius: 999, height: 4, overflow: "hidden", width: "100%" }}>
+                              <div style={{ background: "var(--accent-gold)", height: "100%", opacity: 0.7, width: `${Math.min(10, moyenne) * 10}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Pas assez de dossiers évalués pour calculer des moyennes par type.
+                      </p>
+                    )}
+                  </article>
+
+                  {/* Répartition par mois */}
+                  <article
+                    style={{
+                      background: "rgba(255,250,238,0.03)",
+                      border: "1px solid rgba(201,168,92,0.14)",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                    }}
+                  >
+                    <p className="label-meta" style={{ margin: 0 }}>Dossiers créés par mois</p>
+                    {tendances.moisSorted.length > 0 ? (
+                      <div style={{ display: "grid", gap: 7 }}>
+                        {tendances.moisSorted.map(([mois, count]) => (
+                          <div key={mois} style={{ alignItems: "center", display: "flex", gap: 10 }}>
+                            <span style={{ color: "var(--text-soft)", fontSize: 12.5, minWidth: 140 }}>{mois}</span>
+                            <div style={{ background: "rgba(255,255,255,.06)", borderRadius: 999, flex: 1, height: 5, overflow: "hidden" }}>
+                              <div style={{ background: "var(--accent-gold)", height: "100%", opacity: 0.65, width: `${(count / dossiers.length) * 100}%` }} />
+                            </div>
+                            <span style={{ color: "var(--accent-gold)", flexShrink: 0, fontSize: 12, fontWeight: 600 }}>
+                              {count}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+                        Pas assez de données pour calculer une répartition.
+                      </p>
+                    )}
+                  </article>
+
+                </SystemGrid>
               </SystemPanel>
             ) : null}
 
