@@ -62,6 +62,7 @@ type Proposition = {
   version: number;
 };
 type MainTab = "cockpit" | "crm" | "pipeline" | "offres" | "outils";
+type OutilsSousTab = "ghostwriting" | "mode500";
 
 // ── Clés localStorage ────────────────────────────────────────────────────────
 
@@ -1589,6 +1590,7 @@ export default function FreelancePage() {
   const [crCopied, setCrCopied] = useState(false);
   const [sprint, setSprint] = useState<SprintActif>(defaultSprint);
   const [sprintEdit, setSprintEdit] = useState(false);
+  const [outilsSousTab, setOutilsSousTab] = useState<OutilsSousTab>("ghostwriting");
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [calc, setCalc] = useState<CalcState>(defaultCalc);
   const [mode500, setMode500] = useState<Mode500State>(defaultMode500);
@@ -2038,8 +2040,35 @@ export default function FreelancePage() {
         {/* ── OUTILS IA ── */}
         {activeTab === "outils" ? (
           <>
+            {/* Sous-onglets Outils IA */}
+            <div style={{ borderBottom: "1px solid rgba(201,168,92,0.12)", display: "flex", marginBottom: 10 }}>
+              {([
+                { key: "ghostwriting" as OutilsSousTab, label: "Ghostwriting" },
+                { key: "mode500" as OutilsSousTab, label: "Mode 500" },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setOutilsSousTab(key)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    borderBottom: outilsSousTab === key ? "2px solid rgba(201,168,92,0.7)" : "2px solid transparent",
+                    color: outilsSousTab === key ? "var(--text-main)" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: outilsSousTab === key ? 600 : 400,
+                    marginBottom: -1,
+                    padding: "4px 14px 6px",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Générateur ghostwriting */}
-            <SystemPanel ariaLabel="Générateur ghostwriting" compact>
+            {outilsSousTab === "ghostwriting" ? <SystemPanel ariaLabel="Générateur ghostwriting" compact>
               <p className="label-meta" style={{ margin: "0 0 8px" }}>
                 Générateur client — Complexité : <strong>{qa.complexite}</strong> · Prix suggéré : <strong>{qa.prix}</strong>
               </p>
@@ -2113,12 +2142,12 @@ export default function FreelancePage() {
                   }
                 </div>
               ) : null}
-            </SystemPanel>
+            </SystemPanel> : null}
 
             {/* Mode 500 */}
-            <SystemPanel ariaLabel="Mode 500" compact>
+            {outilsSousTab === "mode500" ? <SystemPanel ariaLabel="Mode 500" compact>
               <Mode500Panel mode500={mode500} onUpdate={setMode500} />
-            </SystemPanel>
+            </SystemPanel> : null}
           </>
         ) : null}
 
