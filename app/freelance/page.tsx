@@ -335,9 +335,8 @@ function SprintEditPanel({ sprint, onUpdate, onClose }: { sprint: SprintActif; o
   return (
     <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
       {([
-        { key: "objectif" as keyof SprintActif, label: "Objectif $" },
-        { key: "revenusEncaisses" as keyof SprintActif, label: "Encaissé $" },
-        { key: "revenusAttente" as keyof SprintActif, label: "En attente $" },
+        { key: "objectif" as keyof SprintActif, label: "Objectif sprint ($)" },
+        { key: "revenusAttente" as keyof SprintActif, label: "En attente ($) — non encore reçu" },
         { key: "prospectsContactes" as keyof SprintActif, label: "Prospects" },
         { key: "clientsObtenus" as keyof SprintActif, label: "Clients" },
       ]).map(({ key, label }) => (
@@ -393,8 +392,15 @@ function FicheProspect({ p, onUpdate, onClose }: {
   }
 
   function sauvegarder() {
-    onUpdate({ ...ef, date_dernier_contact: new Date().toISOString().split("T")[0] });
+    // CP1: ne PAS écraser date_dernier_contact automatiquement
+    // L'utilisateur doit cliquer "Marquer comme contacté" pour mettre à jour cette date
+    onUpdate(ef);
     onClose();
+  }
+
+  function marquerContacte() {
+    const today = new Date().toISOString().split("T")[0];
+    setEf((prev) => ({ ...prev, date_dernier_contact: today }));
   }
 
   return (
@@ -436,12 +442,8 @@ function FicheProspect({ p, onUpdate, onClose }: {
           <input type="text" value={ef.projet_en_cours || ""} onChange={(e) => f("projet_en_cours", e.target.value)} placeholder="ex: Biographie chapitre 3, révision manuscrit…" style={inputStyle} />
         </div>
         <div>
-          <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Montant ($)</p>
-          <input type="number" min={0} value={ef.montant} onChange={(e) => f("montant", Number(e.target.value))} style={inputStyle} />
-        </div>
-        <div>
           <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Valeur estimée ($)</p>
-          <input type="number" min={0} value={ef.valeur_estimee || 0} onChange={(e) => f("valeur_estimee", Number(e.target.value))} style={inputStyle} />
+          <input type="number" min={0} value={ef.valeur_estimee ?? ef.montant ?? 0} onChange={(e) => f("valeur_estimee", Number(e.target.value))} style={inputStyle} />
         </div>
       </div>
 
@@ -469,13 +471,6 @@ function FicheProspect({ p, onUpdate, onClose }: {
           </select>
         </div>
         <div>
-          <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Source</p>
-          <select value={ef.source || ""} onChange={(e) => f("source", e.target.value as SourceProspect || undefined)} style={inputStyle}>
-            <option value="">—</option>
-            {SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </div>
-        <div>
           <p className="label-meta" style={{ fontSize: 10, marginBottom: 2 }}>Canal</p>
           <input type="text" value={ef.canal} onChange={(e) => f("canal", e.target.value)} placeholder="LinkedIn, Facebook…" style={inputStyle} />
         </div>
@@ -497,6 +492,19 @@ function FicheProspect({ p, onUpdate, onClose }: {
         </div>
       </div>
 
+      {/* CP1 — Dernier contact explicite */}
+      <div style={{ alignItems: "center", display: "flex", gap: 8, marginBottom: 8 }}>
+        <button
+          type="button"
+          onClick={marquerContacte}
+          style={{ background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.30)", borderRadius: 5, color: "#1D9E75", cursor: "pointer", fontSize: 11, padding: "3px 10px" }}
+        >
+          ✓ Marquer comme contacté aujourd'hui
+        </button>
+        {ef.date_dernier_contact ? (
+          <span style={{ color: "var(--text-muted)", fontSize: 10 }}>Dernier contact : {ef.date_dernier_contact}</span>
+        ) : null}
+      </div>
       <div style={{ display: "flex", gap: 6 }}>
         <button className="btn-primary" type="button" onClick={sauvegarder} style={{ flex: 1, fontSize: 12, padding: "5px" }}>Sauvegarder</button>
         <button type="button" onClick={onClose} style={{ ...btnSmall, padding: "5px 12px" }}>Annuler</button>
@@ -953,7 +961,8 @@ function CRMPanel({ prospects, onUpdate, propositions, onUpdatePropositions }: {
       canal: nv.canal || "",
       offre: nv.offre || "",
       statut: nv.statut || "a_contacter",
-      montant: nv.montant || 0,
+      montant: 0,
+      valeur_estimee: (nv.valeur_estimee as number | undefined) || 0,
       dateContact: today,
       date_dernier_contact: today,
       encaisse: false,
@@ -1038,7 +1047,7 @@ function CRMPanel({ prospects, onUpdate, propositions, onUpdatePropositions }: {
             { k: "nom", ph: "Nom *", t: "text" },
             { k: "offre", ph: "Offre / service", t: "text" },
             { k: "canal", ph: "Canal (LinkedIn, Facebook…)", t: "text" },
-            { k: "montant", ph: "Montant $", t: "number" },
+            { k: "valeur_estimee", ph: "Valeur estimée ($)", t: "number" },
           ].map(({ k, ph, t }) => (
             <input
               key={k}
@@ -2033,7 +2042,7 @@ const PIPELINE_COLONNES: { statut: StatutProspect; label: string; color: string 
   { statut: "gagne", label: "Gagné", color: "#1D9E75" },
 ];
 
-function PipelinePanel({ prospects, today }: { prospects: Prospect[]; today: string }) {
+function PipelinePanel({ prospects, today, onUpdate }: { prospects: Prospect[]; today: string; onUpdate: (p: Prospect[]) => void }) {
   const [afficherPerdus, setAfficherPerdus] = useState(false);
 
   const liste = afficherPerdus ? prospects : prospects.filter((p) => p.statut !== "perdu");
@@ -2145,6 +2154,15 @@ function PipelinePanel({ prospects, today }: { prospects: Prospect[]; today: str
                           {retardRelance === 0 ? "Relance aujourd'hui" : "Relance J+" + retardRelance}
                         </p>
                       ) : null}
+                      {/* CP5 — Select statut inline */}
+                      <select
+                        value={p.statut}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => onUpdate(prospects.map((pr) => pr.id === p.id ? { ...pr, statut: e.target.value as StatutProspect } : pr))}
+                        style={{ background: "var(--bg-main)", border: "1px solid rgba(201,168,92,0.20)", borderRadius: 4, color: "var(--text-muted)", fontSize: 10, marginTop: 5, padding: "2px 3px", width: "100%" }}
+                      >
+                        {STATUTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
                     </div>
                   );
                 })
@@ -2247,14 +2265,25 @@ export default function FreelancePage() {
   useEffect(() => { setForm(lireSauvegarde()); }, []);
   useEffect(() => {
     setSprint(lireLS(FL_SPRINT, defaultSprint));
-    setProspects(lireLS<Prospect[]>(FL_PROSPECTS, []));
+    // CP3 — Migration : valeur_estimee ← montant si valeur_estimee absente ou nulle
+    const rawProspects = lireLS<Prospect[]>(FL_PROSPECTS, []);
+    setProspects(rawProspects.map((p) =>
+      (p.valeur_estimee === undefined || p.valeur_estimee === 0) && p.montant > 0
+        ? { ...p, valeur_estimee: p.montant }
+        : p
+    ));
     setCalc(lireLS(FL_CALC, defaultCalc));
     setMode500(lireLS(FL_MODE500, defaultMode500));
     setOffres(lireLS<Offre[]>(FL_OFFERS, []));
     setPropositions(lireLS<Proposition[]>(FL_PROPOSITIONS, []));
     setProjets(lireLS<Projet[]>(FL_PROJETS, []));
     setRevenus(lireLS<Revenu[]>(FL_REVENUS, []));
-    setTaches(lireLS<Tache[]>(FL_TACHES, []));
+    // CP8 — Purge tâches terminées de plus de 14 jours
+    const rawTaches = lireLS<Tache[]>(FL_TACHES, []);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+    setTaches(rawTaches.filter((t) => !t.done || t.date >= cutoffStr));
     setObjectifs(lireLS<Objectifs>(FL_OBJECTIFS, defaultObjectifs));
     setMessages(lireLS<MessageTemplate[]>(FL_MESSAGES, []));
   }, []);
@@ -2306,7 +2335,13 @@ export default function FreelancePage() {
   const kpis = calculerKPIs(sprint);
   const prevision = calculerPrevision(prospects);
   const relances = relancesProspects(prospects);
-  const totalRevenu = sprint.revenusEncaisses + sprint.revenusAttente;
+  // CP2 — Source de vérité unique : freelance-revenus pour les encaissements réels
+  const moisEnCours = new Date().toISOString().slice(0, 7);
+  const revenusMoisActuelReel = revenus
+    .filter((r) => r.mois === moisEnCours)
+    .reduce((acc, r) => acc + r.montant, 0);
+  const totalRevenu = revenusMoisActuelReel + sprint.revenusAttente;
+  const manqueReel = Math.max(0, sprint.objectif - totalRevenu);
   const pct = Math.min(100, sprint.objectif > 0 ? Math.round((totalRevenu / sprint.objectif) * 100) : 0);
 
   // ── Centre d'actions Phase 3 — logique explicite depuis les champs CRM ─────
@@ -2422,9 +2457,9 @@ export default function FreelancePage() {
             {/* KPIs mini dans le header */}
             <div style={{ alignItems: "baseline", display: "flex", flexWrap: "wrap", gap: 18 }}>
               {[
-                { label: "Objectif", value: sprint.objectif + " $", accent: false },
-                { label: "Encaissé", value: sprint.revenusEncaisses + " $", accent: sprint.revenusEncaisses > 0 },
-                { label: "Manque", value: kpis.manque + " $", accent: kpis.manque === 0 },
+                { label: "Obj. sprint", value: sprint.objectif + " $", accent: false },
+                { label: "Encaissé", value: revenusMoisActuelReel + " $", accent: revenusMoisActuelReel > 0 },
+                { label: "Manque", value: manqueReel + " $", accent: manqueReel === 0 },
                 { label: "Prévision", value: prevision + " $", accent: prevision > 0 },
                 { label: "Clients", value: clientsNonEncaisses.length > 0 ? clientsNonEncaisses.length + " à encaisser" : clientsGagnes.length + " total", accent: clientsNonEncaisses.length > 0 },
               ].map((k) => (
@@ -2650,15 +2685,23 @@ export default function FreelancePage() {
             <SystemPanel ariaLabel="KPIs sprint" compact>
               <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <p className="label-meta" style={{ margin: 0 }}>Sprint actif · {kpis.joursRestants}j restants</p>
-                <button style={btnSmall} type="button" onClick={() => setSprintEdit(!sprintEdit)}>
-                  {sprintEdit ? "Fermer" : "Modifier"}
-                </button>
+                <div style={{ display: "flex", gap: 5 }}>
+                  <button
+                    style={btnSmall}
+                    type="button"
+                    title="Réinitialiser le sprint (remet à zéro la date et les compteurs)"
+                    onClick={() => setSprint((s) => ({ ...s, dateDebut: today, prospectsContactes: 0, clientsObtenus: 0, revenusAttente: 0 }))}
+                  >↺ Reset</button>
+                  <button style={btnSmall} type="button" onClick={() => setSprintEdit(!sprintEdit)}>
+                    {sprintEdit ? "Fermer" : "Modifier"}
+                  </button>
+                </div>
               </div>
               <SystemGrid gap={6} min={90}>
-                <CompactMetric label="Objectif" value={sprint.objectif + " $"} />
-                <CompactMetric label="Encaissé" value={sprint.revenusEncaisses + " $"} />
+                <CompactMetric label="Objectif sprint" value={sprint.objectif + " $"} />
+                <CompactMetric label="Encaissé (mois)" value={revenusMoisActuelReel + " $"} />
                 <CompactMetric label="En attente" value={sprint.revenusAttente + " $"} />
-                <CompactMetric label="Manque" value={kpis.manque + " $"} />
+                <CompactMetric label="Manque" value={manqueReel + " $"} />
                 <CompactMetric label="Prospects" value={String(sprint.prospectsContactes)} />
                 <CompactMetric label="Taux conv." value={kpis.taux + " %"} />
                 <CompactMetric label="Clients" value={String(sprint.clientsObtenus)} />
@@ -3081,7 +3124,7 @@ export default function FreelancePage() {
         {/* ── PIPELINE ── */}
         {activeTab === "pipeline" ? (
           <SystemPanel ariaLabel="Pipeline commercial" compact>
-            <PipelinePanel prospects={prospects} today={today} />
+            <PipelinePanel prospects={prospects} today={today} onUpdate={setProspects} />
           </SystemPanel>
         ) : null}
 
