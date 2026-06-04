@@ -3,9 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  StateTile,
-  StatusChip,
-  SystemGrid,
   SystemPageShell,
   SystemPanel,
   SystemSectionHeader,
@@ -17,33 +14,39 @@ import { lireFragments, type Fragment } from "@/lib/fragments";
 import { lireMemoiresNarratives, type MemoireNarrative } from "@/lib/memoire-narrative";
 import {
   createChapitreId,
-  getChapterNarrativeStats,
   lireNarrativeRelationsAvecAutomatiques,
-  lireScenesRelationnelles,
   type NarrativeRelation,
 } from "@/lib/narrative-relations";
-import type { Scene } from "@/lib/scenes";
 import {
+  compterMotsChapitreTome1,
+  getChapitresTome1Ecrits,
   getNumeroChapitreTome1,
   lireChapitresTome1DepuisStorage,
   type ChapitreTome1,
 } from "@/lib/tome1-chapters";
 
-type MissionData = {
+// ── Types ────────────────────────────────────────────────────────
+
+type CockpitData = {
   chapters: ChapitreTome1[];
   continuity: StrateContinuity | null;
   fragments: Fragment[];
   memoires: MemoireNarrative[];
   relations: NarrativeRelation[];
-  scenes: Scene[];
 };
+
+// ── Helpers chapitres ────────────────────────────────────────────
 
 function isWritten(chapter: ChapitreTome1) {
   return Boolean(chapter.contenu.trim());
 }
 
 function isSealed(chapter: ChapitreTome1) {
-  return chapter.statut === "scellé" || chapter.statut === "gele" || chapter.statutStructure === "gele";
+  return (
+    chapter.statut === "scellé" ||
+    chapter.statut === "gele" ||
+    chapter.statutStructure === "gele"
+  );
 }
 
 function isExplicitlyWritten(chapter: ChapitreTome1) {
@@ -51,7 +54,12 @@ function isExplicitlyWritten(chapter: ChapitreTome1) {
 }
 
 function isToWrite(chapter: ChapitreTome1) {
-  return !isExplicitlyWritten(chapter) || chapter.statut === "à écrire" || chapter.statut === "vide" || !chapter.contenu.trim();
+  return (
+    !isExplicitlyWritten(chapter) ||
+    chapter.statut === "à écrire" ||
+    chapter.statut === "vide" ||
+    !chapter.contenu.trim()
+  );
 }
 
 function isRevisionCandidate(chapter: ChapitreTome1) {
@@ -62,55 +70,44 @@ function chapterNumber(chapter: ChapitreTome1) {
   return getNumeroChapitreTome1(chapter.id);
 }
 
-function chapterRelationIds(chapter: ChapitreTome1) {
-  const numero = chapterNumber(chapter);
-  const canonical = createChapitreId(1, numero);
-  return new Set([chapter.id, canonical, `chapter:${canonical}`, `chapitre:${chapter.id}`, `chapitre-${numero}`]);
+function getStatusLabel(chapter: ChapitreTome1) {
+  if (isSealed(chapter)) return "scellé";
+  if (isWritten(chapter) || chapter.statut === "écrit") return "écrit";
+  return "à écrire";
 }
 
-function memoireRelationIds(memoire: MemoireNarrative) {
-  return new Set([memoire.id, `memoire:${memoire.id}`]);
+function getChapitresParStatut(chapitres: ChapitreTome1[]) {
+  const sorted = [...chapitres].sort((a, b) => chapterNumber(a) - chapterNumber(b));
+  return {
+    aEcrire: sorted.filter(isToWrite),
+    enCours: sorted.filter((ch) => isWritten(ch) && !isSealed(ch)),
+    termines: sorted.filter(isSealed),
+  };
 }
 
-function relationLinksMemoireToChapter(relation: NarrativeRelation, memoire: MemoireNarrative, chapter: ChapitreTome1) {
-  const memoireIds = memoireRelationIds(memoire);
-  const chapterIds = chapterRelationIds(chapter);
-  return (
-    (memoireIds.has(relation.sourceId) && chapterIds.has(relation.targetId)) ||
-    (memoireIds.has(relation.targetId) && chapterIds.has(relation.sourceId))
-  );
+function getTotalMots(chapitres: ChapitreTome1[]): number {
+  return chapitres.reduce((total, ch) => total + compterMotsChapitreTome1(ch), 0);
 }
 
-function getLinkedMemoires(chapter: ChapitreTome1, memoires: MemoireNarrative[], relations: NarrativeRelation[]) {
-  const numero = chapterNumber(chapter);
-
-  return memoires.filter((memoire) => {
-    if (memoire.statut === "archive") return false;
-    if (memoire.tomeProbable === 1 && memoire.chapitreProbable === numero) return true;
-    return relations.some((relation) => relationLinksMemoireToChapter(relation, memoire, chapter));
-  });
+function formatChapterNums(chapitres: ChapitreTome1[], max = 4): string {
+  if (chapitres.length === 0) return "—";
+  const nums = chapitres
+    .slice(0, max)
+    .map((ch) => `Ch. ${chapterNumber(ch)}`)
+    .join(", ");
+  return chapitres.length > max ? `${nums}…` : nums;
 }
 
-function getUntreatedMemoires(memoires: MemoireNarrative[]) {
-  return memoires.filter((memoire) => memoire.statut === "non-traite" || memoire.statut === "a-integrer");
-}
+// ── Helpers continuité ───────────────────────────────────────────
 
-function averageIntensity(memoires: MemoireNarrative[]) {
-  const values = memoires.map((memoire) => memoire.intensite || 0).filter(Boolean);
-  if (!values.length) return 0;
-  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1));
-}
-
-function getMainMotifs(chapter: ChapitreTome1, memoires: MemoireNarrative[], fragments: Fragment[]) {
-  const motifs = [
-    ...(chapter.imageCentrale || "").split(/[,\s]+/),
-    ...memoires.flatMap((memoire) => memoire.motifs || []),
-    ...fragments.filter((fragment) => fragment.chapitreId === chapter.id || String(fragment.chapitre || "") === String(chapterNumber(chapter))).flatMap((fragment) => fragment.tags || []),
-  ]
-    .map((motif) => motif.trim().toLowerCase())
-    .filter((motif) => motif.length > 3);
-
-  return Array.from(new Set(motifs)).slice(0, 5);
+function formatDaysSince(value: string): string {
+  if (!value) return "première session";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "première session";
+  const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+  if (days === 0) return "aujourd'hui";
+  if (days === 1) return "hier";
+  return `il y a ${days} jours`;
 }
 
 function continuityChapterNumber(continuity: StrateContinuity | null) {
@@ -119,7 +116,74 @@ function continuityChapterNumber(continuity: StrateContinuity | null) {
   return match ? Number(match[0]) : null;
 }
 
-function chooseRecommendedChapter(data: MissionData) {
+// ── Helpers mémoires ─────────────────────────────────────────────
+
+function chapterRelationIds(chapter: ChapitreTome1) {
+  const numero = chapterNumber(chapter);
+  const canonical = createChapitreId(1, numero);
+  return new Set([
+    chapter.id,
+    canonical,
+    `chapter:${canonical}`,
+    `chapitre:${chapter.id}`,
+    `chapitre-${numero}`,
+  ]);
+}
+
+function memoireRelationIds(memoire: MemoireNarrative) {
+  return new Set([memoire.id, `memoire:${memoire.id}`]);
+}
+
+function relationLinksMemoireToChapter(
+  relation: NarrativeRelation,
+  memoire: MemoireNarrative,
+  chapter: ChapitreTome1,
+) {
+  const memoireIds = memoireRelationIds(memoire);
+  const chapterIds = chapterRelationIds(chapter);
+  return (
+    (memoireIds.has(relation.sourceId) && chapterIds.has(relation.targetId)) ||
+    (memoireIds.has(relation.targetId) && chapterIds.has(relation.sourceId))
+  );
+}
+
+function getLinkedMemoires(
+  chapter: ChapitreTome1,
+  memoires: MemoireNarrative[],
+  relations: NarrativeRelation[],
+) {
+  const numero = chapterNumber(chapter);
+  return memoires.filter((memoire) => {
+    if (memoire.statut === "archive") return false;
+    if (memoire.tomeProbable === 1 && memoire.chapitreProbable === numero) return true;
+    return relations.some((relation) =>
+      relationLinksMemoireToChapter(relation, memoire, chapter),
+    );
+  });
+}
+
+function getUntreatedMemoires(memoires: MemoireNarrative[]) {
+  return memoires.filter(
+    (memoire) => memoire.statut === "non-traite" || memoire.statut === "a-integrer",
+  );
+}
+
+function getMemoireIcon(statut: string): string {
+  if (statut === "non-traite" || statut === "a-integrer") return "⚠";
+  if (statut === "integre") return "✓";
+  return "○";
+}
+
+function getMemoireStatutLabel(statut: string): string {
+  if (statut === "non-traite") return "non traité";
+  if (statut === "a-integrer") return "à intégrer";
+  if (statut === "integre") return "intégré";
+  return statut;
+}
+
+// ── Helpers recommandation ───────────────────────────────────────
+
+function chooseRecommendedChapter(data: CockpitData) {
   const sorted = [...data.chapters].sort((a, b) => chapterNumber(a) - chapterNumber(b));
   const continuityNumber = continuityChapterNumber(data.continuity);
   const continuityChapter = continuityNumber
@@ -139,27 +203,10 @@ function chooseRecommendedChapter(data: MissionData) {
     const linked = getLinkedMemoires(chapter, data.memoires, data.relations);
     const untreated = getUntreatedMemoires(linked);
     const orderBonus = Math.max(0, 32 - chapterNumber(chapter)) / 10;
-
-    return {
-      chapter,
-      score: untreated.length * 2 + linked.length + orderBonus,
-    };
+    return { chapter, score: untreated.length * 2 + linked.length + orderBonus };
   });
 
   return scored.sort((a, b) => b.score - a.score)[0]?.chapter || sorted[0];
-}
-
-function getStatusLabel(chapter: ChapitreTome1) {
-  if (isWritten(chapter)) return "écrit";
-  if (chapter.statut === "scellé") return "scellé";
-  return "à écrire";
-}
-
-function getDangerLabel(chapter: ChapitreTome1) {
-  if (chapter.niveauLourdeur === "extreme") return "très élevé";
-  if (chapter.niveauLourdeur === "lourd") return "élevé";
-  if (chapter.typeChapitre === "respiration") return "respiration";
-  return chapter.niveauLourdeur || chapter.typeChapitre || "à préciser";
 }
 
 function getActionRecommendation({
@@ -171,14 +218,22 @@ function getActionRecommendation({
   directorAlert: string;
   untreatedCount: number;
 }) {
-  if (directorAlert.includes("respiration") || directorAlert.includes("séquence trop lourde")) return "ajouter une respiration";
+  if (
+    directorAlert.includes("respiration") ||
+    directorAlert.includes("séquence trop lourde")
+  )
+    return "ajouter une respiration";
   if (untreatedCount > 0) return "sélectionner les mémoires utiles";
   if (!isWritten(chapter)) return "commencer par 300 mots";
   return "relire le chapitre précédent";
 }
 
+// ── Composant principal ──────────────────────────────────────────
+
 export default function MissionManuscritPage() {
-  const [data, setData] = useState<MissionData | null>(null);
+  const [data, setData] = useState<CockpitData | null>(null);
+  const [auditsOpen, setAuditsOpen] = useState(false);
+  const [risqueOpen, setRisqueOpen] = useState(false);
 
   useEffect(() => {
     setData({
@@ -187,190 +242,476 @@ export default function MissionManuscritPage() {
       fragments: lireFragments(),
       memoires: lireMemoiresNarratives(),
       relations: lireNarrativeRelationsAvecAutomatiques(),
-      scenes: lireScenesRelationnelles(),
     });
   }, []);
 
-  const mission = useMemo(() => {
+  const cockpit = useMemo(() => {
     if (!data) return null;
 
     const chapter = chooseRecommendedChapter(data);
     const linkedMemoires = getLinkedMemoires(chapter, data.memoires, data.relations);
     const untreatedMemoires = getUntreatedMemoires(linkedMemoires);
-    const motifs = getMainMotifs(chapter, linkedMemoires, data.fragments);
     const director = genererDiagnosticEditorial(data.chapters, data.fragments);
-    const stats = getChapterNarrativeStats({
-      chapitre: chapterNumber(chapter),
-      fragments: data.fragments,
-      scenes: data.scenes,
-      tomeId: 1,
+    const directorAlert =
+      director.signaux.find((s) => s.tone === "warning")?.message || "équilibre lisible";
+    const action = getActionRecommendation({
+      chapter,
+      directorAlert,
+      untreatedCount: untreatedMemoires.length,
     });
-    const directorAlert = director.signaux.find((signal) => signal.tone === "warning")?.message || "équilibre lisible";
+
+    const resumeChapter = data.continuity?.lastChapterId
+      ? (data.chapters.find((ch) => ch.id === data.continuity?.lastChapterId) ?? chapter)
+      : chapter;
+
+    const priorityMemoires =
+      untreatedMemoires.length > 0
+        ? untreatedMemoires.slice(0, 3)
+        : linkedMemoires.slice(0, 3);
+
+    const chapitresEcrits = getChapitresTome1Ecrits(data.chapters);
+    const totalMots = getTotalMots(chapitresEcrits);
+    const chapitresStatuts = getChapitresParStatut(data.chapters);
 
     return {
-      action: getActionRecommendation({ chapter, directorAlert, untreatedCount: untreatedMemoires.length }),
+      action,
       chapter,
+      chapitresEcrits: chapitresEcrits.length,
+      chapitresStatuts,
+      chapitresTotal: data.chapters.length,
       director,
       directorAlert,
       linkedMemoires,
-      motifs: motifs.length ? motifs : stats.motifs,
-      stats,
+      priorityMemoires,
+      resumeChapter,
+      totalMots,
       untreatedMemoires,
+      writingUpdatedAt: data.continuity?.writingUpdatedAt || "",
     };
   }, [data]);
 
-  if (!mission) {
+  // ── État de chargement ─────────────────────────────────────────
+
+  if (!cockpit) {
     return (
       <main className="internal-page">
         <SystemPageShell maxWidth={980}>
           <header className="internal-header">
-            <BackLink label="Système" />
-            <p className="internal-kicker">Manuscrit</p>
-          <h1 className="internal-title">Mission manuscrit</h1>
-          <p className="internal-subtitle">Chargement local de la prochaine reprise.</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-            <Link className="internal-button" href="/guide-strate">
-              Besoin d’aide ?
-            </Link>
-          </div>
-        </header>
+            <BackLink label="Centre" href="/centre-de-controle" />
+            <p className="internal-kicker">Écriture</p>
+            <h1 className="internal-title">Cockpit Écriture</h1>
+            <p className="internal-subtitle">Chargement en cours…</p>
+          </header>
         </SystemPageShell>
       </main>
     );
   }
 
-  const { chapter, director, linkedMemoires, motifs, stats, untreatedMemoires } = mission;
+  const {
+    action,
+    chapter,
+    chapitresEcrits,
+    chapitresStatuts,
+    chapitresTotal,
+    director,
+    directorAlert,
+    linkedMemoires,
+    priorityMemoires,
+    resumeChapter,
+    totalMots,
+    untreatedMemoires,
+    writingUpdatedAt,
+  } = cockpit;
+
   const chapterNo = chapterNumber(chapter);
-  const mainMemoires = untreatedMemoires.length ? untreatedMemoires.slice(0, 5) : linkedMemoires.slice(0, 5);
+  const resumeChapterNo = chapterNumber(resumeChapter);
+  const progressPct =
+    chapitresTotal > 0 ? Math.round((chapitresEcrits / chapitresTotal) * 100) : 0;
 
   return (
     <main className="internal-page">
       <SystemPageShell maxWidth={1040}>
-        <header className="internal-header">
+
+        {/* Header ────────────────────────────────────────────── */}
+        <header className="internal-header" style={{ marginBottom: 8 }}>
           <BackLink label="Centre" href="/centre-de-controle" />
-          <p className="internal-kicker">Mission manuscrit</p>
-          <h1 className="internal-title">Qu’est-ce que j’écris maintenant ?</h1>
-          <p className="internal-subtitle">
-            Une seule décision principale, calculée localement à partir du Tome 1, des mémoires et du directeur éditorial.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-            <Link className="internal-button" href="/guide-strate">
-              Besoin d’aide ?
-            </Link>
-          </div>
+          <p className="internal-kicker">Écriture</p>
+          <h1 className="internal-title">Cockpit Écriture</h1>
         </header>
 
-        <SystemPanel ariaLabel="Chapitre actif recommandé">
-          <SystemSectionHeader eyebrow="Décision principale" title="Chapitre actif recommandé" />
-          <SystemGrid gap={12} min={220}>
-            <StateTile label="Chapitre" value={`Ch. ${chapterNo} · ${chapter.titre}`} />
-            <StateTile label="Âge" value={chapter.ageApprox || "À préciser"} />
-            <StateTile label="Statut" value={getStatusLabel(chapter)} />
-            <StateTile label="Intensité" value={String(chapter.intensite || "À préciser")} />
-          </SystemGrid>
-          <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-            <p className="editorial-body" style={{ margin: 0 }}>
-              <strong style={{ color: "#f1e7d5" }}>Fonction narrative :</strong>{" "}
-              {chapter.fonctionNarrative || "À préciser"}
-            </p>
-            <p className="editorial-body" style={{ margin: 0 }}>
-              <strong style={{ color: "#f1e7d5" }}>Danger :</strong> {getDangerLabel(chapter)}
-            </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {(motifs.length ? motifs : ["motifs à préciser"]).map((motif) => (
-                <StatusChip key={motif}>{motif}</StatusChip>
+        {/* BLOC 1 — REPRENDRE ─────────────────────────────────── */}
+        <SystemPanel ariaLabel="Reprendre l'écriture">
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 16,
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <p
+                style={{
+                  color: "#9c8d73",
+                  fontSize: 11,
+                  letterSpacing: "0.18em",
+                  margin: "0 0 6px",
+                  textTransform: "uppercase",
+                }}
+              >
+                ↩ Reprendre
+              </p>
+              <p
+                style={{
+                  color: "#f1e7d5",
+                  fontSize: 17,
+                  fontWeight: 650,
+                  margin: "0 0 4px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Ch. {resumeChapterNo} · {resumeChapter.titre}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 13, margin: 0 }}>
+                {formatDaysSince(writingUpdatedAt)}
+                {resumeChapter.contenu.trim()
+                  ? ` · ${compterMotsChapitreTome1(resumeChapter).toLocaleString("fr-CA")} mots`
+                  : " · aucun texte pour l'instant"}
+              </p>
+            </div>
+            <Link
+              className="internal-button-primary"
+              href="/ecrire-maintenant"
+              style={{ flexShrink: 0, fontSize: 14, padding: "10px 22px" }}
+            >
+              ▶ Reprendre l'écriture
+            </Link>
+          </div>
+        </SystemPanel>
+
+        {/* BLOC 2 — AUJOURD'HUI ───────────────────────────────── */}
+        <SystemPanel ariaLabel="Aujourd'hui">
+          <SystemSectionHeader eyebrow="Aujourd'hui" title={`Ch. ${chapterNo} · ${chapter.titre}`} />
+          <p className="editorial-body" style={{ fontSize: 13, margin: "0 0 12px" }}>
+            {getStatusLabel(chapter)}
+            {chapter.intensite ? ` · intensité ${chapter.intensite}` : ""}
+            {chapter.ageApprox ? ` · ${chapter.ageApprox}` : ""}
+          </p>
+          <p
+            style={{
+              color: "#f1e7d5",
+              fontSize: 15,
+              fontWeight: 600,
+              margin: "0 0 4px",
+            }}
+          >
+            → {action}
+          </p>
+          <p className="editorial-body" style={{ fontSize: 13, margin: "0 0 16px" }}>
+            Garde la décision petite : une scène, un choix de mémoires, ou 300 mots.
+          </p>
+          <button
+            onClick={() => setRisqueOpen((v) => !v)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#9c8d73",
+              cursor: "pointer",
+              fontSize: 11,
+              letterSpacing: "0.14em",
+              padding: 0,
+              textAlign: "left",
+              textTransform: "uppercase",
+            }}
+            type="button"
+          >
+            ⚠ {directorAlert} {risqueOpen ? "▴" : "▾"}
+          </button>
+          {risqueOpen && (
+            <div
+              style={{
+                borderTop: "1px solid rgba(214,178,94,0.1)",
+                display: "grid",
+                gap: 6,
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                marginTop: 12,
+                paddingTop: 12,
+              }}
+            >
+              <p className="editorial-body" style={{ fontSize: 12, margin: 0 }}>
+                Saturation : {director.courbeTension}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 12, margin: 0 }}>
+                Respiration : {director.evaluation360.respiration}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 12, margin: 0 }}>
+                Motif :{" "}
+                {director.motifsSurutilises[0]
+                  ? `${director.motifsSurutilises[0].motif} (${director.motifsSurutilises[0].count})`
+                  : "—"}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 12, margin: 0 }}>
+                Risque lecteur : {director.risqueLecteur}
+              </p>
+            </div>
+          )}
+        </SystemPanel>
+
+        {/* BLOC 3 — MÉMOIRES À INTÉGRER ──────────────────────── */}
+        <SystemPanel ariaLabel="Mémoires à intégrer">
+          <SystemSectionHeader title="Mémoires à intégrer" />
+          {priorityMemoires.length > 0 ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              {priorityMemoires.map((memoire) => (
+                <div
+                  key={memoire.id}
+                  style={{
+                    alignItems: "baseline",
+                    borderBottom: "1px solid rgba(214,178,94,0.08)",
+                    display: "flex",
+                    gap: 10,
+                    justifyContent: "space-between",
+                    paddingBottom: 10,
+                  }}
+                >
+                  <div
+                    style={{ alignItems: "baseline", display: "flex", gap: 8, minWidth: 0 }}
+                  >
+                    <span
+                      style={{
+                        color:
+                          memoire.statut === "integre" ? "#b8caa8" : "#d6b25e",
+                        flexShrink: 0,
+                        fontSize: 13,
+                      }}
+                    >
+                      {getMemoireIcon(memoire.statut)}
+                    </span>
+                    <span
+                      style={{
+                        color: "#f1e7d5",
+                        fontSize: 14,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {memoire.titre}
+                    </span>
+                  </div>
+                  <span
+                    className="editorial-body"
+                    style={{ flexShrink: 0, fontSize: 12 }}
+                  >
+                    intensité {memoire.intensite || "n/r"} · {getMemoireStatutLabel(memoire.statut)}
+                  </span>
+                </div>
               ))}
+            </div>
+          ) : (
+            <p className="editorial-body" style={{ margin: 0 }}>
+              Aucune mémoire liée à ce chapitre pour l'instant.
+            </p>
+          )}
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: 14,
+            }}
+          >
+            <p className="editorial-body" style={{ fontSize: 12, margin: 0 }}>
+              {untreatedMemoires.length > 0
+                ? `${untreatedMemoires.length} non traité${untreatedMemoires.length > 1 ? "es" : ""} sur ${linkedMemoires.length} liée${linkedMemoires.length > 1 ? "s" : ""}`
+                : linkedMemoires.length > 0
+                  ? `${linkedMemoires.length} mémoire${linkedMemoires.length > 1 ? "s" : ""} liée${linkedMemoires.length > 1 ? "s" : ""}`
+                  : "Aucune mémoire reliée"}
+            </p>
+            <Link className="internal-button" href="/memoires" style={{ fontSize: 12 }}>
+              Toutes les mémoires →
+            </Link>
+          </div>
+        </SystemPanel>
+
+        {/* BLOC 4 — ÉTAT DU MANUSCRIT ─────────────────────────── */}
+        <SystemPanel ariaLabel="État du manuscrit">
+          <SystemSectionHeader title="État du manuscrit" />
+
+          {/* Barre de progression */}
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              gap: 14,
+              marginBottom: 18,
+            }}
+          >
+            <div
+              style={{
+                background: "rgba(255,255,255,0.07)",
+                borderRadius: 3,
+                flex: 1,
+                height: 6,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  background: "rgba(214,178,94,0.65)",
+                  borderRadius: 3,
+                  height: "100%",
+                  transition: "width 0.4s ease",
+                  width: `${progressPct}%`,
+                }}
+              />
+            </div>
+            <span
+              style={{ color: "#d7cab0", flexShrink: 0, fontSize: 13 }}
+            >
+              {chapitresEcrits} / {chapitresTotal} chapitres · {totalMots.toLocaleString("fr-CA")} mots
+            </span>
+          </div>
+
+          {/* 3 colonnes statuts */}
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(3, 1fr)",
+            }}
+          >
+            <div
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 10,
+                padding: "12px 14px",
+              }}
+            >
+              <p
+                style={{
+                  color: "#9c8d73",
+                  fontSize: 10,
+                  letterSpacing: "0.18em",
+                  margin: "0 0 6px",
+                  textTransform: "uppercase",
+                }}
+              >
+                À écrire
+              </p>
+              <p
+                style={{
+                  color: "#f1e7d5",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  margin: "0 0 6px",
+                }}
+              >
+                {chapitresStatuts.aEcrire.length}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 11, margin: 0 }}>
+                {formatChapterNums(chapitresStatuts.aEcrire)}
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 10,
+                padding: "12px 14px",
+              }}
+            >
+              <p
+                style={{
+                  color: "#9c8d73",
+                  fontSize: 10,
+                  letterSpacing: "0.18em",
+                  margin: "0 0 6px",
+                  textTransform: "uppercase",
+                }}
+              >
+                En cours
+              </p>
+              <p
+                style={{
+                  color: "#f1e7d5",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  margin: "0 0 6px",
+                }}
+              >
+                {chapitresStatuts.enCours.length}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 11, margin: 0 }}>
+                {formatChapterNums(chapitresStatuts.enCours)}
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 10,
+                padding: "12px 14px",
+              }}
+            >
+              <p
+                style={{
+                  color: "#9c8d73",
+                  fontSize: 10,
+                  letterSpacing: "0.18em",
+                  margin: "0 0 6px",
+                  textTransform: "uppercase",
+                }}
+              >
+                Terminé
+              </p>
+              <p
+                style={{
+                  color: "#b8caa8",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  margin: "0 0 6px",
+                }}
+              >
+                {chapitresStatuts.termines.length}
+              </p>
+              <p className="editorial-body" style={{ fontSize: 11, margin: 0 }}>
+                {formatChapterNums(chapitresStatuts.termines)}
+              </p>
             </div>
           </div>
         </SystemPanel>
 
-        <SystemGrid gap={14} min={280}>
-          <SystemPanel ariaLabel="Pourquoi ce chapitre" compact>
-            <SystemSectionHeader title="Pourquoi ce chapitre ?" />
-            <ul className="editorial-body" style={{ display: "grid", gap: 8, margin: 0, paddingLeft: 18 }}>
-              {!isWritten(chapter) && <li>Il reste à écrire ou à stabiliser.</li>}
-              <li>Il arrive naturellement dans l’ordre du Tome 1.</li>
-              {untreatedMemoires.length > 0 && <li>Il est lié à des mémoires non traitées.</li>}
-              {data?.continuity?.lastPage && <li>Il reste cohérent avec la continuité récente.</li>}
-            </ul>
-          </SystemPanel>
+        {/* BLOC 5 — ACCÈS RAPIDE ──────────────────────────────── */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingBottom: 24 }}>
+          <Link className="internal-button" href="/manuscrit">Manuscrit</Link>
+          <Link className="internal-button" href="/structure-tome-1">Structure</Link>
+          <Link className="internal-button" href="/memoires">Mémoires</Link>
+          <button
+            className="internal-button"
+            onClick={() => setAuditsOpen((v) => !v)}
+            type="button"
+          >
+            Audits {auditsOpen ? "▴" : "▾"}
+          </button>
+          {auditsOpen && (
+            <>
+              <Link className="internal-button" href="/pipeline-editorial">Pipeline</Link>
+              <Link className="internal-button" href="/audit-vibration">Vibration</Link>
+              <Link className="internal-button" href="/audit-voix">Voix</Link>
+              <Link className="internal-button" href="/audit-linguistique">Linguistique</Link>
+              <Link className="internal-button" href="/repetitions">Répétitions</Link>
+              <Link className="internal-button" href="/audit-anti-ia">Anti-IA</Link>
+            </>
+          )}
+        </div>
 
-          <SystemPanel ariaLabel="Action recommandée" compact>
-            <SystemSectionHeader title="Action recommandée" />
-            <p className="editorial-title" style={{ fontSize: "1.08rem", margin: 0 }}>
-              → {mission.action}
-            </p>
-            <p className="editorial-body" style={{ margin: "10px 0 0" }}>
-              Garde la décision petite : une scène, un choix de mémoires, ou 300 mots.
-            </p>
-          </SystemPanel>
-        </SystemGrid>
-
-        <SystemPanel ariaLabel="Mémoires disponibles">
-          <SystemSectionHeader title="Mémoires disponibles" />
-          <SystemGrid gap={10} min={190}>
-            <StateTile label="Total lié" value={String(linkedMemoires.length)} />
-            <StateTile label="Non traitées" value={String(untreatedMemoires.length)} />
-            <StateTile label="Intensité moyenne" value={averageIntensity(linkedMemoires) ? String(averageIntensity(linkedMemoires)) : "Non renseignée"} />
-            <StateTile label="Relations narratives" value={`${stats.fragmentCount} fragments · ${stats.sceneCount} scènes`} />
-          </SystemGrid>
-          <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-            {mainMemoires.length > 0 ? (
-              mainMemoires.map((memoire) => (
-                <article
-                  key={memoire.id}
-                  style={{
-                    background: "rgba(255, 250, 238, 0.035)",
-                    border: "1px solid rgba(201, 168, 92, 0.12)",
-                    borderRadius: 10,
-                    padding: "10px 12px",
-                  }}
-                >
-                  <p style={{ color: "#f1e7d5", fontSize: 14, fontWeight: 650, margin: "0 0 4px" }}>{memoire.titre}</p>
-                  <p className="editorial-body" style={{ fontSize: 12.5, margin: 0 }}>
-                    {memoire.periode} · {memoire.statut} · intensité {memoire.intensite || "n/r"}
-                  </p>
-                </article>
-              ))
-            ) : (
-              <p className="editorial-body" style={{ margin: 0 }}>Aucune mémoire liée à afficher pour l’instant.</p>
-            )}
-          </div>
-        </SystemPanel>
-
-        <SystemPanel ariaLabel="Risque éditorial">
-          <SystemSectionHeader title="Risque éditorial" />
-          <SystemGrid gap={10} min={190}>
-            <StateTile label="Saturation" value={director.courbeTension} />
-            <StateTile label="Respiration" value={director.evaluation360.respiration} />
-            <StateTile label="Motifs" value={director.motifsSurutilises[0] ? `${director.motifsSurutilises[0].motif} (${director.motifsSurutilises[0].count})` : "À préciser"} />
-            <StateTile label="Risque lecteur" value={director.risqueLecteur} />
-          </SystemGrid>
-          <p className="editorial-body" style={{ margin: "12px 0 0" }}>
-            <strong style={{ color: "#f1e7d5" }}>Alerte principale :</strong> {mission.directorAlert}
-          </p>
-        </SystemPanel>
-
-        <SystemPanel ariaLabel="Actions rapides" compact>
-          <SystemSectionHeader title="Ouvrir le bon endroit" />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <Link className="internal-button-primary" href="/ecrire-maintenant">
-              Continuer l’écriture
-            </Link>
-            <Link className="internal-button" href="/manuscrit">
-              Ouvrir dans Manuscrit
-            </Link>
-            <Link className="internal-button" href="/structure-tome-1">
-              Voir dans Structure
-            </Link>
-            <Link className="internal-button" href="/memoires">
-              Voir Mémoires liées
-            </Link>
-            <Link className="internal-button" href="/centre-de-controle">
-              Retour Centre
-            </Link>
-          </div>
-        </SystemPanel>
       </SystemPageShell>
     </main>
   );
