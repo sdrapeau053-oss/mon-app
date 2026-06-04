@@ -267,8 +267,9 @@ function formaterDate(iso: string): string {
 
 function calculerPrevision(prospects: Prospect[]): number {
   return prospects.reduce((total, p) => {
-    if (p.statut === "devis_envoye") return total + p.montant;
-    if (p.statut === "en_discussion") return total + Math.round(p.montant * 0.4);
+    const valeur = p.valeur_estimee || p.montant || 0;
+    if (p.statut === "devis_envoye") return total + valeur;
+    if (p.statut === "en_discussion") return total + Math.round(valeur * 0.4);
     return total;
   }, 0);
 }
@@ -1100,7 +1101,7 @@ function CRMPanel({ prospects, onUpdate, propositions, onUpdatePropositions }: {
                   <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, flex: 1 }}>
                     <span style={{ color: "var(--text-muted)", fontSize: 10, flexShrink: 0 }}>{isExpanded ? "▾" : "▸"}</span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nom}</span>
-                    {p.montant > 0 ? <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>{p.montant} $</span> : null}
+                    {(p.valeur_estimee || p.montant) > 0 ? <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>{p.valeur_estimee || p.montant} $</span> : null}
                     {pot ? <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 99, background: pot.color + "22", color: pot.color, flexShrink: 0 }}>{pot.label}</span> : null}
                     {interet ? <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 99, background: interet.color + "22", color: interet.color, flexShrink: 0 }}>{interet.label}</span> : null}
                     {p.prochaine_action !== undefined && p.prochaine_action !== "" ? (
