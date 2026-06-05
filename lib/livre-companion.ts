@@ -118,8 +118,7 @@ export const MANUAL_VARIANTS: Record<string, string[]> = {
 };
 
 const PERSONNAGES_CONNUS = [
-  "père", "mère", "sœur", "frère", "oncle",
-  "grand-mère", "grand-père",
+  "père", "mère", "soeur", "frère", "oncle",
 ];
 
 // ── Utilitaires texte ─────────────────────────────────────────────
@@ -385,9 +384,7 @@ export function detecterSouvenirOrphelins(
     .filter(
       (m) =>
         m.statut !== "archive" &&
-        m.statut !== "integre" &&
-        !m.tomeProbable &&
-        !m.chapitreProbable,
+        m.statut !== "integre",
     )
     .map((m) => ({
       id: m.id,

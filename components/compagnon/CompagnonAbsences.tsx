@@ -32,6 +32,13 @@ export function CompagnonAbsences({ data }: { data: CompagnonData }) {
   const orphelinsVis = showAll ? orphelins : orphelins.slice(0, 6);
 
   // Conseiller narratif : fusionne absences + actions diagnostics
+  type Conseil = {
+    label: string;
+    detail: string;
+    certitude: "élevée" | "moyenne" | "faible";
+    impact: "élevé" | "moyen" | "faible";
+  };
+
   const conseils = [
     diagnostic.evaluation360.respiration !== "présente" && {
       label: "Ajouter des moments de respiration",
@@ -52,12 +59,12 @@ export function CompagnonAbsences({ data }: { data: CompagnonData }) {
       impact: "moyen" as const,
     },
     orphelins.length > 5 && {
-      label: `${orphelins.length} mémoires sans chapitre assigné`,
+      label: `${orphelins.length} mémoires non intégrées`,
       detail: "Matière narrative non mobilisée — potentiel non exploité",
       certitude: "élevée" as const,
       impact: "élevé" as const,
     },
-  ].filter(Boolean);
+  ].filter(Boolean) as Conseil[];
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
