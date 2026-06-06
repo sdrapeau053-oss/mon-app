@@ -54,8 +54,8 @@ body {
 
 .internal-header {
   border-bottom: 1px solid rgba(201, 168, 92, 0.16);
-  margin-bottom: 18px;
-  padding-bottom: 14px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
 }
 
 .internal-kicker {
@@ -63,7 +63,7 @@ body {
   font-size: 9.5px;
   font-weight: 650;
   letter-spacing: 0.2em;
-  margin: 14px 0 5px;
+  margin: 8px 0 4px;
   text-transform: uppercase;
 }
 
@@ -292,7 +292,7 @@ body {
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 14px;
 }
 
 .chapter-card {

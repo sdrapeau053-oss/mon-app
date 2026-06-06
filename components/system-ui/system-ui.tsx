@@ -74,7 +74,7 @@ export function SystemPageShell({
   as = "main",
   children,
   maxWidth = 1180,
-  padding = "32px 24px 56px",
+  padding = "22px 20px 36px",
 }: {
   as?: "main" | "section";
   children: ReactNode;
@@ -102,7 +102,7 @@ export function SystemPanel({
       aria-label={ariaLabel}
       className="panel"
       style={{
-        marginBottom: 22,
+        marginBottom: 14,
         ...(compact ? { padding: 14 } : {}),
         ...style,
       }}
@@ -141,8 +141,8 @@ export function SystemSectionHeader({
     <div
       style={{
         display: "grid",
-        gap: 10,
-        marginBottom: 10,
+        gap: 8,
+        marginBottom: 8,
       }}
     >
       <div>
@@ -238,7 +238,7 @@ export function SystemInlineField({
 
 export function SystemActionRow({ children }: { children: ReactNode }) {
   return (
-    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 12, marginTop: 12 }}>
+    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
       {children}
     </div>
   );

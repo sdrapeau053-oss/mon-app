@@ -132,7 +132,7 @@ export default function GlobalNavigation() {
 
           return (
             <details
-              className={`group/nav flex-none rounded-2xl border transition ${
+              className={`group/nav relative flex-none rounded-2xl border transition ${
                 groupActive
                   ? "border-[#C9A84C]/38 bg-[#15120e]/88"
                   : "border-[#d6b25e]/10 bg-[#11100d]/58 hover:border-[#d6b25e]/20"
@@ -155,7 +155,7 @@ export default function GlobalNavigation() {
                 <span className="text-[12px] leading-none text-[#C9A84C]/70 transition group-open/nav:rotate-45">+</span>
               </summary>
 
-              <div className="hidden w-[min(82vw,320px)] grid-cols-2 gap-1.5 px-2 pb-2 group-open/nav:grid sm:w-auto sm:min-w-[190px] sm:grid-cols-1 lg:min-w-[210px]">
+              <div className="hidden w-[min(82vw,320px)] grid-cols-2 gap-1.5 px-2 pb-1.5 group-open/nav:grid sm:absolute sm:left-0 sm:top-full sm:z-50 sm:mt-0.5 sm:w-auto sm:min-w-[190px] sm:grid-cols-1 sm:rounded-b-xl sm:border sm:border-t-0 sm:border-[#d6b25e]/14 sm:bg-[#0a0907]/96 sm:pb-2 sm:pt-1 sm:backdrop-blur lg:min-w-[210px]">
                 {group.items.map((item) => {
                   const itemKey = getItemKey(group, item);
                   const active = activeItemKey === itemKey;
