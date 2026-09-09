@@ -8,21 +8,15 @@ import {
   SystemPanel,
 } from "@/components/system-ui";
 import { BackLink } from "@/components/ui/back-link";
-
-interface RelationDossier {
-  id: string;
-  nom: string;
-  statut: string;
-  dateCreation: string;
-  typeRelation?: string;
-  derniereInteraction?: string;
-  notes?: string;
-  tags?: string[];
-  energieEmotionnelle?: number;
-  niveauClarte?: number;
-  niveauReciprocite?: number;
-  niveauSecurite?: number;
-}
+import { readRelationDossiers, type RelationDossier as CanonicalRelationDossier } from "@/lib/autre-rive";
+import { DossierMigrationPanel } from "./[id]/dossier-migration-panel";
+import {
+  buildCanonicalIndex,
+  buildDossierDisplayIdentity,
+  readLegacyDossierList,
+  updateLegacyDossierList,
+  type LegacyDossierListItem,
+} from "./dossier-list-view";
 
 type DossierDraft = {
   id?: string;
@@ -38,8 +32,6 @@ type DossierErrors = {
 };
 
 type DossierSort = "date" | "nom" | "completion";
-
-const STORAGE_KEY = "autre-rive-dossiers";
 
 const statutOptions = ["Rencontre", "Dating", "Relation", "Rupture", "Famille", "Coparentalité", "Autre"];
 const typeRelationOptions = ["Romantique", "Familiale", "Amicale", "Professionnelle", "Coparentalite", "Autre"];
@@ -103,6 +95,23 @@ const compactStatusBadgeStyle = {
   padding: "4px 7px",
 } as const;
 
+// Phase 4 d'IMP-001 : badge purement informatif indiquant qu'un dossier vit
+// encore sous l'ancienne structure (SR-D-001, Décision 4). La Phase 8bis.4a
+// branche désormais un véritable mécanisme de confirmation (réutilisation
+// de DossierMigrationPanel, construit en Phase 4bis) derrière le bouton
+// "Confirmer" de chaque carte — ce badge reste néanmoins purement
+// informatif : il ne change ni la création, ni l'édition, ni la
+// suppression, qui continuent d'opérer sur la structure legacy.
+const migrationPendingBadgeStyle = {
+  border: "1px solid rgba(201, 168, 92, 0.4)",
+  borderRadius: 999,
+  color: "var(--accent-gold)",
+  flex: "0 0 auto",
+  fontSize: 10.5,
+  lineHeight: 1.1,
+  padding: "4px 7px",
+} as const;
+
 const dashboardFieldStyle = {
   display: "grid",
   gap: 4,
@@ -154,40 +163,7 @@ function createId() {
   return `relation-${Date.now()}`;
 }
 
-function isRelationDossier(value: unknown): value is RelationDossier {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Partial<RelationDossier>;
-  return typeof item.id === "string" && typeof item.nom === "string" && typeof item.statut === "string" && typeof item.dateCreation === "string";
-}
-
-function readDossiers(): RelationDossier[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    const data: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(data) ? data.filter(isRelationDossier) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDossiers(dossiers: RelationDossier[]) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dossiers));
-  } catch {
-    return;
-  }
-}
-
-function updateStoredDossiers(updater: (current: RelationDossier[]) => RelationDossier[]) {
-  const current = readDossiers();
-  const next = updater(current);
-  saveDossiers(next);
-  return next;
-}
-
-function calculateCompletion(dossier: RelationDossier) {
+function calculateCompletion(dossier: LegacyDossierListItem) {
   let score = 0;
   if (dossier.nom.trim()) score += 20;
   if (dossier.statut.trim()) score += 20;
@@ -204,17 +180,31 @@ function completionColor(score: number) {
 }
 
 export default function RelationDossiersPage() {
-  const [dossiers, setDossiers] = useState<RelationDossier[]>([]);
+  const [dossiers, setDossiers] = useState<LegacyDossierListItem[]>([]);
   const [draft, setDraft] = useState<DossierDraft>(emptyDraft);
   const [formOpen, setFormOpen] = useState(false);
   const [errors, setErrors] = useState<DossierErrors>({});
-  const [deleteTarget, setDeleteTarget] = useState<RelationDossier | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LegacyDossierListItem | null>(null);
   const [statusFilter, setStatusFilter] = useState("Tous");
   const [sortBy, setSortBy] = useState<DossierSort>("date");
   const [successMessage, setSuccessMessage] = useState("");
+  // Dossiers déjà confirmés/migrés vers la structure canonique (SR-D-001,
+  // Décision 4). Lecture seule ici : la seule façon d'en ajouter un est la
+  // confirmation explicite via DossierMigrationPanel plus bas (mécanisme
+  // construit en Phase 4bis d'IMP-001) — ce composant n'est ni modifié ni
+  // dupliqué par la Phase 8bis.4a.
+  const [canonicalDossiers, setCanonicalDossiers] = useState<CanonicalRelationDossier[]>([]);
+  const [confirmingDossier, setConfirmingDossier] = useState<LegacyDossierListItem | null>(null);
+
+  const canonicalById = useMemo(() => buildCanonicalIndex(canonicalDossiers), [canonicalDossiers]);
+
+  function refreshCanonicalDossiers() {
+    setCanonicalDossiers(readRelationDossiers());
+  }
 
   useEffect(() => {
-    setDossiers(readDossiers());
+    setDossiers(readLegacyDossierList());
+    refreshCanonicalDossiers();
   }, []);
 
   useEffect(() => {
@@ -249,8 +239,8 @@ export default function RelationDossiersPage() {
     };
   }, []);
 
-  function persist(updater: (current: RelationDossier[]) => RelationDossier[]) {
-    const next = updateStoredDossiers(updater);
+  function persist(updater: (current: LegacyDossierListItem[]) => LegacyDossierListItem[]) {
+    const next = updateLegacyDossierList(updater);
     setDossiers(next);
   }
 
@@ -260,7 +250,7 @@ export default function RelationDossiersPage() {
     setFormOpen(true);
   }
 
-  function openEditForm(dossier: RelationDossier) {
+  function openEditForm(dossier: LegacyDossierListItem) {
     setDraft({
       id: dossier.id,
       nom: dossier.nom,
@@ -306,7 +296,7 @@ export default function RelationDossiersPage() {
         ),
       );
     } else {
-      const dossier: RelationDossier = {
+      const dossier: LegacyDossierListItem = {
         id: createId(),
         nom,
         statut,
@@ -340,6 +330,13 @@ export default function RelationDossiersPage() {
           : dossier,
       ),
     );
+  }
+
+  function handleMigrated() {
+    refreshCanonicalDossiers();
+    setConfirmingDossier(null);
+    setSuccessMessage("Dossier confirmé avec succès.");
+    window.setTimeout(() => setSuccessMessage(""), 2000);
   }
 
   const displayedDossiers = useMemo(() => {
@@ -401,9 +398,14 @@ export default function RelationDossiersPage() {
             <h2 style={{ color: "var(--text-main)", fontSize: 16, lineHeight: 1.05, margin: 0 }}>
               Dossier central
             </h2>
-            <button className="internal-button-primary" onClick={openCreateForm} style={compactActionButtonStyle} type="button">
-              + Nouveau dossier
-            </button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <Link className="internal-button" href="/autre-rive/import" style={compactActionButtonStyle}>
+                Importer une conversation
+              </Link>
+              <button className="internal-button-primary" onClick={openCreateForm} style={compactActionButtonStyle} type="button">
+                + Nouveau dossier
+              </button>
+            </div>
           </div>
 
           {formOpen ? (
@@ -552,6 +554,8 @@ export default function RelationDossiersPage() {
                 ["Réciprocité", dossier.niveauReciprocite],
                 ["Sécurité", dossier.niveauSecurite],
               ] as const;
+              const canonicalDossier = canonicalById.get(dossier.id) ?? null;
+              const displayIdentity = buildDossierDisplayIdentity(dossier, canonicalDossier);
 
               return (
               <article className="chapter-card" key={dossier.id} style={{ display: "grid", gap: 6, marginBottom: 0, padding: "9px 10px 7px" }}>
@@ -569,18 +573,25 @@ export default function RelationDossiersPage() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {dossier.nom}
+                    {displayIdentity.nom}
                   </h2>
-                  <span style={compactStatusBadgeStyle}>{dossier.statut}</span>
+                  <div style={{ alignItems: "center", display: "flex", flex: "0 0 auto", gap: 4 }}>
+                    {!displayIdentity.isCanonical ? (
+                      <span style={migrationPendingBadgeStyle} title="Ce dossier utilise encore l'ancienne structure de données (SR-D-001, Décision 4) et n'a pas encore été confirmé.">
+                        À confirmer
+                      </span>
+                    ) : null}
+                    <span style={compactStatusBadgeStyle}>{displayIdentity.statut}</span>
+                  </div>
                 </div>
 
                 <p className="label-meta" style={{ lineHeight: 1.25, margin: 0 }}>
                   Créé le {formatDisplayDate(dossier.dateCreation)} · Dernière interaction : {derniereInteraction}
                 </p>
 
-                {dossier.typeRelation?.trim() ? (
+                {displayIdentity.typeRelation?.trim() ? (
                   <p className="label-meta" style={{ lineHeight: 1.2, margin: 0 }}>
-                    Type : {dossier.typeRelation}
+                    Type : {displayIdentity.typeRelation}
                   </p>
                 ) : null}
 
@@ -608,13 +619,18 @@ export default function RelationDossiersPage() {
                   ))}
                 </div>
 
-                <div style={{ alignItems: "center", display: "flex", gap: 6, marginTop: -1 }}>
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 6, marginTop: -1 }}>
                   <Link className="internal-button-primary" href={`/autre-rive/dossiers/${dossier.id}`} style={compactDossierButtonStyle}>
                     Voir
                   </Link>
                   <button className="internal-button" onClick={() => openEditForm(dossier)} style={compactDossierButtonStyle} type="button">
                     Modifier
                   </button>
+                  {!displayIdentity.isCanonical ? (
+                    <button className="internal-button" onClick={() => setConfirmingDossier(dossier)} style={compactDossierButtonStyle} type="button">
+                      Confirmer
+                    </button>
+                  ) : null}
                   <button className="internal-button" onClick={() => setDeleteTarget(dossier)} style={compactDossierButtonStyle} type="button">
                     Supprimer
                   </button>
@@ -674,6 +690,31 @@ export default function RelationDossiersPage() {
                   Annuler
                 </button>
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {confirmingDossier ? (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirmation de migration"
+            style={{
+              alignItems: "center",
+              background: "rgba(0,0,0,.62)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              padding: 20,
+              position: "fixed",
+              zIndex: 80,
+            }}
+          >
+            <div className="panel" style={{ display: "grid", gap: 10, maxWidth: 480, width: "100%" }}>
+              <DossierMigrationPanel legacyDossier={confirmingDossier} onMigrated={handleMigrated} />
+              <button className="internal-button" onClick={() => setConfirmingDossier(null)} style={dashboardButtonStyle} type="button">
+                Annuler
+              </button>
             </div>
           </div>
         ) : null}

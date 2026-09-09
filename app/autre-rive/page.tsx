@@ -2,430 +2,323 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  StatusChip,
-  SystemGrid,
-  SystemPageShell,
-  SystemPanel,
-  SystemSectionHeader,
-} from "@/components/system-ui";
+import { SystemPageShell, SystemPanel } from "@/components/system-ui";
 import { BackLink } from "@/components/ui/back-link";
+import {
+  readImportedConversations,
+  readImportValidations,
+  readLegacyRapportsAnalyse,
+  readPartiallyAdaptedLegacyRelationDossiers,
+  readRelationDossiers,
+  type ConversationImportée,
+} from "@/lib/autre-rive";
 
-type TierKey = "essentiel" | "intermediaire" | "premium";
-type TierTone = "neutral" | "accent" | "premium";
+// Phase 4 d'IMP-001 : vue d'affichage minimale, alimentée soit par un
+// RelationDossier déjà migré (canonique), soit par l'adaptation partielle
+// d'un dossier encore legacy (voir readDashboardDossiers ci-dessous). Ni l'un
+// ni l'autre n'est écrit par cet écran, qui reste strictement en lecture.
+type DashboardDossierView = { dateCreation: string; derniereInteraction?: string; id: string; nom: string };
+type DashboardSnapshot = { conversations: ConversationImportée[]; dossiers: DashboardDossierView[]; rapportsCount: number; validationsCount: number };
+type NavigationItem = { href: string; label: string };
+type PrimaryAction = { cta: string; description: string; href: string; label: string };
 
-interface AutreRiveProgression {
-  essentiel: number;
-  intermediaire: number;
-  premium: number;
-}
-
-type RelationModule = {
-  href?: string;
-  label: string;
-};
-
-type ModuleTier = {
-  badge: string;
-  key: TierKey;
-  modules: RelationModule[];
-  objective: string;
-  title: string;
-  tone: TierTone;
-};
-
-const DOSSIERS_STORAGE_KEY = "autre-rive-dossiers";
-const PROGRESSION_STORAGE_KEY = "autre-rive-progression";
-
-const defaultProgression: AutreRiveProgression = {
-  essentiel: 0,
-  intermediaire: 0,
-  premium: 0,
-};
-
-const tiers: ModuleTier[] = [
-  {
-    badge: "Essentiel",
-    key: "essentiel",
-    objective: "Comprendre la relation.",
-    title: "Essentiel",
-    tone: "neutral",
-    modules: [
-      { href: "/autre-rive/dossiers", label: "Dossier relationnel central" },
-      { label: "Centre d'importation relationnelle" },
-      { href: "/analyze", label: "Analyse de conversation" },
-      { label: "Baromètre de réalité" },
-      { label: "Radar relationnel" },
-      { label: "Red flags" },
-      { label: "Green flags" },
-      { label: "Décodage de messages" },
-      { label: "Niveau de certitude" },
-      { href: "/module/decision", label: "Centre de décision simplifié" },
-    ],
-  },
-  {
-    badge: "Intermédiaire",
-    key: "intermediaire",
-    objective: "Comprendre ses propres schémas.",
-    title: "Intermédiaire",
-    tone: "accent",
-    modules: [
-      { label: "Historique relationnel" },
-      { href: "/patterns", label: "Repérage des patterns" },
-      { label: "Énergie émotionnelle" },
-      { label: "Journal relationnel" },
-      { label: "Analyse des conflits" },
-      { label: "Besoins activés" },
-      { label: "Mes valeurs" },
-      { label: "Mes limites" },
-      { label: "Synthèse hebdomadaire" },
-      { label: "Assistant réponse avancé" },
-      { label: "Scanner de progression" },
-      { label: "Comparaison de relations" },
-    ],
-  },
-  {
-    badge: "★ Premium",
-    key: "premium",
-    objective: "Relations complexes et sécurité.",
-    title: "Premium",
-    tone: "premium",
-    modules: [
-      { label: "Centre rupture" },
-      { href: "/module/safety", label: "Sécurité relationnelle" },
-      { label: "Thermomètre de sécurité" },
-      { label: "Journal des incidents" },
-      { label: "Risque d'escalade" },
-      { label: "Simulateur de conséquences" },
-      { label: "Dossier familial" },
-      { label: "Familles recomposées" },
-      { label: "Coparentalité" },
-      { label: "Loyautés familiales" },
-      { label: "Sécurité émotionnelle des enfants" },
-      { label: "Observatoire familial" },
-      { label: "Ressources spécialisées" },
-      { label: "Plan de sécurité" },
-      { label: "Intelligence relationnelle globale" },
-    ],
-  },
+const navigationItems: NavigationItem[] = [
+  { href: "/autre-rive", label: "Tableau de bord" },
+  { href: "/autre-rive/dossiers", label: "Relations" },
+  { href: "/autre-rive/import", label: "Preuves" },
+  { href: "/autre-rive/analyse-conversation", label: "Analyses" },
+  { href: "/autre-rive/imports", label: "Rapports" },
 ];
 
-function badgeStyle(tone: TierTone) {
-  if (tone === "neutral") return { borderColor: "rgba(201,168,92,.16)", color: "var(--text-soft)" };
-  if (tone === "accent") return { borderColor: "rgba(201,168,92,.34)", color: "var(--accent-gold)" };
-  return { borderColor: "rgba(201,168,92,.48)", boxShadow: "0 0 0 1px rgba(201,168,92,.08)", color: "var(--accent-gold)" };
-}
-
-function readDossierCount() {
-  if (typeof window === "undefined") return 0;
-
-  try {
-    const raw = window.localStorage.getItem(DOSSIERS_STORAGE_KEY);
-    if (!raw) return 0;
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.length : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function readProgression(): AutreRiveProgression {
-  if (typeof window === "undefined") return defaultProgression;
-
-  try {
-    const raw = window.localStorage.getItem(PROGRESSION_STORAGE_KEY);
-    if (!raw) return defaultProgression;
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaultProgression;
-
-    const source = parsed as Partial<Record<TierKey, unknown>>;
-
-    return {
-      essentiel: Number.isFinite(Number(source.essentiel)) ? Number(source.essentiel) : 0,
-      intermediaire: Number.isFinite(Number(source.intermediaire)) ? Number(source.intermediaire) : 0,
-      premium: Number.isFinite(Number(source.premium)) ? Number(source.premium) : 0,
-    };
-  } catch {
-    return defaultProgression;
-  }
-}
-
-function dossierCountLabel(count: number) {
-  if (count === 1) return "1 relation en cours";
-  if (count > 1) return `${count} relations en cours`;
-  return "Aucun dossier créé";
-}
-
-const goldButtonStyle = {
-  alignItems: "center",
-  borderRadius: 999,
-  display: "inline-flex",
-  fontSize: 12.5,
-  justifyContent: "center",
-  lineHeight: 1,
-  minHeight: 36,
-  padding: "8px 13px",
-  textAlign: "center",
-  whiteSpace: "nowrap",
+const pillButtonStyle = {
+  alignItems: "center", border: "1px solid rgba(201,168,92,.2)", borderRadius: 999, color: "#d7cab0",
+  display: "inline-flex", fontSize: 11.5, fontWeight: 650, gap: 6, justifyContent: "center",
+  lineHeight: 1, minHeight: 32, padding: "7px 11px", whiteSpace: "nowrap",
 } as const;
 
+const softCardStyle = {
+  background: "rgba(255,250,238,.035)", border: "1px solid rgba(201,168,92,.12)",
+  borderRadius: 10, padding: "10px 11px",
+} as const;
+
+// Fusionne les dossiers déjà migrés (canoniques) et les dossiers encore
+// legacy (via l'adaptation partielle, lecture seule, Phase 3) pour un
+// affichage complet du tableau de bord sans attendre que chaque dossier
+// soit individuellement migré. Un dossier déjà migré n'apparaît qu'une
+// fois : sa version canonique prévaut sur sa version legacy.
+function readDashboardDossiers(): DashboardDossierView[] {
+  const canonicalDossiers = readRelationDossiers();
+  const canonicalIds = new Set(canonicalDossiers.map((dossier) => dossier.id));
+
+  const canonicalViews: DashboardDossierView[] = canonicalDossiers.map((dossier) => ({
+    id: dossier.id,
+    nom: dossier.name,
+    dateCreation: dossier.createdAt,
+    derniereInteraction: dossier.updatedAt,
+  }));
+
+  const legacyViews: DashboardDossierView[] = readPartiallyAdaptedLegacyRelationDossiers()
+    .filter((adaptation) => !canonicalIds.has(adaptation.sourceId))
+    .map((adaptation) => ({
+      id: adaptation.canonicalFields.id,
+      nom: adaptation.canonicalFields.name,
+      dateCreation: adaptation.canonicalFields.createdAt,
+      derniereInteraction: adaptation.canonicalFields.updatedAt,
+    }));
+
+  return [...canonicalViews, ...legacyViews];
+}
+
+function formatRelative(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Date inconnue";
+  const diff = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (diff <= 0) return "Aujourd'hui";
+  if (diff === 1) return "Hier";
+  if (diff < 7) return `Il y a ${diff} jours`;
+  return new Intl.DateTimeFormat("fr-CA", { day: "numeric", month: "short" }).format(date);
+}
+
+function buildPrimaryAction(snapshot: DashboardSnapshot): PrimaryAction {
+  const pendingValidation = snapshot.conversations.filter((conversation) => conversation.statut === "en_validation" || conversation.nombreMessagesRouge > 0).length;
+  const analysable = snapshot.conversations.filter((conversation) => conversation.prêtPourAnalyse).length;
+  if (snapshot.dossiers.length === 0) return {
+    cta: "Créer un dossier relation", description: "Le système est vide. Commencez par ouvrir un dossier relationnel.",
+    href: "/autre-rive/dossiers", label: "Créer un nouveau dossier",
+  };
+  if (snapshot.conversations.length === 0) return {
+    cta: "Importer une conversation", description: "Aucune preuve n'est encore déposée. L'étape utile maintenant est d'ajouter une première conversation.",
+    href: "/autre-rive/import", label: "Preuves attendues",
+  };
+  if (pendingValidation > 0) return {
+    cta: "Vérifier maintenant", description: "Des preuves attendent une validation avant de pouvoir alimenter une lecture fiable.",
+    href: "/autre-rive/imports", label: "Validation requise",
+  };
+  if (analysable > 0 && snapshot.rapportsCount === 0) return {
+    cta: "Lancer l'analyse", description: "Des preuves sont prêtes. Vous pouvez passer à l'analyse sans ajouter d'étape intermédiaire.",
+    href: "/autre-rive/analyse-conversation", label: "Analyse prête",
+  };
+  return {
+    cta: "Ouvrir un dossier", description: "Le meilleur prochain geste est de reprendre le dossier déjà avancé.",
+    href: "/autre-rive/dossiers", label: "Continuer le travail",
+  };
+}
+
+function EmptyCard({ text }: { text: string }) {
+  return (
+    <div style={softCardStyle}>
+      <p style={{ color: "var(--text-main)", fontSize: 13, lineHeight: 1.45, margin: 0 }}>{text}</p>
+    </div>
+  );
+}
+
 export default function AutreRivePage() {
-  const [activeTierKey, setActiveTierKey] = useState<TierKey>("essentiel");
-  const [dossierCount, setDossierCount] = useState(0);
-  const [progression, setProgression] = useState<AutreRiveProgression>(defaultProgression);
-  const [unavailableModule, setUnavailableModule] = useState("");
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot>({ conversations: [], dossiers: [], rapportsCount: 0, validationsCount: 0 });
 
   useEffect(() => {
-    setDossierCount(readDossierCount());
-    setProgression(readProgression());
+    const conversations = readImportedConversations().sort(
+      (first, second) => new Date(second.dateImport).getTime() - new Date(first.dateImport).getTime(),
+    );
+    setSnapshot({
+      conversations,
+      dossiers: readDashboardDossiers(),
+      rapportsCount: readLegacyRapportsAnalyse().length,
+      validationsCount: readImportValidations().length,
+    });
   }, []);
 
-  const activeTier = useMemo(() => {
-    return tiers.find((tier) => tier.key === activeTierKey) || tiers[0];
-  }, [activeTierKey]);
+  const pendingValidation = useMemo(
+    () => snapshot.conversations.filter((conversation) => conversation.statut === "en_validation" || conversation.nombreMessagesRouge > 0).length,
+    [snapshot.conversations],
+  );
+  const analysedCount = useMemo(
+    () => snapshot.conversations.filter((conversation) => conversation.statut === "analysé").length,
+    [snapshot.conversations],
+  );
+  const analysisInProgressCount = useMemo(
+    () => snapshot.conversations.filter((conversation) => conversation.prêtPourAnalyse && conversation.statut !== "analysé").length,
+    [snapshot.conversations],
+  );
+  const primaryAction = useMemo(() => buildPrimaryAction(snapshot), [snapshot]);
+  const recentDossiers = useMemo(
+    () => [...snapshot.dossiers]
+      .sort((a, b) => new Date(b.derniereInteraction || b.dateCreation).getTime() - new Date(a.derniereInteraction || a.dateCreation).getTime())
+      .slice(0, 3),
+    [snapshot.dossiers],
+  );
+
+  const alerts = useMemo(() => {
+    const items: string[] = [];
+    if (snapshot.dossiers.length === 0) items.push("Aucun dossier n'est encore ouvert.");
+    if (snapshot.dossiers.length > 0 && snapshot.conversations.length === 0) items.push("Des dossiers existent, mais aucune preuve n'a encore été déposée.");
+    if (pendingValidation > 0) items.push(`${pendingValidation} conversation(s) attendent une validation humaine.`);
+    if (snapshot.conversations.length > 0 && analysedCount === 0) items.push("Des preuves sont présentes, mais aucune analyse n'a encore abouti.");
+    if (snapshot.validationsCount > snapshot.rapportsCount && snapshot.validationsCount > 0) items.push("Des validations sont enregistrées sans rapport correspondant.");
+    return items;
+  }, [analysedCount, pendingValidation, snapshot.conversations.length, snapshot.dossiers.length, snapshot.rapportsCount, snapshot.validationsCount]);
+
+  const visibleAlerts = alerts.slice(0, 3);
+  const hiddenAlertsCount = Math.max(0, alerts.length - visibleAlerts.length);
+
+  const counters = [
+    { label: "Dossiers", value: String(snapshot.dossiers.length) },
+    { label: "Analyses", value: String(analysisInProgressCount) },
+    { label: "Rapports", value: String(snapshot.rapportsCount) },
+    { label: "Preuves", value: String(snapshot.conversations.length) },
+    { label: "Alertes", value: String(alerts.length) },
+  ];
 
   return (
     <main className="internal-page">
-      <style>
-        {`
-          .autre-rive-tier-tab {
-            background: rgba(255,250,238,.055) !important;
-            color: #d8caa8 !important;
-            -webkit-text-fill-color: #d8caa8 !important;
-          }
-
-          .autre-rive-tier-tab[aria-selected="true"] {
-            background: rgba(201,168,92,0.18) !important;
-            border-color: rgba(201,168,92,.72) !important;
-            color: #d8caa8 !important;
-            -webkit-text-fill-color: #d8caa8 !important;
-          }
-
-          .autre-rive-tier-tab:hover {
-            background: rgba(201,168,92,0.16) !important;
-            color: #d8caa8 !important;
-            -webkit-text-fill-color: #d8caa8 !important;
-          }
-        `}
-      </style>
-      <SystemPageShell maxWidth={1180}>
-        <header className="internal-header">
+      <SystemPageShell maxWidth={980} padding="8px 14px 12px">
+        <header className="internal-header" style={{ marginBottom: 6, paddingBottom: 3 }}>
           <BackLink href="/centre-de-controle" label="Centre" />
-          <p className="internal-kicker">Relationnel</p>
-          <h1 className="internal-title">L&apos;Autre Rive</h1>
-          <p className="internal-subtitle">
-            L&apos;Autre Rive aide à comprendre une relation, repérer les patterns,
-            clarifier les décisions et identifier les situations relationnelles préoccupantes.
+          <p className="internal-kicker" style={{ margin: "2px 0 0" }}>Analyse des relations</p>
+          <h1 className="internal-title" style={{ fontSize: "clamp(1.44rem, 2.7vw, 2rem)", lineHeight: 0.98, margin: "2px 0 0" }}>
+            L&apos;Autre Rive
+          </h1>
+          <p className="internal-subtitle" style={{ fontSize: "0.8rem", lineHeight: 1.3, marginTop: 5, maxWidth: 430 }}>
+            Comprendre une relation. Analyser les preuves. Décider avec clarté.
           </p>
         </header>
 
+        <nav aria-label="Navigation principale L'Autre Rive" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {navigationItems.map((item) => (
+            <Link className="internal-button" href={item.href} key={item.label} style={{ ...pillButtonStyle, fontSize: 10.75, minHeight: 29, padding: "6px 10px" }}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
         <SystemPanel
-          ariaLabel="Créer un dossier relationnel"
+          ariaLabel="Action principale"
           compact
           style={{
-            background: "linear-gradient(135deg, rgba(201,168,92,.16), rgba(255,250,238,.035))",
-            borderColor: "rgba(201,168,92,.48)",
-            boxShadow: "0 18px 60px rgba(0,0,0,.22)",
+            background: "linear-gradient(135deg, rgba(201,168,92,.12), rgba(255,250,238,.035))",
+            borderColor: "rgba(201,168,92,.34)",
+            marginBottom: 8,
+            padding: "10px 12px",
           }}
         >
-          <div style={{ alignItems: "center", display: "grid", gap: 16, gridTemplateColumns: "minmax(0, 1fr) auto" }}>
-            <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
-              <p className="internal-kicker" style={{ margin: 0 }}>Première action</p>
-              <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 24, margin: 0 }}>
-                Étape 1 — Créez votre premier dossier relationnel
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div style={{ display: "grid", gap: 5 }}>
+              <p className="internal-kicker" style={{ margin: 0 }}>À faire maintenant</p>
+              <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 17, lineHeight: 1.04, margin: 0 }}>
+                {primaryAction.label}
               </h2>
-              <p className="editorial-body" style={{ margin: 0, maxWidth: 760 }}>
-                Tout commence ici. Chaque relation importante mérite son propre dossier. Vous pourrez ensuite suivre son évolution,
-                ajouter des observations et accéder aux futures analyses.
+              <p className="editorial-body" style={{ fontSize: 12.4, lineHeight: 1.32, margin: 0 }}>
+                {primaryAction.description}
               </p>
             </div>
-            <Link className="internal-button-primary" href="/autre-rive/dossiers" style={goldButtonStyle}>
-              Créer un dossier
-            </Link>
-          </div>
-        </SystemPanel>
-
-        <SystemPanel ariaLabel="Résumé des dossiers relationnels" compact>
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}>
-            <div style={{ display: "grid", gap: 4 }}>
-              <p className="internal-kicker" style={{ margin: 0 }}>Dossiers existants</p>
-              <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 22 }}>
-                {dossierCountLabel(dossierCount)}
-              </strong>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <Link className="internal-button-primary" href={primaryAction.href} style={{ ...pillButtonStyle, minHeight: 29, padding: "6px 10px" }}>
+                {primaryAction.cta}
+              </Link>
             </div>
-            <StatusChip tone={dossierCount > 0 ? "success" : "neutral"}>
-              {dossierCount > 0 ? "Socle commencé" : "Prêt à commencer"}
-            </StatusChip>
           </div>
         </SystemPanel>
 
-        <SystemPanel ariaLabel="Volets L'Autre Rive" compact>
-          <SystemSectionHeader
-            eyebrow="Socle du module"
-            title="Trois niveaux de clarté relationnelle"
-            actions={<StatusChip tone={activeTier.tone === "neutral" ? "neutral" : "warning"}>{activeTier.objective}</StatusChip>}
-          />
-
-          <div
-            aria-label="Volets disponibles"
-            role="tablist"
-            style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 16,
-              overflowX: "auto",
-              paddingBottom: 2,
-              WebkitOverflowScrolling: "touch",
-            }}
-          >
-            {tiers.map((tier) => {
-              const active = tier.key === activeTierKey;
-
-              return (
-                <button
-                  aria-selected={active}
-                  className="autre-rive-tier-tab"
-                  key={tier.key}
-                  onClick={() => setActiveTierKey(tier.key)}
-                  role="tab"
-                  style={{
-                    background: active ? "rgba(201,168,92,0.18)" : "rgba(255,250,238,.055)",
-                    border: active ? "1px solid rgba(201,168,92,.72)" : "1px solid rgba(201,168,92,.22)",
-                    borderRadius: 999,
-                    color: "#d8caa8",
-                    cursor: "pointer",
-                    flex: "0 0 auto",
-                    fontSize: 13,
-                    fontWeight: 750,
-                    lineHeight: 1,
-                    minHeight: 38,
-                    padding: "9px 14px",
-                    transition: "background .18s ease, border-color .18s ease, color .18s ease",
-                    whiteSpace: "nowrap",
-                  }}
-                  type="button"
-                >
-                  {tier.title}
-                </button>
-              );
-            })}
+        <SystemPanel ariaLabel="Compteurs" compact style={{ marginBottom: 8, padding: "10px 12px" }}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {counters.map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  alignItems: "center",
+                  background: "rgba(255,250,238,.035)",
+                  border: "1px solid rgba(201,168,92,.12)",
+                  borderRadius: 8,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "7px 8px",
+                }}
+              >
+                <span className="label-meta" style={{ margin: 0 }}>{item.label}</span>
+                <strong style={{ color: "var(--text-main)", fontSize: 13, fontWeight: 700, lineHeight: 1 }}>{item.value}</strong>
+              </div>
+            ))}
           </div>
+        </SystemPanel>
 
-          <section aria-labelledby={`tier-${activeTier.key}`} role="tabpanel" style={{ display: "grid", gap: 14 }}>
-            <div style={{ alignItems: "start", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
-              <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 9 }}>
-                  <h2 id={`tier-${activeTier.key}`} style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 24, margin: 0 }}>
-                    {activeTier.title}
-                  </h2>
-                  <span
+        <div className="grid gap-2 lg:grid-cols-2" style={{ marginBottom: 8 }}>
+          <SystemPanel ariaLabel="Activité récente" compact style={{ marginBottom: 0, padding: "10px 12px" }}>
+            <div style={{ display: "grid", gap: 5 }}>
+              <p className="internal-kicker" style={{ margin: 0 }}>Activité récente</p>
+              <div style={{ display: "grid", gap: 5 }}>
+                {recentDossiers.length > 0 ? recentDossiers.map((dossier) => (
+                  <Link
+                    className="chapter-card"
+                    href={`/autre-rive/dossiers/${dossier.id}`}
+                    key={dossier.id}
                     style={{
-                      border: "1px solid",
-                      borderRadius: 999,
-                      fontSize: 12,
-                      lineHeight: 1,
-                      padding: "6px 9px",
-                      whiteSpace: "nowrap",
-                      ...badgeStyle(activeTier.tone),
+                      alignItems: "center",
+                      background: "rgba(255,250,238,.035)",
+                      border: "1px solid rgba(201,168,92,.12)",
+                      borderRadius: 8,
+                      color: "inherit",
+                      display: "flex",
+                      gap: 8,
+                      justifyContent: "space-between",
+                      padding: "7px 8px",
+                      textDecoration: "none",
                     }}
                   >
-                    {activeTier.badge}
-                  </span>
-                </div>
-                <p className="editorial-body" style={{ margin: 0 }}>{activeTier.objective}</p>
+                    <span style={{ color: "var(--text-main)", fontSize: 12.6, fontWeight: 600, lineHeight: 1.25, minWidth: 0 }}>
+                      {dossier.nom}
+                    </span>
+                    <span className="label-meta" style={{ flex: "0 0 auto", margin: 0 }}>
+                      {formatRelative(dossier.derniereInteraction || dossier.dateCreation)}
+                    </span>
+                  </Link>
+                )) : <EmptyCard text="Aucun dossier récent pour le moment." />}
               </div>
-              <StatusChip tone="neutral">
-                {progression[activeTier.key]} / {activeTier.modules.length} modules complétés
-              </StatusChip>
             </div>
+          </SystemPanel>
 
-            <SystemGrid gap={10} min={320}>
-              {activeTier.modules.map((module) => {
-                const cardStyle = {
-                  alignItems: "center",
-                  background: "rgba(255, 250, 238, 0.035)",
-                  borderColor: "rgba(201, 168, 92, 0.12)",
-                  display: "flex",
-                  gap: 10,
-                  justifyContent: "space-between",
-                  marginBottom: 0,
-                  minHeight: 52,
-                  padding: "10px 12px",
-                  textAlign: "left",
-                  width: "100%",
-                } as const;
+          <SystemPanel ariaLabel="Accès rapide" compact style={{ marginBottom: 0, padding: "10px 12px" }}>
+            <div style={{ display: "grid", gap: 5 }}>
+              <p className="internal-kicker" style={{ margin: 0 }}>Accès rapide</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <Link className="internal-button" href="/autre-rive/dossiers" style={{ ...pillButtonStyle, minHeight: 29, padding: "6px 10px" }}>
+                  Ouvrir un dossier
+                </Link>
+                <Link className="internal-button" href="/autre-rive/import" style={{ ...pillButtonStyle, minHeight: 29, padding: "6px 10px" }}>
+                  Importer une conversation
+                </Link>
+                <Link className="internal-button" href="/autre-rive/imports" style={{ ...pillButtonStyle, minHeight: 29, padding: "6px 10px" }}>
+                  Voir les rapports
+                </Link>
+              </div>
+            </div>
+          </SystemPanel>
+        </div>
 
-                if (module.href) {
-                  return (
-                    <Link className="chapter-card" href={module.href} key={module.label} style={cardStyle}>
-                      <span style={{ color: "var(--text-main)", fontSize: 13.5, fontWeight: 650 }}>{module.label}</span>
-                      <span className="label-meta">ouvrir</span>
-                    </Link>
-                  );
-                }
-
-                return (
-                  <button
-                    className="chapter-card"
-                    key={module.label}
-                    onClick={() => setUnavailableModule(module.label)}
-                    style={{ ...cardStyle, cursor: "pointer" }}
-                    type="button"
-                  >
-                    <span style={{ color: "var(--text-main)", fontSize: 13.5, fontWeight: 650 }}>{module.label}</span>
-                    <span className="label-meta">ouvrir</span>
-                  </button>
-                );
-              })}
-            </SystemGrid>
-          </section>
+        <SystemPanel ariaLabel="Clarté immédiate" compact style={{ marginBottom: 0, padding: "10px 12px" }}>
+          <div style={{ display: "grid", gap: 5 }}>
+            <p className="internal-kicker" style={{ margin: 0 }}>Clarté immédiate</p>
+            <div style={{ display: "grid", gap: 5 }}>
+              {visibleAlerts.length > 0 ? visibleAlerts.map((alert) => (
+                <div
+                  key={alert}
+                  style={{
+                    background: "rgba(255,250,238,.035)",
+                    border: "1px solid rgba(201,168,92,.12)",
+                    borderRadius: 8,
+                    padding: "7px 8px",
+                  }}
+                >
+                  <p style={{ color: "var(--text-main)", fontSize: 12.35, lineHeight: 1.32, margin: 0 }}>{alert}</p>
+                </div>
+              )) : <EmptyCard text="Aucun élément bloquant détecté pour le moment." />}
+              {hiddenAlertsCount > 0 ? (
+                <p className="label-meta" style={{ margin: "1px 2px 0" }}>
+                  + {hiddenAlertsCount} autre{hiddenAlertsCount > 1 ? "s" : ""} alerte{hiddenAlertsCount > 1 ? "s" : ""}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </SystemPanel>
       </SystemPageShell>
-
-      {unavailableModule ? (
-        <div
-          aria-modal="true"
-          role="dialog"
-          style={{
-            alignItems: "center",
-            background: "rgba(5, 4, 2, .72)",
-            display: "flex",
-            inset: 0,
-            justifyContent: "center",
-            padding: 20,
-            position: "fixed",
-            zIndex: 80,
-          }}
-        >
-          <div
-            className="chapter-card"
-            style={{
-              background: "rgba(24, 19, 12, .98)",
-              borderColor: "rgba(201,168,92,.28)",
-              display: "grid",
-              gap: 12,
-              marginBottom: 0,
-              maxWidth: 420,
-              padding: 18,
-              width: "100%",
-            }}
-          >
-            <p className="internal-kicker" style={{ margin: 0 }}>{unavailableModule}</p>
-            <h2 style={{ color: "var(--text-main)", fontFamily: "var(--font-serif)", fontSize: 24, margin: 0 }}>
-              Bientôt disponible
-            </h2>
-            <p className="editorial-body" style={{ margin: 0 }}>Ce module arrive bientôt.</p>
-            <button
-              className="internal-button-primary"
-              onClick={() => setUnavailableModule("")}
-              style={{ ...goldButtonStyle, justifySelf: "start" }}
-              type="button"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

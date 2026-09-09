@@ -10,6 +10,8 @@ import {
   SystemSectionHeader,
 } from "@/components/system-ui";
 import { BackLink } from "@/components/ui/back-link";
+import { syncAiScoresToCanonicalDossier } from "./ai-score-sync";
+import { parseAnalyseIA, type AnalyseIA } from "./ia-parsing";
 
 type Tonalite = "Positive" | "Tendue" | "Mixte" | "Neutre";
 type NiveauTension = "Faible" | "Modere" | "Eleve";
@@ -20,20 +22,6 @@ interface ConversationAnalysis {
   niveauTension: NiveauTension;
   observations: string[];
   negativeCount: number;
-}
-
-interface AnalyseIA {
-  faits: string;
-  interpretations: string;
-  inconnues: string;
-  clarte: string;
-  clarteScore: number;
-  reciprocite: string;
-  reciprociteScore: number;
-  securite: string;
-  securiteScore: number;
-  anglesMorts: string;
-  verdict: string;
 }
 
 interface AnalyseConversation {
@@ -131,41 +119,16 @@ function analyzeConversation(text: string): ConversationAnalysis {
   return { tonalite, patterns, niveauTension, observations: observations.slice(0, 3), negativeCount };
 }
 
-function parseSection(text: string, tag: string): string {
-  const open = "[" + tag + "]";
-  const close = "[/" + tag + "]";
-  const i1 = text.indexOf(open);
-  const i2 = text.indexOf(close);
-  if (i1 >= 0 && i2 > i1) return text.slice(i1 + open.length, i2).trim();
-  return "";
-}
-
-function parseScore(text: string, tag: string): number {
-  const raw = parseSection(text, tag + "_SCORE");
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 50;
-}
-
-function parseAnalyseIA(text: string): AnalyseIA {
-  return {
-    faits: parseSection(text, "FAITS"),
-    interpretations: parseSection(text, "INTERPRETATIONS"),
-    inconnues: parseSection(text, "INCONNUES"),
-    clarte: parseSection(text, "CLARTE"),
-    clarteScore: parseScore(text, "CLARTE"),
-    reciprocite: parseSection(text, "RECIPROCITE"),
-    reciprociteScore: parseScore(text, "RECIPROCITE"),
-    securite: parseSection(text, "SECURITE"),
-    securiteScore: parseScore(text, "SECURITE"),
-    anglesMorts: parseSection(text, "ANGLES"),
-    verdict: parseSection(text, "VERDICT"),
-  };
-}
-
 function scoreColor(score: number) {
   if (score >= 70) return "#9fbd99";
   if (score >= 40) return "var(--accent-gold)";
   return "#b56b5f";
+}
+
+// Phase 8bis.3b : un score peut desormais etre explicitement absent (null).
+// Purement presentationnel — aucune valeur n'est devinee ou calculee ici.
+function formatScore(score: number | null): string {
+  return score === null ? "n/d" : score + "%";
 }
 
 function tonaliteTone(tonalite: Tonalite): "success" | "warning" | "neutral" {
@@ -233,13 +196,17 @@ export default function AnalyseConversationPage() {
       tonalite: localAnalysis.tonalite,
       analyseIA: ia || undefined,
     };
+    // SR-D-001, Decision 3 (Phase 8bis.3) : les scores IA ne remplacent plus
+    // jamais niveauClarte / niveauReciprocite / niveauSecurite ici. Ces
+    // champs plats legacy restent a leur derniere valeur connue, comme
+    // donnee heritee figee ; les nouveaux scores vivent desormais dans le
+    // modele canonique d'evaluations (voir syncAiScoresToCanonicalDossier
+    // ci-dessous), jamais designes automatiquement comme evaluation
+    // courante.
     const next = currentDossiers.map((d) =>
       d.id === selectedDossier.id
         ? {
             ...d,
-            niveauClarte: ia ? ia.clarteScore : d.niveauClarte,
-            niveauReciprocite: ia ? ia.reciprociteScore : d.niveauReciprocite,
-            niveauSecurite: ia ? ia.securiteScore : d.niveauSecurite,
             derniereAnalyse: { date: savedAnalysis.date, niveauTension: savedAnalysis.niveauTension, observations: savedAnalysis.observations, patterns: savedAnalysis.patterns, tonalite: savedAnalysis.tonalite },
             analyses: [savedAnalysis, ...(Array.isArray(d.analyses) ? d.analyses : [])],
           }
@@ -248,6 +215,25 @@ export default function AnalyseConversationPage() {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setDossiers(next);
+      if (ia) {
+        // Ecart 3 de l'audit Phase 8bis, resolu : le score IA est historise
+        // comme ScoreAssessment canonique plutot que d'ecraser un champ
+        // plat. Si ce dossier n'a pas encore de version canonique (Phase
+        // 8bis.4, non executee), aucune migration implicite n'est faite ici
+        // : l'ecriture canonique est simplement differee (voir
+        // ai-score-sync.ts), sans perte de l'analyse elle-meme, deja
+        // sauvegardee ci-dessus dans le chemin legacy.
+        syncAiScoresToCanonicalDossier(
+          selectedDossier.id,
+          // null (dimension absente ou non interpretable, Phase 8bis.3b) ->
+          // undefined, seule forme d'absence reconnue par
+          // buildAiScoreAssessments : aucune valeur artificielle n'est
+          // jamais transmise.
+          { clarte: ia.clarteScore ?? undefined, reciprocite: ia.reciprociteScore ?? undefined, securite: ia.securiteScore ?? undefined },
+          { clarte: ia.clarte, reciprocite: ia.reciprocite, securite: ia.securite },
+          savedAnalysis.id,
+        );
+      }
       showToast("Analyse sauvegardee dans " + selectedDossier.nom);
     } catch { return; }
   }
@@ -353,7 +339,7 @@ export default function AnalyseConversationPage() {
                       <div>
                         <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-main)", margin: "0 0 2px" }}>{a.tonalite} · Tension {a.niveauTension}</p>
                         <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>{formatDate(a.date)}</p>
-                        {a.analyseIA ? <p style={{ fontSize: 11, color: "#1D9E75", margin: "2px 0 0" }}>Clarte {a.analyseIA.clarteScore}% · Reciprocite {a.analyseIA.reciprociteScore}% · Securite {a.analyseIA.securiteScore}%</p> : null}
+                        {a.analyseIA ? <p style={{ fontSize: 11, color: "#1D9E75", margin: "2px 0 0" }}>Clarte {formatScore(a.analyseIA.clarteScore)} · Reciprocite {formatScore(a.analyseIA.reciprociteScore)} · Securite {formatScore(a.analyseIA.securiteScore)}</p> : null}
                       </div>
                       <button type="button" onClick={() => chargerAnalyse(a)} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, border: "1px solid rgba(29,158,117,0.4)", background: "rgba(29,158,117,0.08)", color: "#1D9E75", cursor: "pointer", flexShrink: 0 }}>Recharger</button>
                     </div>
@@ -432,7 +418,12 @@ export default function AnalyseConversationPage() {
                         { label: "Clarte relationnelle", score: analyseIA.clarteScore, texte: analyseIA.clarte },
                         { label: "Reciprocite", score: analyseIA.reciprociteScore, texte: analyseIA.reciprocite },
                         { label: "Securite emotionnelle", score: analyseIA.securiteScore, texte: analyseIA.securite },
-                      ].map(({ label, score, texte }) => (
+                      ]
+                        // Phase 8bis.3b : une dimension sans score reellement
+                        // present (null) n'affiche plus de carte plutot que
+                        // d'afficher une valeur inventee.
+                        .filter((item): item is { label: string; score: number; texte: string } => item.score !== null)
+                        .map(({ label, score, texte }) => (
                         <div key={label} style={{ padding: "12px", background: "rgba(255,250,238,0.03)", border: "1px solid rgba(201,168,92,0.15)", borderRadius: 10 }}>
                           <p className="label-meta" style={{ margin: "0 0 6px", fontSize: 11 }}>{label}</p>
                           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
