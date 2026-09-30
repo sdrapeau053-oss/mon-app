@@ -13,6 +13,13 @@ import {
 } from "@/lib/narrative-relations";
 import { lireMemoiresNarratives, type MemoireNarrative } from "@/lib/memoire-narrative";
 import type { Scene } from "@/lib/scenes";
+// LIVRE-P0.1B — réutilise le mécanisme canonique d'historique non
+// destructif (LIVRE-P0.1) plutôt que d'en dupliquer la logique ici.
+import {
+  appliquerEcritureChapitresTome1,
+  normaliserHistoriqueChapitreTome1,
+  type ChapitreTome1Version,
+} from "@/lib/tome1-chapters";
 
 type ChapterType = "severe" | "doux" | "respiration" | "charniere" | "fin" | "mixte";
 type ChapterStatus = "a-ecrire" | "ecrit" | "scelle";
@@ -50,6 +57,9 @@ interface Bloc {
 
 interface StoredChapter {
   id: string;
+  // LIVRE-P0.1B — même type canonique que ChapitreTome1 (lib/tome1-chapters.ts),
+  // importé plutôt que redéfini.
+  historique?: ChapitreTome1Version[];
   titre: string;
   description?: string;
   bloc: number;
@@ -795,6 +805,7 @@ function normaliserChapitreStocke(chapitre: StoredChapter): StoredChapter {
         ? chapitre.statut
         : fallback.statut,
     contenu: normaliserContenuChapitre(chapitre.contenu),
+    historique: normaliserHistoriqueChapitreTome1(chapitre.historique) ?? fallback.historique,
     ageApprox: chapitre.ageApprox ?? metadata.ageApprox ?? fallback.ageApprox,
     periode: chapitre.periode ?? metadata.periode ?? fallback.periode,
     typeChapitre: chapitre.typeChapitre || metadata.typeChapitre || fallback.typeChapitre,
@@ -863,8 +874,13 @@ function initialiserChapitresTome1() {
       Array.isArray(chapitres) ? chapitres : [],
     );
     const chapitresReconciles = reconcilerChapitresTome1(chapitresCompletes);
+    // LIVRE-P0.1B — la réconciliation peut vider un chapitre et en remplir
+    // un autre. On diffuse contre l'état précédent PAR IDENTITÉ DE
+    // CHAPITRE pour que chaque chapitre archive uniquement son propre
+    // ancien contenu — jamais celui d'un autre chapitre.
+    const chapitresProteges = appliquerEcritureChapitresTome1(chapitresCompletes, chapitresReconciles);
 
-    localStorage.setItem(CHAPITRES_TOME_1_KEY, JSON.stringify(chapitresReconciles));
+    localStorage.setItem(CHAPITRES_TOME_1_KEY, JSON.stringify(chapitresProteges));
   } catch {
     localStorage.setItem(CHAPITRES_TOME_1_KEY, JSON.stringify(CHAPITRES_TOME_1_INITIAUX));
   }
@@ -1420,15 +1436,19 @@ export default function StructureTome1() {
     const chapterId = `chapitre-${chapter.num}`;
     const existingChapter = getStoredChapter(chapter.num);
     const updatedChapter = updater(existingChapter || createStoredChapter(chapter));
-    const nextChapitres = chapitresStockes.some((storedChapter) => storedChapter.id === chapterId)
+    const nextChapitresBruts = chapitresStockes.some((storedChapter) => storedChapter.id === chapterId)
       ? chapitresStockes.map((storedChapter) =>
       storedChapter.id === chapterId ? updatedChapter : storedChapter,
       )
       : [...chapitresStockes, updatedChapter];
 
+    // LIVRE-P0.1B — point d'écriture canonique unique de cet écran.
+    const nextChapitres = appliquerEcritureChapitresTome1(chapitresStockes, nextChapitresBruts);
+    const chapitreProtege = nextChapitres.find((storedChapter) => storedChapter.id === chapterId) ?? updatedChapter;
+
     setChapitresStockes(nextChapitres);
     localStorage.setItem(CHAPITRES_TOME_1_KEY, JSON.stringify(nextChapitres));
-    return updatedChapter;
+    return chapitreProtege;
   };
 
   const updateChapterMetadata = (chapter: Chapter, updates: Partial<StoredChapter>) => {

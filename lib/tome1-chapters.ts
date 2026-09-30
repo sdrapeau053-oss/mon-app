@@ -10,6 +10,17 @@ export type StatutChapitreTome1 =
 
 export type StatutEditorialChapitreTome1 = "vide" | "brouillon" | "à réviser" | "validé";
 
+// LIVRE-P0.1 — Historique non destructif du contenu d'un chapitre.
+// Une entrée représente le `contenu` tel qu'il était juste avant d'être
+// remplacé. `createdAt` documente le moment de cet archivage (jamais une
+// date d'écriture originale reconstituée : cette information n'existe pas
+// pour les chapitres déjà présents avant cette phase).
+export type ChapitreTome1Version = {
+  id: string;
+  contenu: string;
+  createdAt: string;
+};
+
 export type ChapitreTome1 = {
   id: string;
   titre: string;
@@ -18,6 +29,10 @@ export type ChapitreTome1 = {
   type: string;
   statut: StatutChapitreTome1;
   contenu: string;
+  // Historique des contenus précédents, du plus ancien au plus récent.
+  // Absent (undefined) pour un chapitre jamais modifié depuis
+  // l'introduction de LIVRE-P0.1 — jamais fabriqué rétroactivement.
+  historique?: ChapitreTome1Version[];
   ageApprox?: string;
   periode?: string;
   typeChapitre?: string;
@@ -178,6 +193,24 @@ function normaliserStatutChapitre(statut: unknown): StatutChapitreTome1 {
   return "à écrire";
 }
 
+export function normaliserHistoriqueChapitreTome1(historique: unknown): ChapitreTome1Version[] | undefined {
+  if (!Array.isArray(historique)) return undefined;
+
+  return historique
+    .map((version): ChapitreTome1Version | null => {
+      if (!isRecord(version)) return null;
+      if (typeof version.id !== "string" || !version.id.trim()) return null;
+      if (typeof version.contenu !== "string") return null;
+      if (typeof version.createdAt !== "string" || !version.createdAt.trim()) return null;
+      return { id: version.id, contenu: version.contenu, createdAt: version.createdAt };
+    })
+    .filter((version): version is ChapitreTome1Version => Boolean(version));
+}
+
+function nouvelIdVersionChapitreTome1() {
+  return `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function normaliserStatutEditorial(statut: unknown): StatutEditorialChapitreTome1 | undefined {
   if (statut === "vide" || statut === "brouillon" || statut === "à réviser" || statut === "validé") {
     return statut;
@@ -251,6 +284,7 @@ export function normaliserChapitreTome1(chapitre: unknown, fallback: ChapitreTom
         : metadata.type || fallback.type,
     statut: normaliserStatutChapitre(chapitre.statut),
     contenu: normaliserContenuChapitreTome1(chapitre.contenu || fallback.contenu),
+    historique: normaliserHistoriqueChapitreTome1(chapitre.historique) ?? fallback.historique,
     ageApprox:
       typeof chapitre.ageApprox === "string" ? chapitre.ageApprox : metadata.ageApprox || fallback.ageApprox,
     periode: typeof chapitre.periode === "string" ? chapitre.periode : metadata.periode || fallback.periode,
@@ -319,6 +353,77 @@ export function lireChapitresTome1DepuisStorage() {
   } catch {
     return CHAPITRES_TOME_1_DEFAUT;
   }
+}
+
+// LIVRE-P0.1 — Invariant : une nouvelle sauvegarde ne doit jamais détruire
+// la dernière version récupérable du texte d'un chapitre.
+//
+// Générique (contrainte structurelle minimale) plutôt que figée sur
+// ChapitreTome1 : LIVRE-P0.1B en a besoin pour StoredChapter
+// (app/structure-tome-1/page.tsx), une représentation locale distincte
+// mais compatible. Évite de dupliquer cette logique dans la page React —
+// la règle continue de vivre uniquement ici.
+export function fusionnerHistoriqueChapitreTome1<
+  T extends { id: string; contenu: string; historique?: ChapitreTome1Version[] },
+>(precedent: T | undefined, prochain: T): T {
+  if (!precedent) return prochain;
+  if (precedent.contenu === prochain.contenu) {
+    return { ...prochain, historique: prochain.historique ?? precedent.historique };
+  }
+
+  const versionArchivee: ChapitreTome1Version = {
+    id: nouvelIdVersionChapitreTome1(),
+    contenu: precedent.contenu,
+    createdAt: new Date().toISOString(),
+  };
+
+  return {
+    ...prochain,
+    historique: [...(precedent.historique ?? []), versionArchivee],
+  };
+}
+
+// Applique fusionnerHistoriqueChapitreTome1 chapitre par chapitre (par id).
+export function appliquerEcritureChapitresTome1<
+  T extends { id: string; contenu: string; historique?: ChapitreTome1Version[] },
+>(precedents: T[], prochains: T[]): T[] {
+  const precedentsParId = new Map(precedents.map((chapitre) => [chapitre.id, chapitre]));
+
+  return prochains.map((prochain) =>
+    fusionnerHistoriqueChapitreTome1(precedentsParId.get(prochain.id), prochain),
+  );
+}
+
+// Point d'écriture UNIQUE recommandé pour les chapitres du Tome 1 via le
+// type canonique. Lit l'état actuellement persisté, applique la
+// préservation d'historique, puis persiste le résultat.
+export function sauvegarderChapitresTome1(chapitres: ChapitreTome1[]): ChapitreTome1[] {
+  const precedents = lireChapitresTome1DepuisStorage();
+  const fusionnes = appliquerEcritureChapitresTome1(precedents, chapitres);
+
+  if (typeof window !== "undefined") {
+    localStorage.setItem(CHAPITRES_TOME_1_STORAGE_KEY, JSON.stringify(fusionnes));
+  }
+
+  return fusionnes;
+}
+
+// Restaure une version historique comme contenu courant, SANS effacer
+// l'état courant : ce changement de contenu retraverse
+// fusionnerHistoriqueChapitreTome1 (via sauvegarderChapitresTome1 ou
+// appliquerEcritureChapitresTome1), qui archivera automatiquement le
+// contenu courant avant de le remplacer par la version restaurée.
+export function restaurerVersionChapitreTome1(
+  chapitres: ChapitreTome1[],
+  chapitreId: string,
+  versionId: string,
+): ChapitreTome1[] {
+  return chapitres.map((chapitre) => {
+    if (chapitre.id !== chapitreId) return chapitre;
+    const version = (chapitre.historique ?? []).find((entry) => entry.id === versionId);
+    if (!version) return chapitre;
+    return { ...chapitre, contenu: version.contenu };
+  });
 }
 
 export function chapitreTome1EstEcrit(chapitre: ChapitreTome1) {

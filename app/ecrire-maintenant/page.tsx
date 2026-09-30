@@ -23,6 +23,7 @@ import {
   type NarrativeRelation,
 } from "@/lib/narrative-relations";
 import {
+  appliquerEcritureChapitresTome1,
   CHAPITRES_TOME_1_STORAGE_KEY,
   chapitreTome1EstVerrouillePourEcriture,
   getNumeroChapitreTome1,
@@ -294,10 +295,14 @@ export default function EcrireMaintenantPage() {
         : chapter,
     );
     const normalized = normaliserChapitresTome1(updatedChapters);
+    // LIVRE-P0.1 — `latestChapters` est l'état juste avant cette écriture
+    // (relu plus haut pour le contrôle de verrouillage) : c'est le bon
+    // "précédent" pour archiver l'ancien contenu si le texte a changé.
+    const protege = appliquerEcritureChapitresTome1(latestChapters, normalized);
 
-    localStorage.setItem(CHAPITRES_TOME_1_STORAGE_KEY, JSON.stringify(normalized));
+    localStorage.setItem(CHAPITRES_TOME_1_STORAGE_KEY, JSON.stringify(protege));
     persistWritingSpot();
-    setData({ ...data, chapters: normalized, continuity: readContinuity() });
+    setData({ ...data, chapters: protege, continuity: readContinuity() });
     setSaveMessage("Sauvegardé localement.");
   }
 
