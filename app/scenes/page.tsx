@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import BackLink from "@/components/ui/back-link";
-import { lireFragments, type Fragment, sauvegarderFragments } from "@/lib/fragments";
+import { lireTousLesFragments, type Fragment, sauvegarderFragments } from "@/lib/fragments";
 import {
   collectMotifs,
   createChapitreId,
@@ -303,6 +303,11 @@ function analyserTome(liste: Scene[], tome: number) {
 export default function ScenesPage() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [fragments, setFragments] = useState<Fragment[]>([]);
+  // LIVRE-P0.2 — `fragments` (état) est le corpus complet (voir chargement
+  // plus bas) : les sauvegardes de cet écran ne doivent jamais réécrire un
+  // sous-ensemble filtré. fragmentsActifs sert uniquement à la sélection
+  // "lier un nouveau fragment", pas aux fragments déjà liés à une scène.
+  const fragmentsActifs = fragments.filter((f) => !f.deletedAt);
   const [sceneActive, setSceneActive] = useState<Scene | null>(null);
   const [filtreTome, setFiltreTome] = useState("tous");
   const [filtreType, setFiltreType] = useState("tous");
@@ -314,7 +319,7 @@ export default function ScenesPage() {
 
   useEffect(() => {
     setScenes(lireScenes());
-    setFragments(lireFragments());
+    setFragments(lireTousLesFragments());
   }, []);
 
   function sauvegarderListe(nextScenes: Scene[]) {
@@ -1232,7 +1237,7 @@ export default function ScenesPage() {
                     value={nouveauFragmentId}
                   >
                     <option value="">Lier un fragment existant</option>
-                    {fragments
+                    {fragmentsActifs
                       .filter(
                         (fragment) =>
                           !fragmentsLies.some((lie) => String(lie.id) === String(fragment.id)),

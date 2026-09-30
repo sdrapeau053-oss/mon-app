@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
-import { lireFragments, sauvegarderFragments, type Fragment } from "@/lib/fragments";
+import { lireTousLesFragments, sauvegarderFragments, type Fragment } from "@/lib/fragments";
 import {
   CHAPITRES_DEFAUT,
   TOMES_DEFAUT,
@@ -46,6 +46,10 @@ function sameFragmentId(a: Fragment["id"], b: Fragment["id"]) {
 
 export default function Structure() {
   const [fragments, setFragments] = useState<Fragment[]>([]);
+  // LIVRE-P0.2 — `fragments` (état) est le corpus complet ; tout affichage
+  // ou comptage doit passer par fragmentsActifs pour exclure les
+  // fragments soft-deleted, sans jamais les exclure des sauvegardes.
+  const fragmentsActifs = fragments.filter((f) => !f.deletedAt);
   const [tomes, setTomes] = useState<Tome[]>(TOMES_DEFAUT);
   const [chapitresParTome, setChapitresParTome] = useState<Record<number, string[]>>(CHAPITRES_DEFAUT);
   const [nouveauChapitreInput, setNouveauChapitreInput] = useState<{ tomeId: number; nom: string } | null>(null);
@@ -64,7 +68,12 @@ export default function Structure() {
   const [detailsOuverts, setDetailsOuverts] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setFragments(lireFragments());
+    // LIVRE-P0.2 — corpus complet en état (voir fragmentsActifs plus bas) :
+    // les 3 sauvegardes de cet écran (.map() puis sauvegarderFragments)
+    // doivent réécrire le corpus complet, jamais un sous-ensemble filtré,
+    // sinon chaque déplacement/renommage effacerait silencieusement les
+    // fragments soft-deleted qu'il ne touche pas.
+    setFragments(lireTousLesFragments());
     const chapitres = lireChapitres();
     const tomesLus = lireTomes() as Tome[];
 
@@ -165,7 +174,7 @@ export default function Structure() {
 
   async function analyserChapitre(tomeId: number, tome: Tome, chapitre: string) {
     const key = `${tomeId}-${chapitre}`;
-    const fragsduChapitre = fragments.filter((f) => f.manuscrit && f.tomeId === tomeId && f.chapitre === chapitre);
+    const fragsduChapitre = fragmentsActifs.filter((f) => f.manuscrit && f.tomeId === tomeId && f.chapitre === chapitre);
     if (fragsduChapitre.length === 0) return;
 
     setAnalyses((prev) => ({ ...prev, [key]: { loading: true, result: null, error: null } }));
@@ -201,7 +210,7 @@ export default function Structure() {
     setTomeOuverts((prev) => prev.filter((t) => t !== id));
   }
 
-  const total = fragments.filter((f) => f.manuscrit).length;
+  const total = fragmentsActifs.filter((f) => f.manuscrit).length;
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: 24, minHeight: "100vh", background: "#2a2118", boxShadow: "0 0 0 100vmax #2a2118", clipPath: "inset(0 -100vmax)" }}>
@@ -222,11 +231,11 @@ export default function Structure() {
       </div>
 
       {tomes.map((tome) => {
-        const fragsduTome = fragments.filter((f) => f.manuscrit && f.tomeId === tome.id);
+        const fragsduTome = fragmentsActifs.filter((f) => f.manuscrit && f.tomeId === tome.id);
         const ouvert = tomeOuverts.includes(tome.id);
         const chapitresDuTome = chapitresParTome[tome.id] || [];
         const tomeVide = fragsduTome.length === 0 && chapitresDuTome.every(
-          (c) => fragments.filter((f) => f.manuscrit && f.tomeId === tome.id && f.chapitre === c).length === 0
+          (c) => fragmentsActifs.filter((f) => f.manuscrit && f.tomeId === tome.id && f.chapitre === c).length === 0
         );
 
         return (

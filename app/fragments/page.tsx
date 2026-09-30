@@ -7,7 +7,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import { loadCloudFragments, saveCloudFragments } from "@/lib/cloud-sync";
 import {
-  lireFragments,
+  lireTousLesFragments,
   sauvegarderFragments,
   supprimerFragment,
   type Fragment,
@@ -83,10 +83,16 @@ export default function Fragments() {
       setCloudLoading(true);
       setScenes(lireScenesRelationnelles());
 
+      // LIVRE-P0.2 — lireTousLesFragments() : cet écran garde en état
+      // local le CORPUS COMPLET (actifs + supprimés). Le filtrage
+      // d'affichage/export se fait séparément (fragmentsActifs plus bas),
+      // jamais en excluant des fragments de ce qui est réécrit en
+      // storage — sinon chaque sauvegarde depuis cet écran effacerait
+      // silencieusement les fragments soft-deleted qu'elle ne touche pas.
       const cloudResult = await loadCloudFragments();
       const saved: Fragment[] = cloudResult.data?.length
         ? sauvegarderFragments(cloudResult.data)
-        : lireFragments();
+        : lireTousLesFragments();
 
       // Passe 1 — corriger les noms de tomes libres + ajouter tomeId si absent
       const CORRECTIONS_TOME: Record<string, string> = {
@@ -161,14 +167,19 @@ export default function Fragments() {
     };
   }, []);
 
-  const tousLesTags = [...new Set(fragments.flatMap((f) => f.tags ?? []))].sort() as string[];
+  // LIVRE-P0.2 — `fragments` (état) est le corpus complet (voir chargement
+  // plus haut) ; tout ce qui est affiché, compté ou exporté doit passer
+  // par fragmentsActifs pour qu'un fragment supprimé n'apparaisse plus
+  // dans les lectures ordinaires de cet écran.
+  const fragmentsActifs = fragments.filter((f) => !f.deletedAt);
+  const tousLesTags = [...new Set(fragmentsActifs.flatMap((f) => f.tags ?? []))].sort() as string[];
   const chapitresDisponibles = filtreTome
-    ? [...new Set(fragments.filter((f) => f.tomeId === filtreTome).map((f) => f.chapitre).filter(Boolean))].sort() as string[]
+    ? [...new Set(fragmentsActifs.filter((f) => f.tomeId === filtreTome).map((f) => f.chapitre).filter(Boolean))].sort() as string[]
     : [];
   const filtresActifs = !!(filtreTome || filtreChapitre || filtreManuscrit !== "all" || filtreTag || recherche.trim());
-  const nonIntegresCount = fragments.filter((f) => !f.manuscrit).length;
+  const nonIntegresCount = fragmentsActifs.filter((f) => !f.manuscrit).length;
 
-  const fragmentsFiltres = fragments
+  const fragmentsFiltres = fragmentsActifs
     .filter((f) => !recherche.trim() || (
       f.texte?.toLowerCase().includes(recherche.toLowerCase()) ||
       f.source?.toLowerCase().includes(recherche.toLowerCase()) ||
@@ -367,7 +378,7 @@ export default function Fragments() {
       new Paragraph({ text: "" }),
     ];
     TOMES.forEach(tome => {
-      const fragsduTome = fragments.filter(f => f.tomeId === tome.id);
+      const fragsduTome = fragmentsActifs.filter(f => f.tomeId === tome.id);
       if (fragsduTome.length === 0) return;
       children.push(new Paragraph({ text: tome.titre, heading: HeadingLevel.HEADING_1 }));
       tome.chapitres.forEach(chapitre => {
@@ -422,7 +433,7 @@ export default function Fragments() {
         <div>
           <h1 style={{ fontSize: 24, fontStyle: "italic", color: "var(--primary)" }}>L'Héritage des Silences</h1>
           <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            Coffre — {fragmentsFiltres.length}/{fragments.length} fragment{fragments.length > 1 ? "s" : ""}
+            Coffre — {fragmentsFiltres.length}/{fragmentsActifs.length} fragment{fragmentsActifs.length > 1 ? "s" : ""}
             {recherche && <span style={{ color: "var(--primary)" }}> · "{recherche}"</span>}
             {nonIntegresCount > 0 && (
               <button

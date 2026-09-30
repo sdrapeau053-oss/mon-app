@@ -21,6 +21,12 @@ export type Fragment = {
   statut?: string;
   sceneIds?: string[];
   chapitreId?: string;
+  // LIVRE-P0.2 — suppression logique et réversible. Absent = actif.
+  // Présent (timestamp ISO) = supprimé logiquement ; le fragment, son
+  // texte, ses tags, ses versions et ses liens restent intacts en
+  // stockage. Ne jamais réutiliser `statut` pour cette information :
+  // c'est un champ libre, non gouverné, déjà utilisé pour autre chose.
+  deletedAt?: string;
 };
 
 export type FragmentInput = Partial<Fragment> & {
@@ -90,6 +96,7 @@ export function normalizeFragment(fragment: unknown): Fragment | null {
       ? fragment.sceneIds.filter((sceneId): sceneId is string => typeof sceneId === "string")
       : [],
     chapitreId: typeof fragment.chapitreId === "string" ? fragment.chapitreId : undefined,
+    deletedAt: typeof fragment.deletedAt === "string" && fragment.deletedAt.trim() ? fragment.deletedAt : undefined,
   };
 }
 
@@ -101,7 +108,13 @@ export function normalizeFragments(fragments: unknown): Fragment[] {
     .filter((fragment): fragment is Fragment => Boolean(fragment));
 }
 
-export function lireFragments(): Fragment[] {
+// LIVRE-P0.2 — lecture complète, sans filtrage de suppression : actifs +
+// supprimés. Réservée aux opérations de cycle de vie (suppression,
+// restauration, migration, export/sync) qui doivent voir tout le corpus
+// pour ne jamais écraser silencieusement un fragment absent de la vue
+// active. Les consommateurs ordinaires du Livre doivent utiliser
+// lireFragments() (filtrée) et n'ont pas à connaître `deletedAt`.
+export function lireTousLesFragments(): Fragment[] {
   if (typeof window === "undefined") return [];
 
   try {
@@ -112,6 +125,17 @@ export function lireFragments(): Fragment[] {
   }
 }
 
+// Lecture normale : uniquement les fragments actifs (non supprimés).
+// C'est le point de lecture utilisé par tous les écrans/lib existants.
+export function lireFragments(): Fragment[] {
+  return lireTousLesFragments().filter((fragment) => !fragment.deletedAt);
+}
+
+// Lecture explicite de la corbeille : uniquement les fragments supprimés.
+export function lireFragmentsSupprimes(): Fragment[] {
+  return lireTousLesFragments().filter((fragment) => Boolean(fragment.deletedAt));
+}
+
 export function sauvegarderFragments(fragments: FragmentInput[]) {
   const normalized = normalizeFragments(fragments);
   localStorage.setItem(FRAGMENTS_STORAGE_KEY, JSON.stringify(normalized));
@@ -119,26 +143,67 @@ export function sauvegarderFragments(fragments: FragmentInput[]) {
 }
 
 export function ajouterFragment(fragment: FragmentInput) {
-  const current = lireFragments();
+  // LIVRE-P0.2 — lireTousLesFragments() (pas lireFragments()) : sinon
+  // chaque ajout réécrirait le corpus en excluant silencieusement tous
+  // les fragments déjà soft-deleted.
+  const current = lireTousLesFragments();
   const normalized = normalizeFragment(fragment);
   if (!normalized) return current;
-
-  return sauvegarderFragments([normalized, ...current]);
+  // Un nouveau fragment est toujours actif ; deletedAt n'est jamais
+  // inventé ici, quoi que l'appelant ait fourni.
+  return sauvegarderFragments([{ ...normalized, deletedAt: undefined }, ...current]);
 }
 
 export function mettreAJourFragment(
   id: Fragment["id"],
   updater: (fragment: Fragment) => FragmentInput,
 ) {
+  // LIVRE-P0.2 — lireTousLesFragments() : une mise à jour ordinaire ne
+  // doit jamais faire disparaître du corpus les fragments soft-deleted
+  // qu'elle ne touche pas.
+  const tous = lireTousLesFragments();
+
   return sauvegarderFragments(
-    lireFragments().map((fragment) =>
-      String(fragment.id) === String(id) ? updater(fragment) : fragment,
-    ),
+    tous.map((fragment) => {
+      if (String(fragment.id) !== String(id)) return fragment;
+      const resultat = updater(fragment);
+      // Une mise à jour ordinaire ne change jamais le cycle de vie :
+      // deletedAt reste exactement ce qu'il était avant l'appel, quoi que
+      // l'updater ait renvoyé. La restauration passe uniquement par
+      // restaurerFragment().
+      return { ...resultat, deletedAt: fragment.deletedAt };
+    }),
   );
 }
 
+// Suppression logique, non destructive et idempotente : le fragment
+// reste physiquement présent, avec son id, son texte, ses tags, ses
+// versions et ses liens intacts. Une deuxième suppression du même
+// fragment ne modifie rien (le premier deletedAt est conservé). Un id
+// inexistant ne modifie aucun fragment.
 export function supprimerFragment(id: Fragment["id"]) {
+  const tous = lireTousLesFragments();
+
   return sauvegarderFragments(
-    lireFragments().filter((fragment) => String(fragment.id) !== String(id)),
+    tous.map((fragment) => {
+      if (String(fragment.id) !== String(id)) return fragment;
+      if (fragment.deletedAt) return fragment; // déjà supprimé : idempotent
+      return { ...fragment, deletedAt: new Date().toISOString() };
+    }),
+  );
+}
+
+// Restauration non destructive et idempotente : retire uniquement
+// `deletedAt`, préserve tout le reste. Un id inexistant ou déjà actif ne
+// modifie rien.
+export function restaurerFragment(id: Fragment["id"]) {
+  const tous = lireTousLesFragments();
+
+  return sauvegarderFragments(
+    tous.map((fragment) => {
+      if (String(fragment.id) !== String(id)) return fragment;
+      if (!fragment.deletedAt) return fragment; // déjà actif : idempotent
+      return { ...fragment, deletedAt: undefined };
+    }),
   );
 }
