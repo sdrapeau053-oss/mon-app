@@ -40,6 +40,7 @@ type PageManuscrit =
   | { chapter: ChapitreTome1; kind: "placeholder"; pageNumber: number; chapterId: string; chapterTitle: string };
 
 const CARACTERES_PAR_PAGE = 860;
+const CLE_COUVERTURE_LIVRE_VIVANT = "livre-vivant-couverture";
 
 function numeroChapitre(id: string) {
   return getNumeroChapitreTome1(id);
@@ -242,6 +243,10 @@ function formatDateModification(value: string) {
 function getChapterOptionLabel(chapitre: ChapitreTome1) {
   const statut = getStatutEditorialChapitreTome1(chapitre);
   return `${STATUT_EDITORIAL_MARKERS[statut]} Ch. ${numeroChapitre(chapitre.id)} · ${chapitre.titre}`;
+}
+
+function getChapterEditHref(chapitre: ChapitreTome1) {
+  return `/structure-tome-1#${chapitre.id}`;
 }
 
 function formatStat(nombre: number) {
@@ -507,19 +512,33 @@ export default function ManuscritPage() {
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [copie, setCopie] = useState(false);
+  const [couverture, setCouverture] = useState<string | null>(null);
+  const [isBookOpen, setIsBookOpen] = useState(true);
   const [includeEmptyChapters, setIncludeEmptyChapters] = useState(false);
   const [selectedChapterId, setSelectedChapterId] = useState<string>("all");
   const [pageIndex, setPageIndex] = useState(0);
   const [isWide, setIsWide] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [relationsNarratives, setRelationsNarratives] = useState<NarrativeRelationsSnapshot | null>(null);
   const readingZoneRef = useRef<HTMLElement | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setChapitres(lireChapitresTome1DepuisStorage());
     setFragments(lireFragments());
     setScenes(lireScenesRelationnelles());
     setRelationsNarratives(creerSnapshotRelationsNarratives());
+
+    try {
+      const storedCover = localStorage.getItem(CLE_COUVERTURE_LIVRE_VIVANT);
+      setCouverture(storedCover);
+      setIsBookOpen(!storedCover);
+    } catch {
+      setCouverture(null);
+      setIsBookOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -527,6 +546,16 @@ export default function ManuscritPage() {
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!menuRef.current || menuRef.current.contains(event.target as Node)) return;
+      setIsMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
   }, []);
 
   const chapitresLisibles = useMemo(
@@ -600,6 +629,8 @@ export default function ManuscritPage() {
     : currentRangeIndex >= 0
       ? currentRangeIndex < rangesList.length - 1
       : nextRangeFromFrontMatter >= 0;
+  const isClosedCoverMode = Boolean(couverture && !isBookOpen);
+  const menuItemClassName = "w-full rounded-[8px] px-3 py-1.5 text-left text-[11px] text-[#b8aa91] transition hover:bg-[#d6b25e]/8 hover:text-[#f5efe3]";
 
   const allerPagePrecedente = () => {
     setPageIndex((current) => Math.max(0, current - maxStep));
@@ -670,6 +701,38 @@ export default function ManuscritPage() {
     }
   };
 
+  const importerCouverture = (file: File | undefined) => {
+    if (!file || !["image/png", "image/jpeg", "image/jpg"].includes(file.type)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) return;
+
+      try {
+        localStorage.setItem(CLE_COUVERTURE_LIVRE_VIVANT, result);
+      } catch {
+        return;
+      }
+
+      setCouverture(result);
+      setIsBookOpen(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const retirerCouverture = () => {
+    try {
+      localStorage.removeItem(CLE_COUVERTURE_LIVRE_VIVANT);
+    } catch {
+      // L'affichage revient quand même au rendu par défaut.
+    }
+
+    setCouverture(null);
+    setIsBookOpen(true);
+    if (coverInputRef.current) coverInputRef.current.value = "";
+  };
+
   useEffect(() => {
     setPageIndex(0);
     if (!includeEmptyChapters && selectedChapterId !== "all") {
@@ -693,52 +756,135 @@ export default function ManuscritPage() {
   });
 
   return (
-    <main className="manuscript-viewport min-h-screen overflow-hidden bg-[#0d0c0a] text-[#f5efe3]">
-      <div className="manuscript-stage flex h-screen flex-col px-3 py-2 sm:px-5">
-        <header className="mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-1.5 pb-2 sm:flex-row sm:items-center sm:justify-between">
+    <main className="manuscript-viewport min-h-[calc(100vh-50px)] overflow-x-hidden overflow-y-auto bg-[#0d0c0a] text-[#f5efe3]">
+      <div className="manuscript-stage flex min-h-[calc(100vh-50px)] flex-col px-3 py-0 sm:px-5 overflow-x-hidden">
+        <header
+          className="relative z-50 mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-0.5 pb-0 sm:flex-row sm:items-center sm:justify-between"
+          style={{ zIndex: 80 }}
+        >
           <div className="flex items-center gap-3">
             <BackLink label="Système" />
             <div className="hidden h-5 w-px bg-[#d6b25e]/18 sm:block" />
             <p className="text-[10px] uppercase tracking-[0.24em] text-[#9c8d73]">Livre virtuel</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#b8aa91]">
-            <Link
-              className="rounded-full border border-[#d6b25e]/12 px-3 py-1.5 opacity-80 transition hover:border-[#d6b25e]/28 hover:text-[#f5efe3]"
-              href="/guide-strate"
+          <div className="relative" ref={menuRef}>
+            <button
+              className="rounded-full border border-[#d6b25e]/18 px-3 py-1 text-[11px] text-[#b8aa91] transition hover:border-[#d6b25e]/38 hover:text-[#f5efe3]"
+              onClick={() => setIsMenuOpen((v) => !v)}
+              type="button"
             >
-              Besoin d’aide ?
-            </Link>
-            <Link
-              className="rounded-full border border-[#d6b25e]/12 px-3 py-1.5 opacity-80 transition hover:border-[#d6b25e]/28 hover:text-[#f5efe3]"
-              href="/structure-tome-1"
-            >
-              Structure
-            </Link>
-            <button className="book-control" disabled={!canGoPreviousChapter} onClick={() => allerChapitre("previous")} type="button">
-              Ch. préc.
+              ···
             </button>
-            <button className="book-control" disabled={!canGoNextChapter} onClick={() => allerChapitre("next")} type="button">
-              Ch. suiv.
-            </button>
-            <button className="book-control" onClick={activerPleinEcran} type="button">
-              Plein écran
-            </button>
-            <button className="book-control" onClick={copierManuscrit} type="button">
-              {copie ? "Copié" : "Copier"}
-            </button>
+            {isMenuOpen && (
+              <div className="absolute right-0 top-full z-[100] mt-2 flex min-w-[180px] flex-col gap-1 rounded-[12px] border border-[#d6b25e]/14 bg-[#15120f] p-2 shadow-[0_18px_42px_rgba(0,0,0,0.42)]">
+                <Link className={menuItemClassName} href="/guide-strate" onClick={() => setIsMenuOpen(false)}>
+                  Besoin d’aide ?
+                </Link>
+                <Link className={menuItemClassName} href="/structure-tome-1" onClick={() => setIsMenuOpen(false)}>
+                  Structure Tome 1
+                </Link>
+                {!isClosedCoverMode && (
+                  <>
+                    <button
+                      className={menuItemClassName}
+                      disabled={!canGoPreviousChapter}
+                      onClick={() => {
+                        allerChapitre("previous");
+                        setIsMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      Ch. préc.
+                    </button>
+                    <button
+                      className={menuItemClassName}
+                      disabled={!canGoNextChapter}
+                      onClick={() => {
+                        allerChapitre("next");
+                        setIsMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      Ch. suiv.
+                    </button>
+                    <button
+                      className={menuItemClassName}
+                      onClick={() => {
+                        void activerPleinEcran();
+                        setIsMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      Plein écran
+                    </button>
+                    <button
+                      className={menuItemClassName}
+                      onClick={() => {
+                        void copierManuscrit();
+                        setIsMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      {copie ? "Copié" : "Copier"}
+                    </button>
+                  </>
+                )}
+                <button
+                  className={menuItemClassName}
+                  onClick={() => {
+                    coverInputRef.current?.click();
+                    setIsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  Couverture
+                </button>
+                {couverture && isBookOpen && (
+                  <button
+                    className={menuItemClassName}
+                    onClick={() => {
+                      setIsBookOpen(false);
+                      setIsMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    Voir couverture
+                  </button>
+                )}
+                {couverture && (
+                  <button
+                    className={menuItemClassName}
+                    onClick={() => {
+                      retirerCouverture();
+                      setIsMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    Retirer la couverture
+                  </button>
+                )}
+              </div>
+            )}
+            <input
+              accept="image/png,image/jpeg,image/jpg"
+              className="hidden"
+              onChange={(event) => importerCouverture(event.target.files?.[0])}
+              ref={coverInputRef}
+              type="file"
+            />
           </div>
         </header>
 
-        <section className="manuscript-toolbar mx-auto flex w-full max-w-7xl shrink-0 items-center justify-between gap-3 border-y border-[#d6b25e]/10 py-1.5">
+        <section className="manuscript-toolbar mx-auto flex w-full max-w-7xl shrink-0 items-center justify-between gap-3 border-y border-[#d6b25e]/10 py-0.5">
           <div className="min-w-0">
-            <h1 className="truncate font-serif text-lg text-[#f5efe3] sm:text-xl">
+            <h1 className="truncate font-serif text-sm text-[#f5efe3] sm:text-base">
               L’Héritage des Silences
             </h1>
-            <p className="truncate text-xs text-[#b8aa91]">
-              {TITRE_TOME_1} · {activeChapter}
+            <p className="truncate text-[10px] text-[#b8aa91]">
+              {TITRE_TOME_1}{isClosedCoverMode ? "" : ` · ${activeChapter}`}
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[#9c8d73]">
+            {!isClosedCoverMode && <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[9px] uppercase tracking-[0.16em] text-[#9c8d73]">
               {activeEditorialStatus ? (
                 <>
                   <span className="rounded-full border border-[#d6b25e]/12 bg-[#d6b25e]/5 px-2 py-0.5 text-[#d8caa8]">
@@ -751,47 +897,71 @@ export default function ManuscritPage() {
               ) : (
                 <span>Pages liminaires</span>
               )}
-            </div>
+            </div>}
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-xs text-[#b8aa91]">
-            <span className="hidden sm:inline">{chapitresRemplis}/{chapitres.length} chapitres écrits</span>
-            <span>Page {currentPageLabel} / {pages.length}</span>
-            <select
-              className="book-select max-w-[190px] rounded-full border border-[#d6b25e]/14 bg-[#14110e] px-3 py-1.5 text-xs text-[#d7cab0] outline-none transition focus:border-[#d6b25e]/45"
-              onChange={(event) => {
-                setSelectedChapterId(event.target.value);
-                setPageIndex(0);
-              }}
-              value={selectedChapterId}
-            >
-              <option value="all">Livre entier</option>
-              {chapitresLisibles.map((chapitre) => (
-                <option key={chapitre.id} value={chapitre.id}>
-                  {getChapterOptionLabel(chapitre)}
-                </option>
-              ))}
-            </select>
-            <label className="book-toggle flex cursor-pointer items-center gap-2 rounded-full border border-[#d6b25e]/14 px-3 py-1.5">
-              <input
-                checked={includeEmptyChapters}
-                className="accent-[#d6b25e]"
-                onChange={(event) => setIncludeEmptyChapters(event.target.checked)}
-                type="checkbox"
-              />
-              <span className="hidden sm:inline">Toute la structure</span>
-              <span className="sm:hidden">Tout</span>
-            </label>
+            {isClosedCoverMode ? (
+              <button
+                className="inline-flex min-h-8 min-w-max items-center justify-center whitespace-nowrap rounded-full border border-[#d6b25e]/38 bg-[#d6b25e] px-4 py-2 text-[11px] font-semibold leading-none text-[#15110d] transition hover:bg-[#efd17a]"
+                onClick={() => setIsBookOpen(true)}
+                type="button"
+              >
+                Ouvrir le livre
+              </button>
+            ) : (
+              <>
+                <span className="hidden sm:inline">{chapitresRemplis}/{chapitres.length} chapitres écrits</span>
+                <span>Page {currentPageLabel} / {pages.length}</span>
+              </>
+            )}
+            {!isClosedCoverMode && activeChapterData && (
+              <Link
+                className="inline-flex min-h-8 min-w-max items-center justify-center whitespace-nowrap rounded-full border border-[#d6b25e]/38 bg-[#d6b25e] px-3.5 py-2 text-[11px] font-semibold leading-none text-[#15110d] transition hover:bg-[#efd17a]"
+                href={getChapterEditHref(activeChapterData)}
+              >
+                {activeWordCount === 0 ? "Coller le chapitre" : "Modifier le chapitre"}
+              </Link>
+            )}
+            {!isClosedCoverMode && (
+              <>
+                <select
+                  className="book-select max-w-[190px] rounded-full border border-[#d6b25e]/14 bg-[#14110e] px-3 py-1.5 text-xs text-[#d7cab0] outline-none transition focus:border-[#d6b25e]/45"
+                  onChange={(event) => {
+                    setSelectedChapterId(event.target.value);
+                    setPageIndex(0);
+                  }}
+                  value={selectedChapterId}
+                >
+                  <option value="all">Livre entier</option>
+                  {chapitresLisibles.map((chapitre) => (
+                    <option key={chapitre.id} value={chapitre.id}>
+                      {getChapterOptionLabel(chapitre)}
+                    </option>
+                  ))}
+                </select>
+                <label className="book-toggle flex cursor-pointer items-center gap-2 rounded-full border border-[#d6b25e]/14 px-3 py-1.5">
+                  <input
+                    checked={includeEmptyChapters}
+                    className="accent-[#d6b25e]"
+                    onChange={(event) => setIncludeEmptyChapters(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="hidden sm:inline">Toute la structure</span>
+                  <span className="sm:hidden">Tout</span>
+                </label>
+              </>
+            )}
           </div>
         </section>
 
-        <section
+        {!isClosedCoverMode && <section
           className={[
             "manuscript-insights-panel mx-auto mt-1 w-full max-w-7xl shrink-0 overflow-hidden rounded-[14px] border border-[#d6b25e]/10 bg-[#15120f]/76 text-[#c2b397] shadow-[0_8px_22px_rgba(0,0,0,0.14)] backdrop-blur-sm",
-            isInsightsOpen ? "max-h-[156px]" : "max-h-[38px]",
+            isInsightsOpen ? "max-h-[220px]" : "max-h-[32px]",
           ].join(" ")}
         >
           <button
-            className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
+            className="flex w-full items-center justify-between gap-3 px-3 py-0.5 text-left"
             onClick={() => setIsInsightsOpen((value) => !value)}
             type="button"
           >
@@ -812,7 +982,7 @@ export default function ManuscritPage() {
             </span>
           </button>
 
-          <div className="max-h-[118px] overflow-y-auto border-t border-[#d6b25e]/8 px-3 py-2 text-[9px] text-[#b8aa91]">
+          <div className="max-h-[172px] overflow-y-auto border-t border-[#d6b25e]/8 px-3 py-2 text-[9px] text-[#b8aa91]">
             <div className="grid gap-2 md:grid-cols-5">
               <div className="min-w-0">
                 <p className="mb-1 text-[8px] uppercase tracking-[0.18em] text-[#9c8d73]">
@@ -925,41 +1095,76 @@ export default function ManuscritPage() {
               </div>
             </div>
           </div>
-        </section>
+        </section>}
 
-        <section className="manuscript-reading-zone relative mx-auto w-full max-w-7xl flex-1" ref={readingZoneRef}>
-          <button
-            aria-label="Page précédente"
-            className="book-side-arrow book-side-arrow-left"
-            disabled={!canGoPrevious}
-            onClick={allerPagePrecedente}
-            type="button"
-          >
-            ‹
-          </button>
-          <button
-            aria-label="Page suivante"
-            className="book-side-arrow book-side-arrow-right"
-            disabled={!canGoNext}
-            onClick={allerPageSuivante}
-            type="button"
-          >
-            ›
-          </button>
-
-          <div className="book-shell">
-            <div className="book-object relative z-20 grid h-full w-full grid-cols-1 gap-0 md:grid-cols-2">
-              {visiblePages.map((page, index) => (
-                <BookPage
-                  isLeft={isWide && index === 0}
-                  isRight={isWide && index === 1}
-                  key={pageKey(page, visibleIndex + index)}
-                  page={page}
+        <section
+          className="manuscript-reading-zone relative mx-auto w-full max-w-none flex-1 overflow-x-hidden px-2"
+          ref={readingZoneRef}
+        >
+          {isClosedCoverMode && couverture ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-4">
+              <div
+                className="relative overflow-hidden rounded-[24px] border border-[#d6b25e]/24 bg-black shadow-[0_44px_110px_rgba(0,0,0,0.72),0_0_0_1px_rgba(214,178,94,0.12)]"
+                style={{
+                  aspectRatio: "2 / 3",
+                  maxHeight: "min(86vh, 920px)",
+                  width: "min(54vw, 600px, calc((100vh - 120px) * 0.67))",
+                }}
+              >
+                <img
+                  alt="Couverture importée du livre"
+                  className="h-full w-full object-contain object-center"
+                  src={couverture}
                 />
-              ))}
-              {isWide && !visiblePages[1] && <div className="book-page-empty hidden md:block" />}
+              </div>
+              <button
+                className="inline-flex min-h-9 min-w-max items-center justify-center whitespace-nowrap rounded-full border border-[#d6b25e]/38 bg-[#d6b25e] px-5 py-2 text-[11px] font-semibold leading-none text-[#15110d] transition hover:bg-[#efd17a]"
+                onClick={() => setIsBookOpen(true)}
+                type="button"
+              >
+                Ouvrir le livre
+              </button>
             </div>
-          </div>
+          ) : (
+            <>
+              <button
+                aria-label="Page précédente"
+                className="book-side-arrow book-side-arrow-left"
+                disabled={!canGoPrevious}
+                onClick={allerPagePrecedente}
+                type="button"
+              >
+                ‹
+              </button>
+              <button
+                aria-label="Page suivante"
+                className="book-side-arrow book-side-arrow-right"
+                disabled={!canGoNext}
+                onClick={allerPageSuivante}
+                type="button"
+              >
+                ›
+              </button>
+
+              <div className="book-shell">
+                <div className="book-object relative z-20 grid h-full w-full grid-cols-1 gap-0 md:grid-cols-2">
+                  {visiblePages.map((page, index) => (
+                    <BookPage
+                      isLeft={isWide && index === 0}
+                      isRight={isWide && index === 1}
+                      key={pageKey(page, visibleIndex + index)}
+                      page={page}
+                      selectChapter={(chapterId) => {
+                        setSelectedChapterId(chapterId);
+                        setPageIndex(0);
+                      }}
+                    />
+                  ))}
+                  {isWide && !visiblePages[1] && <div className="book-page-empty hidden md:block" />}
+                </div>
+              </div>
+            </>
+          )}
         </section>
       </div>
     </main>
@@ -970,10 +1175,12 @@ function BookPage({
   isLeft,
   isRight,
   page,
+  selectChapter,
 }: {
   isLeft?: boolean;
   isRight?: boolean;
   page?: PageManuscrit;
+  selectChapter: (chapterId: string) => void;
 }) {
   if (!page) {
     return <div className="book-page-empty hidden md:block" />;
@@ -1028,9 +1235,11 @@ function BookPage({
           <div className="mx-auto mt-2 w-full max-w-sm space-y-2">
             {page.chapters.length > 0 ? (
               page.chapters.map((chapitre) => (
-                <div
-                  className="flex items-baseline gap-3 border-b border-[#8f7a50]/16 pb-1.5 text-[#3d3326]"
+                <button
+                  className="flex w-full cursor-pointer items-baseline gap-3 border-b border-[#8f7a50]/16 bg-transparent pb-1.5 text-left text-[#3d3326] transition hover:border-[#8f7a50]/34 hover:text-[#211d18]"
                   key={chapitre.id}
+                  onClick={() => selectChapter(chapitre.id)}
+                  type="button"
                 >
                   <span className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-[#8f7a50]">
                     {String(numeroChapitre(chapitre.id)).padStart(2, "0")}
@@ -1038,7 +1247,7 @@ function BookPage({
                   <span className="font-serif text-sm leading-snug">
                     {chapitre.titre}
                   </span>
-                </div>
+                </button>
               ))
             ) : (
               <p className="text-center text-sm italic leading-7 text-[#84755f]">
@@ -1076,6 +1285,12 @@ function BookPage({
           <p className="book-placeholder-copy mx-auto max-w-xs text-sm italic leading-7 text-[#84755f]">
             Chapitre à écrire.
           </p>
+          <Link
+            className="mx-auto mt-4 inline-flex min-h-9 w-max max-w-full items-center justify-center whitespace-nowrap rounded-full border border-[#8f7a50]/24 bg-[#211d18] px-5 py-2 text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-[#fbf3e2] no-underline transition hover:bg-[#3d3326]"
+            href={getChapterEditHref(page.chapter)}
+          >
+            Coller le chapitre
+          </Link>
           {page.chapter.fonctionNarrative && (
             <p className="book-placeholder-note mx-auto max-w-sm text-xs leading-6 text-[#8b7b63]">
               {page.chapter.fonctionNarrative}

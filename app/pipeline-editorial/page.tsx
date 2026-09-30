@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
+import {
+  getEditorialAuditCurrencyStatus,
+  type EditorialAuditCurrencyStatus,
+} from "@/lib/editorial-governance";
 import { getCompleteChapter } from "@/lib/manuscript-source";
 
 const CHAPITRES_TOME_1_KEY = "chapitres-tome-1";
@@ -14,7 +18,18 @@ const AUDIT_ANTI_IA_RESULTS_KEY = "audit-anti-ia-results";
 const PIPELINE_EDITORIAL_NOTES_KEY = "pipeline-editorial-notes";
 
 type StoredChapterStatus = "à écrire" | "écrit" | "scellé";
-type PipelineStatus = "À faire" | "En cours" | "Attention" | "Validé" | "Prêt à sceller" | "Scellé";
+type PipelineStatus =
+  | "À faire"
+  | "En cours"
+  | "Attention"
+  | "Non analysé"
+  | "Ancien audit"
+  | "Courant"
+  | "Texte modifié depuis l’audit"
+  | "Standard/prompt ancien"
+  | "Audit non conforme"
+  | "Prêt à sceller"
+  | "Scellé";
 
 type StoredChapter = {
   id: string;
@@ -49,6 +64,7 @@ type StoredAuditVibration = {
   analyzedAt: string;
   wordCount: number;
   paragraphCount: number;
+  metadata?: unknown;
   result: unknown;
 };
 
@@ -60,6 +76,7 @@ type StoredAuditLinguistique = {
   analyzedAt: string;
   wordCount: number;
   paragraphCount: number;
+  metadata?: unknown;
   result: unknown;
 };
 
@@ -71,6 +88,7 @@ type StoredAuditSurExplication = {
   analyzedAt: string;
   wordCount: number;
   paragraphCount: number;
+  metadata?: unknown;
   result: unknown;
 };
 
@@ -82,6 +100,7 @@ type StoredAuditVoix = {
   analyzedAt: string;
   wordCount: number;
   paragraphCount: number;
+  metadata?: unknown;
   result: unknown;
 };
 
@@ -93,6 +112,7 @@ type StoredAuditAntiIa = {
   analyzedAt: string;
   wordCount: number;
   paragraphCount: number;
+  metadata?: unknown;
   result: unknown;
 };
 
@@ -286,6 +306,40 @@ function getDecisionFinale(status: PipelineStatus) {
   return "Non prêt";
 }
 
+function getAuditPipelineStatus(audit: unknown, chapterText: string): PipelineStatus {
+  const status = getEditorialAuditCurrencyStatus(audit, chapterText);
+  const labels: Record<EditorialAuditCurrencyStatus, PipelineStatus> = {
+    ABSENT: "Non analysé",
+    LEGACY_UNVERSIONED: "Ancien audit",
+    VERSIONED_CURRENT: "Courant",
+    STALE_TEXT: "Texte modifié depuis l’audit",
+    STALE_STANDARD_OR_PROMPT: "Standard/prompt ancien",
+    INVALID_TRACEABILITY: "Audit non conforme",
+  };
+
+  return labels[status];
+}
+
+function formatAuditMeta(audit: { analyzedAt?: string } | undefined, status: PipelineStatus) {
+  if (!audit) return undefined;
+
+  const details: Record<PipelineStatus, string> = {
+    "À faire": "",
+    "En cours": "",
+    Attention: "",
+    "Non analysé": "",
+    "Ancien audit": "non versionné, consultable seulement",
+    Courant: "traçabilité courante",
+    "Texte modifié depuis l’audit": "texte courant différent",
+    "Standard/prompt ancien": "standard ou prompt non courant",
+    "Audit non conforme": "traçabilité incomplète ou invalide",
+    "Prêt à sceller": "",
+    Scellé: "",
+  };
+  const date = formatDateAudit(audit.analyzedAt);
+  return [date ? `Dernier audit : ${date}` : "", details[status]].filter(Boolean).join(" · ");
+}
+
 function getPipelineSteps(
   chapter: StoredChapter | null,
   chapterText: string,
@@ -296,43 +350,42 @@ function getPipelineSteps(
   auditAntiIa?: StoredAuditAntiIa,
 ): PipelineStep[] {
   const globalStatus = getGlobalStatus(chapter, chapterText);
-  const defaultStatus: PipelineStatus = globalStatus === "Scellé" ? "Scellé" : "À faire";
-  const auditStatus: PipelineStatus = audit ? "Validé" : "À faire";
-  const controleStatus: PipelineStatus = controleLinguistique ? "Validé" : "À faire";
-  const surExplicationStatus: PipelineStatus = auditSurExplication ? "Validé" : "À faire";
-  const voixStatus: PipelineStatus = auditVoix ? "Validé" : "À faire";
-  const antiIaStatus: PipelineStatus = auditAntiIa ? "Validé" : "À faire";
+  const auditStatus = getAuditPipelineStatus(audit, chapterText);
+  const controleStatus = getAuditPipelineStatus(controleLinguistique, chapterText);
+  const surExplicationStatus = getAuditPipelineStatus(auditSurExplication, chapterText);
+  const voixStatus = getAuditPipelineStatus(auditVoix, chapterText);
+  const antiIaStatus = getAuditPipelineStatus(auditAntiIa, chapterText);
 
   return [
     {
       label: "Audit de vibration nerveuse",
       status: auditStatus,
       href: "/audit-vibration",
-      meta: audit ? `Dernier audit : ${formatDateAudit(audit.analyzedAt)}` : undefined,
+      meta: formatAuditMeta(audit, auditStatus),
     },
     {
       label: "Contrôle linguistique final",
       status: controleStatus,
       href: "/audit-linguistique",
-      meta: controleLinguistique ? `Dernier contrôle : ${formatDateAudit(controleLinguistique.analyzedAt)}` : undefined,
+      meta: formatAuditMeta(controleLinguistique, controleStatus),
     },
     {
       label: "Détection de sur-explication",
       status: surExplicationStatus,
       href: "/audit-sur-explication",
-      meta: auditSurExplication ? `Dernier audit : ${formatDateAudit(auditSurExplication.analyzedAt)}` : undefined,
+      meta: formatAuditMeta(auditSurExplication, surExplicationStatus),
     },
     {
       label: "Cohérence de voix avec le Tome 1",
       status: voixStatus,
       href: "/audit-voix",
-      meta: auditVoix ? `Dernier audit : ${formatDateAudit(auditVoix.analyzedAt)}` : undefined,
+      meta: formatAuditMeta(auditVoix, voixStatus),
     },
     {
       label: "Contrôle anti-IA / humanisation",
       status: antiIaStatus,
       href: "/audit-anti-ia",
-      meta: auditAntiIa ? `Dernier audit : ${formatDateAudit(auditAntiIa.analyzedAt)}` : undefined,
+      meta: formatAuditMeta(auditAntiIa, antiIaStatus),
     },
     { label: "Validation de scellement", status: globalStatus === "Scellé" ? "Scellé" : "À faire" },
   ];
@@ -355,10 +408,35 @@ function getStatusStyle(status: PipelineStatus) {
       border: "rgba(192, 57, 43, 0.26)",
       color: "#8b2f24",
     },
-    Validé: {
+    "Non analysé": {
+      background: "rgba(80, 65, 50, 0.08)",
+      border: "rgba(80, 65, 50, 0.16)",
+      color: "rgba(80, 65, 50, 0.68)",
+    },
+    "Ancien audit": {
+      background: "rgba(198, 169, 126, 0.16)",
+      border: "rgba(198, 169, 126, 0.32)",
+      color: "#6f5b3f",
+    },
+    Courant: {
       background: "rgba(107, 143, 113, 0.14)",
       border: "rgba(107, 143, 113, 0.28)",
       color: "#49694f",
+    },
+    "Texte modifié depuis l’audit": {
+      background: "rgba(201, 168, 76, 0.18)",
+      border: "rgba(201, 168, 76, 0.34)",
+      color: "#725f25",
+    },
+    "Standard/prompt ancien": {
+      background: "rgba(192, 57, 43, 0.12)",
+      border: "rgba(192, 57, 43, 0.26)",
+      color: "#8b2f24",
+    },
+    "Audit non conforme": {
+      background: "rgba(192, 57, 43, 0.12)",
+      border: "rgba(192, 57, 43, 0.26)",
+      color: "#8b2f24",
     },
     "Prêt à sceller": {
       background: "rgba(201, 168, 76, 0.18)",

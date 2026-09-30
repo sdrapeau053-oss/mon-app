@@ -1,39 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  createAuditTraceabilityMetadata,
+  getEditorialSystemPrompt,
+  type AuditTraceabilityMetadata,
+} from "@/lib/editorial-governance";
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SYSTEM_PROMPT = `Tu es un directeur littéraire spécialisé en autobiographie littéraire contemporaine.
-Tu analyses la cohérence de voix d’un chapitre par rapport au reste du Tome 1.
-
-Tu appliques le protocole Justesse Nue :
-- corps avant idée
-- atmosphère avant événement
-- aucune pédagogie
-- aucune consolation
-- sobriété radicale
-- texture humaine
-- fragmentation organique
-- rythme somatique
-- aucune sur-littérarisation
-
-Tu compares :
-- rythme
-- densité
-- abstraction
-- tension
-- vocabulaire
-- fragmentation
-- niveau explicatif
-- texture corporelle
-- cohérence émotionnelle
-
-Tu ne réécris pas le texte.
-Tu analyses uniquement.
-
-Réponds uniquement en JSON structuré.`;
+const MODEL_PROVIDER = "anthropic";
+const MODEL_NAME = "claude-sonnet-4-20250514";
+const RESULT_SCHEMA_VERSION = "1.0.0";
+const PROMPT_ID = "LHS-VOICE-LONGITUDINAL";
+const TEXT_VERSION = "primary-chapter-text-v1; references-context-not-hashed";
 
 type ChapitreAudit = {
   id: string;
@@ -51,40 +32,27 @@ type ChapitreAudit = {
   contenu?: string;
 };
 
-type RuptureDetectee = {
-  extrait: string;
-  probleme: string;
-  impact: string;
-};
-
-type AuditVoixResult = {
-  niveauCohesionVoix: string;
-  scoreJustesseNue: string;
-  rythme: string;
-  textureCorporelle: string;
-  niveauAbstraction: string;
-  coherenceLexicale: string;
-  coherenceEmotionnelle: string;
-  rupturesDetectees: RuptureDetectee[];
-  chapitresProches: string[];
-  chapitresTresDifferents: string[];
-  recommandationsEditoriales: string[];
-  decision: string;
+type VoiceLongitudinalResult = {
+  overallStatus: string;
+  continuity: string[];
+  evolution: string[];
+  ruptures: string[];
+  repetitions: string[];
+  overHarmonization: string[];
+  recommendations: string[];
+  uncertainty: string[];
+  traceability: AuditTraceabilityMetadata;
 };
 
 const REQUIRED_FIELDS = [
-  "niveauCohesionVoix",
-  "scoreJustesseNue",
-  "rythme",
-  "textureCorporelle",
-  "niveauAbstraction",
-  "coherenceLexicale",
-  "coherenceEmotionnelle",
-  "rupturesDetectees",
-  "chapitresProches",
-  "chapitresTresDifferents",
-  "recommandationsEditoriales",
-  "decision",
+  "overallStatus",
+  "continuity",
+  "evolution",
+  "ruptures",
+  "repetitions",
+  "overHarmonization",
+  "recommendations",
+  "uncertainty",
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -117,23 +85,7 @@ function normalizeStringArray(value: unknown) {
   return value.map((item) => String(item || "").trim()).filter(Boolean);
 }
 
-function normalizeRuptures(value: unknown): RuptureDetectee[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => {
-      if (!isRecord(item)) return null;
-
-      return {
-        extrait: String(item.extrait || "").trim(),
-        probleme: String(item.probleme || "").trim(),
-        impact: String(item.impact || "").trim(),
-      };
-    })
-    .filter((item): item is RuptureDetectee => Boolean(item && (item.extrait || item.probleme || item.impact)));
-}
-
-function extractJson(raw: string): AuditVoixResult {
+function extractJson(raw: string, traceability: AuditTraceabilityMetadata): VoiceLongitudinalResult {
   const clean = raw.replace(/```json|```/g, "").trim();
   const start = clean.indexOf("{");
   const end = clean.lastIndexOf("}");
@@ -150,18 +102,15 @@ function extractJson(raw: string): AuditVoixResult {
   }
 
   return {
-    niveauCohesionVoix: String(parsed.niveauCohesionVoix || ""),
-    scoreJustesseNue: String(parsed.scoreJustesseNue || ""),
-    rythme: String(parsed.rythme || ""),
-    textureCorporelle: String(parsed.textureCorporelle || ""),
-    niveauAbstraction: String(parsed.niveauAbstraction || ""),
-    coherenceLexicale: String(parsed.coherenceLexicale || ""),
-    coherenceEmotionnelle: String(parsed.coherenceEmotionnelle || ""),
-    rupturesDetectees: normalizeRuptures(parsed.rupturesDetectees),
-    chapitresProches: normalizeStringArray(parsed.chapitresProches),
-    chapitresTresDifferents: normalizeStringArray(parsed.chapitresTresDifferents),
-    recommandationsEditoriales: normalizeStringArray(parsed.recommandationsEditoriales),
-    decision: String(parsed.decision || ""),
+    overallStatus: String(parsed.overallStatus || ""),
+    continuity: normalizeStringArray(parsed.continuity),
+    evolution: normalizeStringArray(parsed.evolution),
+    ruptures: normalizeStringArray(parsed.ruptures),
+    repetitions: normalizeStringArray(parsed.repetitions),
+    overHarmonization: normalizeStringArray(parsed.overHarmonization),
+    recommendations: normalizeStringArray(parsed.recommendations),
+    uncertainty: normalizeStringArray(parsed.uncertainty),
+    traceability,
   };
 }
 
@@ -187,10 +136,25 @@ export async function POST(req: NextRequest) {
 
     if (!chapitre.contenu || chapitre.contenu.trim().length < 300) {
       return NextResponse.json(
-        { error: "Le texte du chapitre est trop court pour analyser la cohérence de voix." },
+        { error: "Le texte du chapitre est trop court pour analyser la cohérence longitudinale de voix." },
         { status: 400 },
       );
     }
+
+    const systemPrompt = getEditorialSystemPrompt(PROMPT_ID);
+    if (!systemPrompt) {
+      return NextResponse.json({ error: "Prompt voix longitudinale introuvable." }, { status: 500 });
+    }
+
+    const analyzedText = chapitre.contenu.trim();
+    const metadata = createAuditTraceabilityMetadata({
+      promptId: PROMPT_ID,
+      modelProvider: MODEL_PROVIDER,
+      modelName: MODEL_NAME,
+      resultSchemaVersion: RESULT_SCHEMA_VERSION,
+      text: analyzedText,
+      textVersion: TEXT_VERSION,
+    });
 
     const metadataChapitre = {
       id: chapitre.id,
@@ -213,6 +177,7 @@ export async function POST(req: NextRequest) {
         id: item.id,
         titre: item.titre,
         ageApprox: item.ageApprox,
+        periode: item.periode,
         typeChapitre: item.typeChapitre,
         intensite: item.intensite,
         fonctionNarrative: item.fonctionNarrative,
@@ -220,61 +185,38 @@ export async function POST(req: NextRequest) {
       }));
 
     const claudeCall = client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: MODEL_NAME,
       max_tokens: 2200,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [
         {
           role: "user",
-          content: `Analyse la cohérence de voix du chapitre sélectionné par rapport au reste du Tome 1.
+          content: `Analyse longitudinalement la voix du chapitre selectionne par rapport aux references.
 
-SOURCE PRINCIPALE À ANALYSER — TEXTE COMPLET DU CHAPITRE :
-${chapitre.contenu}
+STRATEGIE DE TRACEABILITE :
+- textHash porte sur le texte complet du chapitre principal analyse.
+- Les chapitres de reference sont un contexte comparatif tronque, non une source a imiter.
 
-CONTEXTE SECONDAIRE — MÉTADONNÉES DU CHAPITRE :
+SOURCE PRINCIPALE A ANALYSER - TEXTE COMPLET DU CHAPITRE :
+${analyzedText}
+
+CONTEXTE SECONDAIRE - METADONNEES DU CHAPITRE :
 ${JSON.stringify(metadataChapitre, null, 2)}
 
-CHAPITRES ÉCRITS DE RÉFÉRENCE POUR COMPARAISON :
+REFERENCES COMPARATIVES :
 ${JSON.stringify(references, null, 2)}
 
-Contraintes :
-- Le texte complet du chapitre est la source principale.
-- Les autres chapitres écrits servent de référence comparative pour la voix globale du Tome 1.
-- Ne réécris pas le texte.
-- Ne propose pas une version réécrite.
-- Analyse rythme, densité, abstraction, tension, vocabulaire, fragmentation, niveau explicatif, texture corporelle et cohérence émotionnelle.
-- Repère les ruptures de ton, les changements involontaires de style, les passages trop cliniques, trop propres, trop littéraires ou trop explicatifs.
-- Réponds uniquement avec ce JSON valide :
-
+Retourne uniquement ce JSON valide :
 {
-  "niveauCohesionVoix": "",
-  "scoreJustesseNue": "",
-  "rythme": "",
-  "textureCorporelle": "",
-  "niveauAbstraction": "",
-  "coherenceLexicale": "",
-  "coherenceEmotionnelle": "",
-  "rupturesDetectees": [
-    {
-      "extrait": "",
-      "probleme": "",
-      "impact": ""
-    }
-  ],
-  "chapitresProches": [],
-  "chapitresTresDifferents": [],
-  "recommandationsEditoriales": [],
-  "decision": ""
-}
-
-Valeurs autorisées pour niveauCohesionVoix :
-très cohérent, cohérent, légèrement divergent, divergent, rupture importante.
-
-Valeurs autorisées pour scoreJustesseNue :
-très cohérent, cohérent, fragile, incohérent.
-
-Valeurs autorisées pour decision :
-cohérent avec le Tome 1, ajustements mineurs recommandés, révision stylistique recommandée, retravailler profondément avant scellement.`,
+  "overallStatus": "continuite legitime | evolution legitime | rupture a surveiller | rupture incoherente",
+  "continuity": [],
+  "evolution": [],
+  "ruptures": [],
+  "repetitions": [],
+  "overHarmonization": [],
+  "recommendations": [],
+  "uncertainty": []
+}`,
         },
       ],
     });
@@ -290,7 +232,8 @@ cohérent avec le Tome 1, ajustements mineurs recommandés, révision stylistiqu
       throw new Error("Réponse Claude vide ou inattendue.");
     }
 
-    return NextResponse.json({ result: extractJson(firstBlock.text) });
+    const result = extractJson(firstBlock.text, metadata);
+    return NextResponse.json({ result, metadata });
   } catch (error) {
     console.error("Erreur API audit-voix:", error);
     return NextResponse.json(

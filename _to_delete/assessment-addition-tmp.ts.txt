@@ -1,0 +1,115 @@
+
+// -----------------------------------------------
+// Validation des données historiques (Décision 2 §6)
+// -----------------------------------------------
+//
+// SR-D-001, Décision 2 §6 (« Processus de validation des données
+// historiques ») : « Voir la valeur originale ; voir l'échelle supposée ;
+// confirmer ou corriger l'échelle ; identifier la source si connue ;
+// produire la valeur normalisée ; conserver une trace de cette validation.
+// Aucune valeur source: "unknown" ne contribue automatiquement à un score
+// consolidé. »
+//
+// Les deux fonctions ci-dessous implémentent ce processus pour un
+// LegacyScoreSnapshot déjà attaché à un dossier canonique (produit,
+// lecture seule, par legacy-adapter.ts, Décision 4 §3) : confirmer (avec
+// ou sans correction de l'échelle supposée) produit une évaluation
+// canonique ; exclure ne produit jamais d'évaluation. Aucune des deux ne
+// modifie ou ne supprime le LegacyScoreSnapshot original au-delà de son
+// champ migrationStatus — la valeur brute (rawValue) reste intacte et
+// consultable indéfiniment (même principe de non-destruction que
+// addAssessment et addNeed).
+
+// Suggestion PUREMENT INFORMATIVE de l'échelle probable (Décision 2 §5 :
+// « valeur <= 10 → 1-10, valeur > 10 → 0-100 »), explicitement autorisée
+// par SR-D-001 « pour proposer une interprétation probable » mais jamais
+// pour « modifier définitivement la donnée sans validation humaine
+// explicite ». Cette fonction ne modifie jamais un ScoreValue ou un
+// LegacyScoreSnapshot ; son seul usage légitime est l'affichage d'une
+// suggestion que l'utilisatrice doit confirmer ou corriger elle-même via
+// confirmLegacyScoreSnapshot ci-dessous — jamais appliquée automatiquement.
+export function suggestLikelyScale(rawValue: number): KnownScoreScale {
+  return rawValue <= 10 ? "1-10" : "0-100";
+}
+
+// Évaluation issue d'une valeur historique validée par l'utilisatrice :
+// source "imported" pour le score (valeur qui provient d'une donnée
+// existante, pas d'une nouvelle saisie manuelle ni d'une analyse IA) et
+// "user_confirmed" pour l'évaluation elle-même (la validation humaine
+// explicite EST l'acte qui produit cette évaluation — Décision 2 §6).
+// Ces deux valeurs d'énumération existent déjà dans types.ts
+// (ScoreSource, AssessmentSource) depuis leur définition d'origine, sans
+// qu'aucune fonction ne les utilise avant celle-ci : ce n'est donc pas une
+// nouvelle décision de gouvernance, seulement l'implémentation d'un chemin
+// déjà prévu.
+export function createImportedScoreAssessment(input: CreateScoreAssessmentInput): ScoreAssessment {
+  return buildScoreAssessment(input, "imported", "user_confirmed");
+}
+
+// Confirme (ou corrige) l'échelle d'un LegacyScoreSnapshot déjà attaché au
+// dossier et produit l'évaluation canonique correspondante en un seul
+// mouvement cohérent : migrationStatus passe à "confirmed" ET l'évaluation
+// est ajoutée à l'historique (jamais l'un sans l'autre, pour qu'un
+// snapshot marqué "confirmed" ait toujours une évaluation correspondante
+// traçable — Décision 2 §6, « conserver une trace de cette validation »).
+// L'appelant construit l'évaluation lui-même (via createImportedScoreAssessment)
+// : cette fonction ne décide d'aucune dimension ni d'aucune échelle, elle
+// se contente d'appliquer atomiquement les deux effets déjà décidés par
+// l'appelant, même répartition des responsabilités qu'ailleurs dans ce
+// fichier (buildScoreAssessment ne décide pas non plus de la source, reçue
+// en paramètre).
+export function confirmLegacyScoreSnapshot(
+  dossier: RelationDossier,
+  snapshotId: string,
+  assessment: ScoreAssessment,
+  options: AddAssessmentOptions = {},
+): RelationDossier {
+  const now = options.now ?? (() => new Date().toISOString());
+  const snapshots = dossier.legacyScoreSnapshots ?? [];
+
+  if (!snapshots.some((snapshot) => snapshot.id === snapshotId)) {
+    throw new Error(
+      `Aucun LegacyScoreSnapshot avec l'id "${snapshotId}" n'existe pour ce dossier : impossible de le confirmer sans qu'il existe déjà (SR-D-001, Décision 2 §6).`,
+    );
+  }
+
+  const dossierWithAssessment = addAssessment(dossier, assessment, { now });
+
+  return {
+    ...dossierWithAssessment,
+    legacyScoreSnapshots: snapshots.map((snapshot) =>
+      snapshot.id === snapshotId ? { ...snapshot, migrationStatus: "confirmed" } : snapshot,
+    ),
+  };
+}
+
+// Exclut définitivement un LegacyScoreSnapshot de toute promotion future,
+// sans jamais produire d'évaluation : c'est l'issue légitime lorsque
+// l'échelle réelle ne peut pas être déterminée (Décision 2 §5 :
+// l'incertitude ne doit jamais être résolue par une déduction silencieuse)
+// ou lorsque la dimension n'a aucune correspondance canonique
+// (energieEmotionnelle — voir manual-score-sync.ts, Phase 8bis.5). La
+// valeur brute reste conservée dans le snapshot, jamais supprimée : seul
+// migrationStatus change, de "pending_review" à "excluded".
+export function excludeLegacyScoreSnapshot(
+  dossier: RelationDossier,
+  snapshotId: string,
+  options: AddAssessmentOptions = {},
+): RelationDossier {
+  const now = options.now ?? (() => new Date().toISOString());
+  const snapshots = dossier.legacyScoreSnapshots ?? [];
+
+  if (!snapshots.some((snapshot) => snapshot.id === snapshotId)) {
+    throw new Error(
+      `Aucun LegacyScoreSnapshot avec l'id "${snapshotId}" n'existe pour ce dossier : impossible de l'exclure sans qu'il existe déjà (SR-D-001, Décision 2 §6).`,
+    );
+  }
+
+  return {
+    ...dossier,
+    legacyScoreSnapshots: snapshots.map((snapshot) =>
+      snapshot.id === snapshotId ? { ...snapshot, migrationStatus: "excluded" } : snapshot,
+    ),
+    updatedAt: now(),
+  };
+}

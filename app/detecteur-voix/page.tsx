@@ -12,19 +12,32 @@ import { useRef, useState } from 'react'
 type ProblemeVoix = {
   passage: string
   type: string
-  pourquoi: string
+  pourquoi?: string
+  why?: string
+  recommendation?: string
+  directions?: string[]
   directionsCorrection?: string[]
   exempleMinimal?: string
   suggestions?: string[]
 }
 
 type AnalyseVoix = {
-  problemes: ProblemeVoix[]
-  points_forts: string
+  problemes?: ProblemeVoix[]
+  points_forts?: string
+  overallStatus?: string
+  strengths?: string[]
+  issues?: ProblemeVoix[]
+  recommendations?: string[]
+  preserve?: string[]
+  revise?: string[]
+  remove?: string[]
+  uncertainty?: string[]
 }
 
 type DetecteurVoixResponse = {
+  result?: unknown
   analyse?: unknown
+  metadata?: unknown
   error?: string
   erreur?: string
 }
@@ -34,7 +47,10 @@ function estAnalyseVoix(analyse: unknown): analyse is AnalyseVoix {
 
   const valeur = analyse as Partial<AnalyseVoix>
 
-  return Array.isArray(valeur.problemes) && typeof valeur.points_forts === 'string'
+  return (
+    (Array.isArray(valeur.problemes) && typeof valeur.points_forts === 'string') ||
+    (typeof valeur.overallStatus === 'string' && Array.isArray(valeur.issues))
+  )
 }
 
 function nettoyerBlocJson(texteBrut: string) {
@@ -118,7 +134,9 @@ function creerTexteAnnote(texteOriginal: string, problemes: ProblemeVoix[]) {
 }
 
 function obtenirDirectionsCorrection(probleme: ProblemeVoix) {
-  return probleme.directionsCorrection?.length
+  return probleme.directions?.length
+    ? probleme.directions
+    : probleme.directionsCorrection?.length
     ? probleme.directionsCorrection
     : probleme.suggestions || []
 }
@@ -133,7 +151,9 @@ export default function DetecteurVoix() {
   const [passageActif, setPassageActif] = useState<number | null>(null)
   const passageRefs = useRef<Record<number, HTMLElement | null>>({})
   const problemeRefs = useRef<Record<number, HTMLElement | null>>({})
-  const texteAnnote = analyse ? creerTexteAnnote(texte, analyse.problemes) : null
+  const problemesAnalyse = analyse ? analyse.issues || analyse.problemes || [] : []
+  const pointsForts = analyse?.strengths?.length ? analyse.strengths.join('\n') : analyse?.points_forts || ''
+  const texteAnnote = analyse ? creerTexteAnnote(texte, problemesAnalyse) : null
 
   const activerDepuisPassage = (index: number) => {
     setProblemeActif(index)
@@ -168,7 +188,7 @@ export default function DetecteurVoix() {
       const data = (await res.json()) as DetecteurVoixResponse
       const messageErreur = data.error || data.erreur
 
-      const analyseStructuree = parserAnalyseVoix(data.analyse)
+      const analyseStructuree = parserAnalyseVoix(data.result || data.analyse)
 
       if (!res.ok || messageErreur) {
         setErreur(messageErreur || 'Erreur analyse.')
@@ -176,8 +196,8 @@ export default function DetecteurVoix() {
         setAnalyse(analyseStructuree)
       } else if (typeof data.analyse === 'string' && data.analyse.trim()) {
         setAnalyseBrute(data.analyse)
-      } else if (data.analyse) {
-        setAnalyseBrute(JSON.stringify(data.analyse, null, 2))
+      } else if (data.result || data.analyse) {
+        setAnalyseBrute(JSON.stringify(data.result || data.analyse, null, 2))
       } else {
         setErreur('Aucune analyse reçue.')
       }
@@ -199,7 +219,7 @@ export default function DetecteurVoix() {
         Détecteur de voix
       </h1>
       <p className="internal-subtitle">
-        Repère les traces IA, la perte de corps, le ton trop lisse.
+        Analyse locale de la voix d’un passage, sans certifier l’origine du texte.
       </p>
         </div>
         <SystemActionRow>
@@ -289,7 +309,7 @@ export default function DetecteurVoix() {
                         ref={(element) => {
                           passageRefs.current[segment.problemeIndex as number] = element
                         }}
-                        title={analyse.problemes[segment.problemeIndex]?.type}
+                        title={problemesAnalyse[segment.problemeIndex]?.type}
                         style={{
                           backgroundColor:
                             passageActif === segment.problemeIndex
@@ -366,7 +386,7 @@ export default function DetecteurVoix() {
                   Points forts
                 </h3>
                 <p style={{ margin: 0, lineHeight: '1.72', color: '#d8c9ad' }}>
-                  {analyse.points_forts}
+                  {pointsForts}
                 </p>
               </SystemPanel>
 
@@ -384,9 +404,9 @@ export default function DetecteurVoix() {
                 }}>
                   Problèmes détectés
                 </h3>
-                {analyse.problemes.length > 0 ? (
+                {problemesAnalyse.length > 0 ? (
                   <div style={{ display: 'grid', gap: '16px' }}>
-                    {analyse.problemes.map((probleme, index) => (
+                    {problemesAnalyse.map((probleme, index) => (
                       <article
                         key={`${probleme.passage}-${index}`}
                         ref={(element) => {
@@ -446,7 +466,7 @@ export default function DetecteurVoix() {
                           {probleme.type}
                         </p>
                         <p style={{ margin: '0 0 12px', lineHeight: '1.7' }}>
-                          {probleme.pourquoi}
+                          {probleme.why || probleme.pourquoi}
                         </p>
                         <div style={{
                           marginTop: '14px',

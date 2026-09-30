@@ -4,7 +4,7 @@ import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
 import { genererDiagnosticEditorial } from "@/lib/editorial-director";
 import { genererAlertesEditoriales } from "@/lib/editorial-memory";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 import {
@@ -439,7 +439,7 @@ const CHAPITRES_7_30_EDITORIAL_METADATA: Record<string, Partial<StoredChapter> &
     saturationEditorial: "noire interne",
   },
   "chapitre-25": {
-    titre: "La nuit différente",
+    titre: "Le pays des lucioles",
     ageApprox: "10 ans",
     typeChapitre: "trauma",
     niveauLourdeur: "extreme",
@@ -794,7 +794,7 @@ function normaliserChapitreStocke(chapitre: StoredChapter): StoredChapter {
       chapitre.statut === "scellé" || chapitre.statut === "écrit" || chapitre.statut === "à écrire"
         ? chapitre.statut
         : fallback.statut,
-    contenu: chapitre.contenu || "",
+    contenu: normaliserContenuChapitre(chapitre.contenu),
     ageApprox: chapitre.ageApprox ?? metadata.ageApprox ?? fallback.ageApprox,
     periode: chapitre.periode ?? metadata.periode ?? fallback.periode,
     typeChapitre: chapitre.typeChapitre || metadata.typeChapitre || fallback.typeChapitre,
@@ -817,7 +817,7 @@ function reconcilerChapitresTome1(chapitres: StoredChapter[]) {
   });
 
   Array.from(parId.values()).forEach((chapitre) => {
-    const contenu = chapitre.contenu.trim();
+    const contenu = normaliserContenuChapitre(chapitre.contenu).trim();
     const chapitreDetecte = contenu ? detecterChapitreDepuisContenu(contenu) : null;
 
     if (!chapitreDetecte || chapitreDetecte === chapitre.id) {
@@ -829,7 +829,7 @@ function reconcilerChapitresTome1(chapitres: StoredChapter[]) {
       return;
     }
 
-    const contenuDestination = destination.contenu.trim();
+    const contenuDestination = normaliserContenuChapitre(destination.contenu).trim();
     destination.contenu = contenuDestination && contenuDestination !== contenu
       ? `${contenuDestination}\n\n--- Contenu déplacé depuis ${chapitre.id} ---\n\n${contenu}`
       : contenu;
@@ -908,12 +908,17 @@ async function chargerChapitresTome1DepuisSupabase() {
 
 type ChapterStorageState = "vide" | "rempli" | "scellé";
 
+function normaliserContenuChapitre(contenu?: string | null) {
+  if (!contenu) return "";
+  return contenu.trim().toLowerCase() === "à définir" ? "" : contenu;
+}
+
 function getStoredChapterEffectiveStatus(chapitre?: StoredChapter): ChapterStatus {
   if (chapitre?.statut === "scellé") {
     return "scelle";
   }
 
-  if (chapitre?.contenu?.trim()) {
+  if (normaliserContenuChapitre(chapitre?.contenu).trim()) {
     return "ecrit";
   }
 
@@ -925,11 +930,15 @@ function getChapterStorageState(chapitre?: StoredChapter): ChapterStorageState {
     return "scellé";
   }
 
-  if (chapitre?.contenu?.trim()) {
+  if (normaliserContenuChapitre(chapitre?.contenu).trim()) {
     return "rempli";
   }
 
   return "vide";
+}
+
+function countChapterWords(contenu?: string) {
+  return normaliserContenuChapitre(contenu).trim().split(/\s+/).filter(Boolean).length || 0;
 }
 
 function getChapitreNumero(chapitre: StoredChapter) {
@@ -1050,7 +1059,7 @@ const BLOCS: Bloc[] = [
     chapitres: [
       { num: 23, age: "10 ans", title: "Le climat reprend", type: "severe", souvenirs: "Reprise de la violence à Dunham · atmosphère encore plus lourde · scène précise · peut-être pire qu'avant", fonction: "Dunham n'est pas une échappatoire. Le système se réinstalle intact.", etatInterieur: "C'est pire qu'avant" },
       { num: 24, age: "10 ans", title: "Ce que le corps faisait seul", type: "severe", souvenirs: "Réactions automatiques · sursauts · sommeil fragmenté · rapport à la nourriture · corps qui agit avant que l'esprit décide", fonction: "La dissociation est installée. Le corps a ses propres mémoires.", etatInterieur: "Mon corps fait des choses que je ne lui demande pas" },
-      { num: 25, age: "10 ans", title: "La nuit différente", type: "severe", souvenirs: "Une nuit qui ne ressemble pas aux autres · quelque chose a changé · le corps sait avant les mots · premiers signes — montrer sans jamais nommer", fonction: "Fracture. Premier signe de l'inceste. Ne rien nommer. Juste ce que le corps enregistre.", etatInterieur: "Quelque chose s'est cassé cette nuit" },
+      { num: 25, age: "10 ans", title: "Le pays des lucioles", type: "severe", souvenirs: "Une nuit qui ne ressemble pas aux autres · quelque chose a changé · le corps sait avant les mots · premiers signes — montrer sans jamais nommer", fonction: "Fracture. Premier signe de l'inceste. Ne rien nommer. Juste ce que le corps enregistre.", etatInterieur: "Quelque chose s'est cassé cette nuit" },
       { num: 26, age: "10–11 ans", title: "Le lendemain ordinaire", type: "severe", souvenirs: "Matin qui continue normalement · petit-déjeuner · gestes ordinaires · comme si rien · vie de surface intacte · silence absolu dans le corps", fonction: "Dissociation totale. La vie continue par-dessus. C'est ce silence-là qui est le plus dévastateur.", etatInterieur: "Tout continue comme si rien" },
       { num: 27, age: "11 ans", title: "Ma sœur ne sait pas", type: "severe", souvenirs: "Distance nouvelle · quelque chose qui ne peut plus se dire · lien qui tient mais qui a changé · moment où tu as réalisé que tu ne pouvais pas lui dire", fonction: "Le secret isole même à l'intérieur du lien le plus proche.", etatInterieur: "Je suis seule avec ça" },
       { num: 28, age: "11 ans", title: "Ce que j'avais appris à faire", type: "severe", souvenirs: "Gestes automatiques · comment sourire · comment tenir le corps droit · comment traverser une pièce · ce que ça coûte", fonction: "L'inventaire sans inventaire. Le coût réel de la survie.", etatInterieur: "Je sais survivre mais je ne sais pas autre chose" },
@@ -1302,6 +1311,7 @@ export default function StructureTome1() {
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [memoiresNarratives, setMemoiresNarratives] = useState<MemoireNarrative[]>([]);
   const [relationsHydratees, setRelationsHydratees] = useState(false);
+  const deepLinkHandledRef = useRef(false);
 
   useEffect(() => {
     let actif = true;
@@ -1457,12 +1467,12 @@ export default function StructureTome1() {
 
     if (storedChapter.statut === "scellé") {
       setEditingChapterId(null);
-      setDraftContent(storedChapter.contenu || "");
+      setDraftContent(normaliserContenuChapitre(storedChapter.contenu));
       return;
     }
 
     setEditingChapterId(storedChapter.id);
-    setDraftContent(storedChapter?.contenu || "");
+    setDraftContent(normaliserContenuChapitre(storedChapter?.contenu));
   };
 
   const saveChapterContent = (chapter: Chapter) => {
@@ -1490,13 +1500,37 @@ export default function StructureTome1() {
   const unlockChapter = (chapter: Chapter) => {
     const updatedChapter = updateStoredChapter(chapter, (storedChapter) => ({
       ...storedChapter,
-      statut: storedChapter.contenu.trim() ? "écrit" : "à écrire",
+      statut: normaliserContenuChapitre(storedChapter.contenu).trim() ? "écrit" : "à écrire",
     }));
-    syncStatut(chapter.num, updatedChapter.contenu.trim() ? "ecrit" : "a-ecrire");
+    syncStatut(chapter.num, normaliserContenuChapitre(updatedChapter.contenu).trim() ? "ecrit" : "a-ecrire");
 
-    setDraftContent(updatedChapter.contenu || "");
+    setDraftContent(normaliserContenuChapitre(updatedChapter.contenu));
     setEditingChapterId(updatedChapter.id);
   };
+
+  useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+
+    const hash = window.location.hash.replace("#", "");
+    const match = hash.match(/^chapitre-(\d+)$/);
+    if (!match) return;
+
+    const numero = Number(match[1]);
+    const chapter = BLOCS_TOME_1.flatMap((bloc) => bloc.chapitres).find((item) => item.num === numero);
+    if (!chapter) return;
+
+    const storedChapter = getStoredChapter(numero) || createStoredChapter(chapter);
+
+    deepLinkHandledRef.current = true;
+    setSelected(chapter);
+    setDraftContent(normaliserContenuChapitre(storedChapter.contenu));
+    if (storedChapter.statut !== "scellé") {
+      setEditingChapterId(storedChapter.id);
+    }
+    window.requestAnimationFrame(() => {
+      document.getElementById(`chapitre-${numero}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [chapitresStockes]);
 
   const allChapters = blocsAffiches.flatMap((b) => b.chapitres);
   const chapitresAnalyse = CHAPITRES_TOME_1_INITIAUX.map((fallback) =>
@@ -1977,6 +2011,8 @@ export default function StructureTome1() {
                   const chapterStorageState = getChapterStorageState(storedChapter);
                   const isSealed = chapterStorageState === "scellé";
                   const isEmptyChapter = chapterStorageState === "vide";
+                  const chapterWordCount = countChapterWords(storedChapter?.contenu);
+                  const manuscriptStateLabel = isEmptyChapter ? "Vide" : isSealed ? "Validé" : "Brouillon";
                   const stateLabel =
                     chapterStorageState === "vide"
                       ? "À écrire"
@@ -2017,12 +2053,11 @@ export default function StructureTome1() {
                     respirationExplicite,
                   );
                   return (
-                    <div key={ch.num}>
+                    <div id={`chapitre-${ch.num}`} key={ch.num}>
                       <div
                         className="chapter-row-card cursor-pointer"
                         onClick={() => {
                           setSelected(ch);
-                          startEditingChapter(ch);
                         }}
                         style={{
                           alignItems: "stretch",
@@ -2088,9 +2123,37 @@ export default function StructureTome1() {
                         </div>
                         <div style={{ alignItems: "flex-end", display: "flex", flexDirection: "column", gap: 5, justifyContent: "space-between" }}>
                           <span style={{ ...intensityDotStyle, width: 6, height: 6, borderRadius: "50%", flexShrink: 0 }} />
-                          <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 20, background: "rgba(255,253,248,0.45)", color: "#78716C", border: "1px solid rgba(198,169,126,0.22)", fontFamily: "system-ui, sans-serif", whiteSpace: "nowrap" }}>
-                            {stateLabel}
-                          </span>
+                          <div style={{ alignItems: "flex-end", display: "grid", gap: 4, justifyItems: "end" }}>
+                            <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 20, background: "rgba(255,253,248,0.45)", color: "#78716C", border: "1px solid rgba(198,169,126,0.22)", fontFamily: "system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                              {stateLabel}
+                            </span>
+                            <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, background: isEmptyChapter ? "rgba(254,242,242,0.72)" : "rgba(240,253,244,0.7)", color: isEmptyChapter ? "#991B1B" : "#166534", border: `1px solid ${isEmptyChapter ? "rgba(252,165,165,0.55)" : "rgba(134,239,172,0.55)"}`, fontFamily: "system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                              {chapterWordCount} mot{chapterWordCount > 1 ? "s" : ""} · {manuscriptStateLabel}
+                            </span>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "flex-end", maxWidth: 210 }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelected(ch);
+                                }}
+                                style={{ alignItems: "center", background: "transparent", border: "1px solid rgba(120,113,108,0.24)", borderRadius: 999, color: "#57534E", cursor: "pointer", display: "inline-flex", fontFamily: "system-ui, sans-serif", fontSize: 10, justifyContent: "center", lineHeight: 1, minHeight: 22, padding: "4px 9px", whiteSpace: "nowrap" }}
+                                type="button"
+                              >
+                                Ouvrir
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelected(ch);
+                                  startEditingChapter(ch);
+                                }}
+                                style={{ alignItems: "center", background: isEmptyChapter ? "#1C1917" : "#F5F0E8", border: `1px solid ${isEmptyChapter ? "#1C1917" : "#D6D0C4"}`, borderRadius: 999, color: isEmptyChapter ? "#F5F0E8" : "#44403C", cursor: "pointer", display: "inline-flex", fontFamily: "system-ui, sans-serif", fontSize: 10, justifyContent: "center", lineHeight: 1, minHeight: 22, padding: "4px 9px", whiteSpace: "nowrap" }}
+                                type="button"
+                              >
+                                {isEmptyChapter ? "Coller le chapitre" : "Modifier"}
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -2358,9 +2421,9 @@ export default function StructureTome1() {
                             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: isEditingText ? 10 : 0 }}>
                               <div>
                                 <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#9CA3AF", margin: 0, fontFamily: "system-ui, sans-serif" }}>Texte réel du chapitre</p>
-                                {!isEditingText && storedChapter?.contenu && (
+                                {!isEditingText && (
                                   <p style={{ fontSize: 11, color: "#78716C", margin: "4px 0 0", fontFamily: "system-ui, sans-serif" }}>
-                                    {storedChapter.contenu.trim().split(/\s+/).filter(Boolean).length} mots sauvegardés
+                                    {chapterWordCount} mot{chapterWordCount > 1 ? "s" : ""} · {isEmptyChapter ? "chapitre vide" : "texte sauvegardé"}
                                   </p>
                                 )}
                               </div>
@@ -2375,6 +2438,11 @@ export default function StructureTome1() {
                                   startEditingChapter(ch);
                                 }}
                                 style={{
+                                  alignItems: "center",
+                                  display: "inline-flex",
+                                  justifyContent: "center",
+                                  lineHeight: 1,
+                                  minHeight: 28,
                                   padding: "5px 12px",
                                   borderRadius: 20,
                                   fontSize: 11,
@@ -2384,12 +2452,19 @@ export default function StructureTome1() {
                                   color: isSealed ? "#F5F0E8" : "#44403C",
                                   fontFamily: "system-ui, sans-serif",
                                   transition: "all 0.15s",
+                                  whiteSpace: "nowrap",
                                 }}
                                 type="button"
                               >
-                                {isSealed ? "Déverrouiller" : "Modifier le texte"}
+                                {isSealed ? "Déverrouiller" : isEmptyChapter ? "Coller le chapitre" : "Modifier le texte"}
                               </button>
                             </div>
+
+                            {isEmptyChapter && !isEditingText && !isSealed && (
+                              <p style={{ background: "#FFF7ED", border: "1px solid rgba(214,178,94,0.35)", borderRadius: 8, color: "#7C2D12", fontFamily: "system-ui, sans-serif", fontSize: 12, lineHeight: 1.6, margin: "12px 0 0", padding: "10px 12px" }}>
+                                Aucun texte sauvegardé. Colle ici le chapitre complet pour mettre à jour le manuscrit.
+                              </p>
+                            )}
 
                             {isSealed && !isEditingText && (
                               <p style={{ background: "#15120E", border: "1px solid rgba(214,178,94,0.5)", borderRadius: 8, color: "#F5F0E8", fontFamily: "system-ui, sans-serif", fontSize: 12, lineHeight: 1.6, margin: "12px 0 0", padding: "10px 12px" }}>
@@ -2426,6 +2501,11 @@ export default function StructureTome1() {
                                       setEditingChapterId(null);
                                     }}
                                     style={{
+                                      alignItems: "center",
+                                      display: "inline-flex",
+                                      justifyContent: "center",
+                                      lineHeight: 1,
+                                      minHeight: 30,
                                       padding: "6px 14px",
                                       borderRadius: 20,
                                       fontSize: 11,
@@ -2434,6 +2514,7 @@ export default function StructureTome1() {
                                       background: "transparent",
                                       color: "#78716C",
                                       fontFamily: "system-ui, sans-serif",
+                                      whiteSpace: "nowrap",
                                     }}
                                     type="button"
                                   >
@@ -2445,6 +2526,11 @@ export default function StructureTome1() {
                                       sealChapter(ch);
                                     }}
                                     style={{
+                                      alignItems: "center",
+                                      display: "inline-flex",
+                                      justifyContent: "center",
+                                      lineHeight: 1,
+                                      minHeight: 30,
                                       padding: "6px 14px",
                                       borderRadius: 20,
                                       fontSize: 11,
@@ -2453,6 +2539,7 @@ export default function StructureTome1() {
                                       background: "#FFFBEB",
                                       color: "#92400E",
                                       fontFamily: "system-ui, sans-serif",
+                                      whiteSpace: "nowrap",
                                     }}
                                     type="button"
                                   >
@@ -2464,6 +2551,11 @@ export default function StructureTome1() {
                                       saveChapterContent(ch);
                                     }}
                                     style={{
+                                      alignItems: "center",
+                                      display: "inline-flex",
+                                      justifyContent: "center",
+                                      lineHeight: 1,
+                                      minHeight: 30,
                                       padding: "6px 14px",
                                       borderRadius: 20,
                                       fontSize: 11,
@@ -2472,6 +2564,7 @@ export default function StructureTome1() {
                                       background: "#1C1917",
                                       color: "#F5F0E8",
                                       fontFamily: "system-ui, sans-serif",
+                                      whiteSpace: "nowrap",
                                     }}
                                     type="button"
                                   >

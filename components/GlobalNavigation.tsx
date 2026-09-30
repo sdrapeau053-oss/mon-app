@@ -47,6 +47,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Manuscrit",
     items: [
+      { href: "/heritage-des-silences", label: "Quartier Général", priority: "primary" },
       { href: "/manuscrit", label: "Manuscrit", priority: "primary" },
       { href: "/mission-manuscrit", label: "Mission", priority: "primary" },
       { href: "/fragments", label: "Fragments", priority: "secondary" },
@@ -125,8 +126,11 @@ export default function GlobalNavigation() {
   }, [pathname]);
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-[#d6b25e]/12 bg-[#090807]/90 px-2 py-1.5 backdrop-blur sm:py-2">
-      <div className="mx-auto flex max-w-7xl flex-nowrap items-start gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0">
+    <nav
+      className="sticky top-0 z-40 border-b border-[#d6b25e]/12 bg-[#090807]/90 px-2 py-1 backdrop-blur sm:px-2.5 sm:py-1.5"
+      data-global-nav
+    >
+      <div className="mx-auto flex max-w-7xl flex-nowrap items-start gap-1 overflow-x-auto pb-0.5 sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0">
         {navGroups.map((group) => {
           const groupActive = Boolean(activeItemKey?.startsWith(`${group.label}-`));
 
@@ -150,12 +154,12 @@ export default function GlobalNavigation() {
               }}
               open={openGroup === group.label}
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#b8ad99] outline-none transition hover:text-[#f1e7d5] sm:py-2 [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-1.5 px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.18em] text-[#b8ad99] outline-none transition hover:text-[#f1e7d5] sm:py-1.5 [&::-webkit-details-marker]:hidden">
                 <span>{group.label}</span>
-                <span className="text-[12px] leading-none text-[#C9A84C]/70 transition group-open/nav:rotate-45">+</span>
+                <span className="text-[11px] leading-none text-[#C9A84C]/70 transition group-open/nav:rotate-45">+</span>
               </summary>
 
-              <div className="hidden w-[min(82vw,320px)] grid-cols-2 gap-1.5 px-2 pb-1.5 group-open/nav:grid sm:absolute sm:left-0 sm:top-full sm:z-50 sm:mt-0.5 sm:w-auto sm:min-w-[190px] sm:grid-cols-1 sm:rounded-b-xl sm:border sm:border-t-0 sm:border-[#d6b25e]/14 sm:bg-[#0a0907]/96 sm:pb-2 sm:pt-1 sm:backdrop-blur lg:min-w-[210px]">
+              <div className="hidden w-[min(82vw,320px)] grid-cols-2 gap-1 px-1.5 pb-1 group-open/nav:grid sm:absolute sm:left-0 sm:top-full sm:z-50 sm:mt-0.5 sm:w-auto sm:min-w-[190px] sm:grid-cols-1 sm:rounded-b-xl sm:border sm:border-t-0 sm:border-[#d6b25e]/14 sm:bg-[#0a0907]/96 sm:pb-1.5 sm:pt-1 sm:backdrop-blur lg:min-w-[210px]">
                 {group.items.map((item) => {
                   const itemKey = getItemKey(group, item);
                   const active = activeItemKey === itemKey;
@@ -166,7 +170,7 @@ export default function GlobalNavigation() {
 
                   return (
                     <Link
-                      className={`rounded-full border px-2.5 py-1.5 text-center font-semibold leading-none transition sm:text-left ${priorityClass} ${
+                      className={`rounded-full border px-2.5 py-1 text-center font-semibold leading-none transition sm:text-left ${priorityClass} ${
                         active
                           ? "border-[#C9A84C]/70 bg-[#C9A84C] !text-[#15110d]"
                           : "border-[#d6b25e]/12 bg-[#1a1712]/50 hover:border-[#d6b25e]/30 hover:bg-[#211d16]/72 hover:text-[#f1e7d5]"

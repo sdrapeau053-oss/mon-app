@@ -186,6 +186,42 @@ const SILENCE_PATTERNS = [
   "je n'étais plus",
   "tout avait changé",
 ];
+const JUSTESSE_NUE_PRINCIPLES = [
+  "Corps avant idée.",
+  "Atmosphère avant explication.",
+  "Montrer plutôt qu'expliquer.",
+  "Narration sensorielle et concrète.",
+  "Fidélité au point de perception de l'âge vécu.",
+  "Suppression des éclairages rétrospectifs.",
+  "Confiance dans l'intelligence du lecteur.",
+];
+const JUSTESSE_NUE_AUDIT_GRID = [
+  {
+    control: "Le silence doit être visible dans les gestes, les évitements, les regards, les objets ou les comportements.",
+    question: "Ai-je écrit le silence ? Ou ai-je montré ce que les personnages font à sa place ?",
+    reminder: null,
+    title: "Le silence",
+  },
+  {
+    control: "Retirer toute phrase dont le rôle principal est d'expliquer la portée humaine de la scène.",
+    question: "Suis-je restée dans le vécu concret ? Ou suis-je en train de chercher à faire signifier la scène ?",
+    reminder: "L'universel appartient au lecteur.",
+    title: "L'universel",
+  },
+  {
+    control: "Supprimer toute connaissance psychologique, familiale ou historique inaccessible au personnage au moment vécu.",
+    question: "Cette information était-elle réellement accessible à l'enfant de cet âge ? Ou provient-elle de la compréhension de l'adulte ?",
+    reminder: "La scène doit être limitée à ce que l'enfant peut percevoir, comprendre ou interpréter à cet âge.",
+    title: "Le regard de l'enfant",
+  },
+];
+const JUSTESSE_NUE_FINAL_CHECKS = [
+  "Le corps parle avant les idées.",
+  "La scène existe sans explication.",
+  "Le lecteur peut tirer ses propres conclusions.",
+  "Aucun commentaire adulte ne parasite le souvenir.",
+  "L'émotion naît de l'observation et non de l'interprétation.",
+];
 
 function readJson<T>(key: string): JsonReadResult<T> {
   const raw = localStorage.getItem(key);
@@ -573,6 +609,7 @@ function statusTone(status: BackupStatus | SilenceScore | Priority["priority"]) 
 const SECTIONS = [
   { id: "etat", label: "État global" },
   { id: "alertes", label: "Alertes prioritaires" },
+  { id: "protocoles", label: "Protocoles" },
   { id: "style", label: "Voix & style" },
   { id: "motifs", label: "Motifs narratifs" },
   { id: "silence", label: "Silence narratif" },
@@ -638,6 +675,7 @@ export default function ControleEditorial() {
     etat: true,
     motifs: false,
     priorites: true,
+    protocoles: true,
     silence: false,
     style: false,
   });
@@ -657,6 +695,7 @@ export default function ControleEditorial() {
             etat: true,
             motifs: false,
             priorites: true,
+            protocoles: true,
             silence: false,
             style: false,
           }
@@ -665,6 +704,7 @@ export default function ControleEditorial() {
             etat: true,
             motifs: true,
             priorites: true,
+            protocoles: true,
             silence: true,
             style: true,
           },
@@ -854,6 +894,76 @@ export default function ControleEditorial() {
                     ))}
                   </div>
                 ) : null}
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              id="protocoles"
+              isOpen={openSections.protocoles}
+              onToggle={() => toggleSection("protocoles")}
+              summary="Justesse Nue · grille permanente d’audit de scène"
+              title="Protocoles d’audit"
+            >
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-[#d6b25e]/25 bg-[#0f0d0a]/65 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="editorial-label">Protocole</p>
+                      <h2 className="mt-2 text-2xl font-semibold text-[#f1e7d5]">Justesse Nue</h2>
+                    </div>
+                    <span className="rounded-full border border-[#d6b25e]/30 bg-[#d6b25e]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#d6b25e]">
+                      Audit permanent
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    {JUSTESSE_NUE_PRINCIPLES.map((principle) => (
+                      <p className="rounded-xl border border-[#d6b25e]/12 bg-[#14110d]/70 px-3 py-2 text-sm text-[#d8cbb5]" key={principle}>
+                        {principle}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[#d6b25e]/16 bg-[#0f0d0a]/55 p-4">
+                  <p className="editorial-label">Grille d’audit de scène</p>
+                  <div className="mt-3 grid gap-3">
+                    {JUSTESSE_NUE_AUDIT_GRID.map((item, index) => (
+                      <article className="rounded-xl border border-[#d6b25e]/12 bg-[#14110d]/70 p-3" key={item.title}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d6b25e]/25 bg-[#d6b25e]/10 text-xs font-semibold text-[#d6b25e]">
+                            {index + 1}
+                          </span>
+                          <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[#f1e7d5]">{item.title}</h3>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-[#d8cbb5]">
+                          <span className="font-semibold text-[#f1e7d5]">Question : </span>
+                          {item.question}
+                        </p>
+                        {item.reminder ? (
+                          <p className="mt-2 text-sm leading-6 text-[#a99b84]">
+                            <span className="font-semibold text-[#d6b25e]">Rappel : </span>
+                            {item.reminder}
+                          </p>
+                        ) : null}
+                        <p className="mt-2 text-sm leading-6 text-[#d8cbb5]">
+                          <span className="font-semibold text-[#f1e7d5]">Contrôle : </span>
+                          {item.control}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4">
+                  <p className="editorial-label">Validation finale</p>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {JUSTESSE_NUE_FINAL_CHECKS.map((check) => (
+                      <p className="rounded-xl border border-emerald-300/18 bg-[#0f0d0a]/45 px-3 py-2 text-sm text-emerald-100" key={check}>
+                        ✓ {check}
+                      </p>
+                    ))}
+                  </div>
+                </div>
               </div>
             </CollapsibleSection>
 

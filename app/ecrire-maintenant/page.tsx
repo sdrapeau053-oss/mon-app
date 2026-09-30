@@ -24,6 +24,7 @@ import {
 } from "@/lib/narrative-relations";
 import {
   CHAPITRES_TOME_1_STORAGE_KEY,
+  chapitreTome1EstVerrouillePourEcriture,
   getNumeroChapitreTome1,
   lireChapitresTome1DepuisStorage,
   normaliserChapitresTome1,
@@ -43,7 +44,7 @@ function isWritten(chapter: ChapitreTome1) {
 }
 
 function isSealed(chapter: ChapitreTome1) {
-  return chapter.statut === "scellé" || chapter.statut === "gele" || chapter.statutStructure === "gele";
+  return chapitreTome1EstVerrouillePourEcriture(chapter);
 }
 
 function isExplicitlyWritten(chapter: ChapitreTome1) {
@@ -271,8 +272,17 @@ export default function EcrireMaintenantPage() {
   function saveDraft() {
     if (!data || !context) return;
 
+    const latestChapters = lireChapitresTome1DepuisStorage();
+    const latestTarget = latestChapters.find((chapter) => chapter.id === context.chapter.id);
+
+    if (latestTarget && chapitreTome1EstVerrouillePourEcriture(latestTarget)) {
+      setData({ ...data, chapters: latestChapters, continuity: readContinuity() });
+      setSaveMessage("Ce chapitre est scellé. Déverrouillez-le depuis Structure Tome I avant de le modifier.");
+      return;
+    }
+
     const now = new Date().toISOString();
-    const updatedChapters = data.chapters.map((chapter) =>
+    const updatedChapters = latestChapters.map((chapter) =>
       chapter.id === context.chapter.id
         ? {
             ...chapter,

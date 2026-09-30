@@ -128,8 +128,18 @@ body {
 .internal-panel { padding: 16px; }
 .internal-card  { padding: 14px; }
 
-.internal-panel:hover,
-.internal-card:hover {
+:where(
+  a.internal-panel,
+  button.internal-panel,
+  .internal-panel.interactive,
+  .internal-panel.interactive-card,
+  [role="button"].internal-panel,
+  a.internal-card,
+  button.internal-card,
+  .internal-card.interactive,
+  .internal-card.interactive-card,
+  [role="button"].internal-card
+):hover {
   border-color: rgba(201, 168, 92, 0.28);
   box-shadow:
     inset 0 1px 0 rgba(255, 250, 238, 0.045),
@@ -233,12 +243,22 @@ body {
 
 .app-page-motion {
   animation: page-arrive-softly var(--motion-page) var(--motion-ease) both;
-  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+body:has([data-global-nav]) .app-page-motion {
+  min-height: calc(100dvh - 44px);
+}
+
+@media (max-height: 850px) {
+  body:has([data-global-nav]) .app-page-motion {
+    min-height: calc(100dvh - 40px);
+  }
 }
 
 /* â”€â”€ Interactions globales â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-:where(button, a, [role="button"], .clickable, .interactive, .action-link) {
+:where(button, a, [role="button"], .clickable, .interactive, .interactive-card, .action-link) {
   cursor: pointer;
   transition:
     background-color var(--motion-soft) var(--motion-ease),
@@ -250,7 +270,7 @@ body {
     opacity var(--motion-soft) var(--motion-ease);
 }
 
-:where(button, a, [role="button"], .clickable, .interactive, .action-link):hover:not(:disabled) {
+:where(button, a, [role="button"], .clickable, .interactive, .interactive-card, .action-link):hover:not(:disabled) {
   background-color: rgba(214, 178, 94, 0.065);
   box-shadow:
     inset 0 1px 0 rgba(255, 250, 238, 0.05),
@@ -260,7 +280,28 @@ body {
   transform: translateY(-0.75px);
 }
 
-:where(.module-card, .hub-card, .card, .panel):hover {
+:where(
+  a.module-card,
+  button.module-card,
+  .module-card.interactive,
+  .module-card.interactive-card,
+  [role="button"].module-card,
+  a.hub-card,
+  button.hub-card,
+  .hub-card.interactive,
+  .hub-card.interactive-card,
+  [role="button"].hub-card,
+  a.card,
+  button.card,
+  .card.interactive,
+  .card.interactive-card,
+  [role="button"].card,
+  a.panel,
+  button.panel,
+  .panel.interactive,
+  .panel.interactive-card,
+  [role="button"].panel
+):hover {
   background-color: rgba(214, 178, 94, 0.055);
   border-color: rgba(214, 178, 94, 0.26);
   box-shadow:
@@ -278,7 +319,7 @@ body {
     opacity var(--motion-soft) var(--motion-ease);
 }
 
-:where(button, a, [role="button"], .clickable, .interactive, .action-link):focus-visible {
+:where(button, a, [role="button"], .clickable, .interactive, .interactive-card, .action-link):focus-visible {
   outline: 2px solid #d6b25e;
   outline-offset: 3px;
   box-shadow:
@@ -308,7 +349,7 @@ body {
     border-color var(--motion-soft) var(--motion-ease);
 }
 
-.chapter-card:hover {
+.chapter-card:is(a, button, .interactive, .interactive-card, [role="button"]):hover {
   border-color: var(--primary);
   box-shadow: 0 6px 18px rgba(100,80,40,0.1);
   transform: translateY(-0.75px);
@@ -918,10 +959,10 @@ body {
 .manuscript-reading-zone {
   display: grid;
   min-height: 0;
-  height: clamp(440px, calc(100vh - 200px), 720px);
+  height: clamp(620px, calc(100vh - 70px), 920px);
   max-height: 100%;
   place-items: center;
-  padding: clamp(12px, 1.8vh, 22px) 52px clamp(16px, 2.6vh, 28px);
+  padding: clamp(4px, 0.8vh, 10px) clamp(14px, 1.6vw, 24px) clamp(6px, 1vh, 12px);
 }
 
 /* â”€â”€ Le livre â€” plus grand, contour ROSE GOLD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -931,12 +972,12 @@ body {
   z-index: 20;
   transform: perspective(2200px) rotateX(1.2deg);
   transform-origin: center 60%;
-  /* Taille augmentÃ©e : présence plus forte sans changer le ratio */
-  width: min(86vw, 1100px, calc((100vh - 245px) * 1.65));
+  /* Format livre ouvert immersif : priorité à la présence visuelle sur desktop. */
+  width: min(90vw, 1320px, calc((100vh - 182px) * 1.68));
   height: auto;
   max-width: 100%;
-  max-height: calc(100vh - 245px);
-  aspect-ratio: 1.65 / 1;
+  max-height: min(920px, calc(100vh - 18px));
+  aspect-ratio: 1.42 / 1;
   margin-block: 0;
   border-radius: 28px;
   background:
@@ -946,7 +987,7 @@ body {
     radial-gradient(ellipse at 50% 108%, rgba(0, 0, 0, 0.72), transparent 48%),
     linear-gradient(180deg, rgba(232, 180, 160, 0.14), rgba(214, 178, 94, 0.03)),
     #17120e;
-  padding: 14px 15px 22px;
+  padding: clamp(10px, 1vw, 15px) clamp(11px, 1vw, 16px) clamp(16px, 1.4vw, 22px);
 
   /* âœ¨ CONTOUR ROSE GOLD âœ¨ */
   border: 1.5px solid var(--rose-gold-border);
@@ -968,7 +1009,7 @@ body {
   content: "";
   position: absolute;
   inset: auto 18px 7px 18px;
-  height: 22px;
+  height: clamp(18px, 1.5vw, 22px);
   border-bottom: 1px solid rgba(214, 178, 94, 0.28);
   border-radius: 0 0 18px 18px;
   pointer-events: none;
@@ -986,8 +1027,8 @@ body {
 .book-shell::after {
   content: "";
   position: absolute;
-  top: 14px;
-  bottom: 22px;
+  top: clamp(10px, 1vw, 15px);
+  bottom: clamp(16px, 1.4vw, 22px);
   left: calc(50% - 3px);
   width: 68px;
   transform: translateX(-50%);
@@ -1103,9 +1144,9 @@ body {
 
 .book-text {
   font-family: Georgia, "Times New Roman", serif;
-  max-width: 46ch;
-  font-size: clamp(0.74rem, 0.88vw, 0.86rem);
-  line-height: 1.48;
+  max-width: 48ch;
+  font-size: clamp(0.82rem, 0.9vw, 1rem);
+  line-height: 1.58;
   text-rendering: optimizeLegibility;
 }
 
@@ -1211,25 +1252,25 @@ body {
 @media (min-width: 900px) {
   .book-page {
     border-radius: 18px 0 0 18px;
-    padding-top:    clamp(28px, 3.8vh, 44px);
-    padding-bottom: clamp(26px, 3.6vh, 42px);
-    padding-left:   clamp(44px, 4vw,   72px);
-    padding-right:  clamp(46px, 4.2vw, 78px);
+    padding-top:    clamp(34px, 4.4vh, 62px);
+    padding-bottom: clamp(32px, 4.2vh, 58px);
+    padding-left:   clamp(50px, 4.8vw, 92px);
+    padding-right:  clamp(52px, 5vw,   96px);
   }
 
   .book-page + .book-page {
     border-radius: 0 18px 18px 0;
-    padding-top:    clamp(28px, 3.8vh, 44px);
-    padding-bottom: clamp(26px, 3.6vh, 42px);
-    padding-left:   clamp(46px, 4.2vw, 78px);
-    padding-right:  clamp(44px, 4vw,   72px);
+    padding-top:    clamp(34px, 4.4vh, 62px);
+    padding-bottom: clamp(32px, 4.2vh, 58px);
+    padding-left:   clamp(52px, 5vw,   96px);
+    padding-right:  clamp(50px, 4.8vw, 92px);
   }
 
   .book-page-content {
-    padding-top: clamp(20px, 2.8vh, 30px);
-    padding-bottom: clamp(20px, 2.8vh, 30px);
-    padding-left: clamp(38px, 3.2vw, 58px);
-    padding-right: clamp(38px, 3.2vw, 58px);
+    padding-top: clamp(26px, 3.2vh, 42px);
+    padding-bottom: clamp(26px, 3.2vh, 42px);
+    padding-left: clamp(46px, 3.8vw, 74px);
+    padding-right: clamp(46px, 3.8vw, 74px);
   }
 
   .book-page-content header {
@@ -1279,31 +1320,31 @@ body {
 
 @media (max-width: 899px) {
   .manuscript-reading-zone {
-    height: clamp(400px, calc(100vh - 228px), 640px);
-    padding: 10px 36px 16px;
+    height: clamp(460px, calc(100vh - 190px), 700px);
+    padding: 8px 22px 16px;
   }
 
   .book-shell {
-    width: min(82vw, 400px, calc((100vh - 290px) * 0.74));
+    width: min(92vw, 520px, calc((100vh - 210px) * 0.667));
     height: auto;
-    max-height: calc(100vh - 290px);
-    padding: 10px 10px 16px;
-    aspect-ratio: 0.74 / 1;
+    max-height: calc(100vh - 210px);
+    padding: 10px 10px 17px;
+    aspect-ratio: 2 / 3;
   }
 
   .book-shell::after { display: none; }
 
   .book-page {
     margin: 0 auto;
-    max-width: min(92vw, 430px);
+    max-width: min(92vw, 520px);
     border-radius: 16px;
-    padding: clamp(26px, 5vh, 40px) clamp(28px, 7.5vw, 42px);
+    padding: clamp(30px, 5vh, 48px) clamp(30px, 8vw, 52px);
   }
 
   .book-text {
-    max-width: 38ch;
-    font-size: clamp(0.72rem, 2.8vw, 0.84rem);
-    line-height: 1.48;
+    max-width: 40ch;
+    font-size: clamp(0.82rem, 3vw, 0.96rem);
+    line-height: 1.56;
   }
 
   .book-cover-title   { font-size: clamp(1.45rem, 7.5vw, 2.45rem); }
@@ -1361,11 +1402,11 @@ body {
 
 /* Positionnement des flÃ¨ches â€” collÃ©es au livre */
 .book-side-arrow-left {
-  left: max(6px, calc(50% - min(43vw, 550px, calc((100vh - 245px) * 0.825)) - 40px));
+  left: max(8px, calc(50% - (min(90vw, 1320px, calc((100vh - 182px) * 1.68)) / 2) - 42px));
 }
 
 .book-side-arrow-right {
-  right: max(6px, calc(50% - min(43vw, 550px, calc((100vh - 245px) * 0.825)) - 40px));
+  right: max(8px, calc(50% - (min(90vw, 1320px, calc((100vh - 182px) * 1.68)) / 2) - 42px));
 }
 
 /* â”€â”€ Animation page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -1383,10 +1424,10 @@ body {
 /* â”€â”€ Plein Ã©cran â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 :fullscreen .book-shell {
-  width: min(80vw, 1140px, calc(82vh * 1.65));
+  width: min(90vw, 1320px, calc(88vh * 1.68));
   height: auto;
-  max-height: 82vh;
-  aspect-ratio: 1.65 / 1;
+  max-height: min(920px, 92vh);
+  aspect-ratio: 1.42 / 1;
 }
 
 :fullscreen .manuscript-reading-zone {

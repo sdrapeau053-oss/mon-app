@@ -335,10 +335,15 @@ function MetricCard({
   detail?: string;
 }) {
   return (
-    <article className="internal-card min-h-[104px]">
+    <article className="internal-card min-h-[82px]" style={{ padding: "10px 11px" }}>
       <p className="editorial-label">{label}</p>
-      <p className="mt-3 text-3xl font-semibold text-[#f1e7d5]">{typeof value === "number" ? formatMetric(value) : value}</p>
-      {detail ? <p className="mt-2 text-xs leading-5 text-[#a99b84]">{detail}</p> : null}
+      <p
+        className="mt-2 font-semibold text-[#f1e7d5]"
+        style={{ fontSize: "clamp(1.18rem, 2.05vh, 1.6rem)", lineHeight: 1.04 }}
+      >
+        {typeof value === "number" ? formatMetric(value) : value}
+      </p>
+      {detail ? <p className="mt-1 text-[11px] leading-4 text-[#a99b84]">{detail}</p> : null}
     </article>
   );
 }
@@ -346,11 +351,11 @@ function MetricCard({
 function ProgressBar({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-3 text-xs text-[#cfc1aa]">
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] text-[#cfc1aa]">
         <span>{label}</span>
         <span className="font-semibold text-[#f1e7d5]">{value}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-[#0d0c0a]">
+      <div className="h-1.5 overflow-hidden rounded-full bg-[#0d0c0a]">
         <div className="h-full rounded-full bg-[#d6b25e]" style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }} />
       </div>
     </div>
@@ -398,28 +403,28 @@ export default function Dashboard() {
 
   return (
     <main className="internal-page">
-      <div className="internal-shell">
-        <header className="internal-header">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="internal-shell" style={{ padding: "12px 16px 18px" }}>
+        <header className="internal-header" style={{ marginBottom: 8, paddingBottom: 8 }}>
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="internal-kicker">Tableau de bord réel</p>
+              <p className="internal-kicker" style={{ margin: "4px 0 3px" }}>Tableau de bord réel</p>
               <h1 className="internal-title">L’Héritage des Silences</h1>
-              <p className="internal-subtitle">
+              <p className="internal-subtitle" style={{ lineHeight: 1.45, marginTop: 5, maxWidth: 620 }}>
                 Lecture directe des données présentes dans le navigateur, sans modification des structures existantes.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Link className="internal-button" href="/">
+            <div className="flex flex-wrap gap-1.5">
+              <Link className="internal-button px-3 py-1.5 text-xs" href="/">
                 Accueil
               </Link>
-              <Link className="internal-button-primary" href="/backup">
+              <Link className="internal-button-primary px-3 py-1.5 text-xs" href="/backup">
                 Sauvegarde
               </Link>
             </div>
           </div>
         </header>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="Tomes" value={snapshot.totalTomes} />
           <MetricCard label="Chapitres" value={snapshot.totalChapters} detail={`${snapshot.structureChapterCount} dans la structure générale`} />
           <MetricCard label="Fragments" value={snapshot.totalFragments} />
@@ -434,52 +439,52 @@ export default function Dashboard() {
           <MetricCard label="Dernier export" value={formatDateTime(snapshot.lastExportAt)} />
         </section>
 
-        <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.72fr]">
-          <article className="internal-panel">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <section className="mt-3 grid gap-3 lg:grid-cols-[0.94fr_1.06fr]">
+          <article className="internal-panel" style={{ padding: "12px 14px" }}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="editorial-label">Santé du projet</p>
-                <h2 className="mt-2 text-xl font-semibold text-[#f1e7d5]">Progression du Tome 1</h2>
+                <h2 className="mt-1 text-lg font-semibold text-[#f1e7d5]">Progression du Tome 1</h2>
               </div>
-              <span className={`w-fit rounded-full border px-3 py-1 text-[11px] font-bold ${getStatusTone(snapshot.backupStatus)}`}>
+              <span className={`w-fit rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getStatusTone(snapshot.backupStatus)}`}>
                 Sauvegarde : {snapshot.backupStatus}
               </span>
             </div>
 
-            <div className="mt-5 grid gap-4">
+            <div className="mt-3 grid gap-3">
               <ProgressBar label="Progression Tome 1" value={snapshot.tome1ProgressPercent} />
               <ProgressBar label="Chapitres validés" value={snapshot.validatedChapterPercent} />
               <ProgressBar label="Chapitres commencés" value={snapshot.startedChapterPercent} />
             </div>
 
-            <div className="mt-5 grid gap-2">
+            <div className="mt-3 grid gap-1.5">
               {alerts.length > 0 ? (
                 alerts.map((alert) => (
-                  <p className="rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 py-2 text-sm text-amber-100" key={alert}>
+                  <p className="rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 py-1.5 text-[12px] leading-5 text-amber-100" key={alert}>
                     {alert}
                   </p>
                 ))
               ) : (
-                <p className="rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">
+                <p className="rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-1.5 text-[12px] leading-5 text-emerald-100">
                   Aucun signal critique détecté.
                 </p>
               )}
             </div>
           </article>
 
-          <article className="internal-panel">
+          <article className="internal-panel" style={{ padding: "12px 14px" }}>
             <p className="editorial-label">Données détectées</p>
-            <div className="mt-4 grid gap-2">
+            <div className="mt-3 grid gap-1.5 xl:grid-cols-2">
               {snapshot.detectedKeys.map((item) => (
                 <div
-                  className="flex items-center justify-between gap-3 rounded-xl border border-[#d6b25e]/14 bg-[#0f0d0a]/60 px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-[#d6b25e]/14 bg-[#0f0d0a]/60 px-2.5 py-1.5"
                   key={item.key}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#f1e7d5]">{item.label}</p>
+                    <p className="truncate text-[12px] font-semibold text-[#f1e7d5]">{item.label}</p>
                     <p className="truncate text-[11px] text-[#a99b84]">{item.key}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                     item.invalid
                       ? "border-red-300/40 bg-red-400/10 text-red-100"
                       : item.present

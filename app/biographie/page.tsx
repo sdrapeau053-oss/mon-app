@@ -71,7 +71,7 @@ export default function BiographiePage() {
 
       {/* Header */}
       <BackLink label="Système" />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: 16, marginBottom: 20 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "flex-start", marginTop: 16, marginBottom: 20 }}>
         <div>
           {titreEditable ? (
             <input
@@ -96,6 +96,34 @@ export default function BiographiePage() {
             {prog.total === 0
               ? "Aucun chapitre pour l'instant"
               : `${prog.total} chapitre${prog.total > 1 ? "s" : ""} · ${prog.analyses} analysé${prog.analyses > 1 ? "s" : ""}`}
+          </p>
+        </div>
+        <div style={{ maxWidth: 320, textAlign: "right" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
+            <Link
+              className="btn-ghost"
+              href="/biographie/strategie"
+              style={{ display: "inline-block", fontSize: 12, textDecoration: "none" }}
+            >
+              Stratégie de consolidation
+            </Link>
+            <Link
+              className="btn-ghost"
+              href="/biographie/inventaire"
+              style={{ display: "inline-block", fontSize: 12, textDecoration: "none" }}
+            >
+              Inventaire manuscrit
+            </Link>
+            <Link
+              className="btn-ghost"
+              href="/biographie/migration-audit"
+              style={{ display: "inline-block", fontSize: 12, textDecoration: "none" }}
+            >
+              Audit migration
+            </Link>
+          </div>
+          <p style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, margin: "7px 0 0" }}>
+            Vérifier la cohérence des données historiques avant toute migration du manuscrit.
           </p>
         </div>
       </div>

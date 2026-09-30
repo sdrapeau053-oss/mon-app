@@ -1,0 +1,157 @@
+
+describe("suggestLikelyScale — suggestion informative uniquement (Décision 2 §5)", () => {
+  it("suggère 1-10 pour une valeur <= 10", () => {
+    expect(suggestLikelyScale(7)).toBe("1-10");
+    expect(suggestLikelyScale(10)).toBe("1-10");
+  });
+
+  it("suggère 0-100 pour une valeur > 10", () => {
+    expect(suggestLikelyScale(11)).toBe("0-100");
+    expect(suggestLikelyScale(80)).toBe("0-100");
+  });
+});
+
+describe("createImportedScoreAssessment — source imported / user_confirmed (Décision 2 §6)", () => {
+  it("produit un ScoreValue de source imported et un ScoreAssessment de source user_confirmed", () => {
+    const assessment = createImportedScoreAssessment({
+      id: "assessment-clarte-imported-1",
+      dimension: "clarte",
+      rawValue: 7,
+      rawScale: "1-10",
+      createdBy: "utilisatrice",
+      createdAt: fixedNow(),
+    });
+
+    expect(assessment.source).toBe("user_confirmed");
+    expect(assessment.score.source).toBe("imported");
+    expect(assessment.score.rawValue).toBe(7);
+    expect(assessment.score.rawScale).toBe("1-10");
+    expect(assessment.score.normalizedValue).toBe(70);
+  });
+
+  it("applique la règle de conversion exacte de la Décision 2 §2 pour une échelle 0-100", () => {
+    const assessment = createImportedScoreAssessment({
+      id: "assessment-securite-imported-1",
+      dimension: "securite",
+      rawValue: 45,
+      rawScale: "0-100",
+      createdBy: "utilisatrice",
+      createdAt: fixedNow(),
+    });
+
+    expect(assessment.score.normalizedValue).toBe(45);
+  });
+});
+
+describe("confirmLegacyScoreSnapshot / excludeLegacyScoreSnapshot — processus de validation (Décision 2 §6)", () => {
+  function buildDossierWithLegacySnapshot(): RelationDossier {
+    return {
+      ...buildValidDossier(),
+      legacyScoreSnapshots: [
+        {
+          id: "legacy-score-dossier-1-niveauClarte",
+          metricKey: "niveauClarte",
+          rawValue: 7,
+          originalField: "niveauClarte",
+          importedAt: "2026-08-01T00:00:00.000Z",
+          provenance: "legacy_unknown",
+          migrationStatus: "pending_review",
+        },
+      ],
+    };
+  }
+
+  it("confirmer un snapshot ajoute l'évaluation ET fait passer migrationStatus à confirmed, en un seul mouvement", () => {
+    const dossier = buildDossierWithLegacySnapshot();
+    const assessment = createImportedScoreAssessment({
+      id: "assessment-clarte-imported-1",
+      dimension: "clarte",
+      rawValue: 7,
+      rawScale: "1-10",
+      createdBy: "utilisatrice",
+      createdAt: fixedNow(),
+    });
+
+    const updated = confirmLegacyScoreSnapshot(dossier, "legacy-score-dossier-1-niveauClarte", assessment, {
+      now: fixedNow,
+    });
+
+    expect(updated.assessments).toEqual([assessment]);
+    expect(updated.legacyScoreSnapshots?.[0].migrationStatus).toBe("confirmed");
+    // La valeur brute originale n'est jamais modifiée ni supprimée.
+    expect(updated.legacyScoreSnapshots?.[0].rawValue).toBe(7);
+  });
+
+  it("confirmer refuse un id de snapshot inexistant, sans rien modifier", () => {
+    const dossier = buildDossierWithLegacySnapshot();
+    const assessment = createImportedScoreAssessment({
+      id: "assessment-clarte-imported-1",
+      dimension: "clarte",
+      rawValue: 7,
+      rawScale: "1-10",
+      createdBy: "utilisatrice",
+      createdAt: fixedNow(),
+    });
+
+    expect(() => confirmLegacyScoreSnapshot(dossier, "id-inexistant", assessment, { now: fixedNow })).toThrow();
+  });
+
+  it("exclure un snapshot fait passer migrationStatus à excluded sans jamais ajouter d'évaluation", () => {
+    const dossier = buildDossierWithLegacySnapshot();
+
+    const updated = excludeLegacyScoreSnapshot(dossier, "legacy-score-dossier-1-niveauClarte", { now: fixedNow });
+
+    expect(updated.assessments).toEqual([]);
+    expect(updated.legacyScoreSnapshots?.[0].migrationStatus).toBe("excluded");
+    expect(updated.legacyScoreSnapshots?.[0].rawValue).toBe(7);
+  });
+
+  it("exclure refuse un id de snapshot inexistant", () => {
+    const dossier = buildDossierWithLegacySnapshot();
+
+    expect(() => excludeLegacyScoreSnapshot(dossier, "id-inexistant", { now: fixedNow })).toThrow();
+  });
+
+  it("confirmer un snapshot ne touche jamais les autres snapshots du même dossier", () => {
+    const dossier: RelationDossier = {
+      ...buildValidDossier(),
+      legacyScoreSnapshots: [
+        {
+          id: "legacy-score-dossier-1-niveauClarte",
+          metricKey: "niveauClarte",
+          rawValue: 7,
+          originalField: "niveauClarte",
+          importedAt: "2026-08-01T00:00:00.000Z",
+          provenance: "legacy_unknown",
+          migrationStatus: "pending_review",
+        },
+        {
+          id: "legacy-score-dossier-1-niveauSecurite",
+          metricKey: "niveauSecurite",
+          rawValue: 90,
+          originalField: "niveauSecurite",
+          importedAt: "2026-08-01T00:00:00.000Z",
+          provenance: "legacy_unknown",
+          migrationStatus: "pending_review",
+        },
+      ],
+    };
+
+    const assessment = createImportedScoreAssessment({
+      id: "assessment-clarte-imported-1",
+      dimension: "clarte",
+      rawValue: 7,
+      rawScale: "1-10",
+      createdBy: "utilisatrice",
+      createdAt: fixedNow(),
+    });
+
+    const updated = confirmLegacyScoreSnapshot(dossier, "legacy-score-dossier-1-niveauClarte", assessment, {
+      now: fixedNow,
+    });
+
+    const untouched = updated.legacyScoreSnapshots?.find((s) => s.id === "legacy-score-dossier-1-niveauSecurite");
+    expect(untouched?.migrationStatus).toBe("pending_review");
+    expect(untouched?.rawValue).toBe(90);
+  });
+});

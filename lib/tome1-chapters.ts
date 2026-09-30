@@ -128,6 +128,21 @@ export const CHAPITRES_TOME_1_METADATA: Record<string, Partial<ChapitreTome1>> =
     fonctionNarrative: "Installer la dissociation comme mécanisme de survie.",
     statutStructure: "stabilise",
   },
+  "chapitre-25": {
+    titre: "Le pays des lucioles",
+    description: "Une nuit qui ne ressemble pas aux autres.",
+    ageApprox: "10 ans",
+    periode: "Dunham",
+    type: "trauma",
+    typeChapitre: "trauma",
+    niveauLourdeur: "extreme",
+    intensite: 10,
+    potentielSerie: "iconique",
+    typeEpisode: "climax",
+    imageCentrale: "Une nuit sans forme nommable",
+    fonctionNarrative: "Fracture. Premier signe de l'inceste. Ne rien nommer. Juste ce que le corps enregistre.",
+    statutStructure: "brouillon",
+  },
 };
 
 function numeroDepuisId(id: string) {
@@ -169,6 +184,11 @@ function normaliserStatutEditorial(statut: unknown): StatutEditorialChapitreTome
   }
 
   return undefined;
+}
+
+export function normaliserContenuChapitreTome1(contenu: unknown) {
+  if (typeof contenu !== "string") return "";
+  return contenu.trim().toLowerCase() === "à définir" ? "" : contenu;
 }
 
 export function getNumeroChapitreTome1(id: string) {
@@ -230,7 +250,7 @@ export function normaliserChapitreTome1(chapitre: unknown, fallback: ChapitreTom
         ? chapitre.type
         : metadata.type || fallback.type,
     statut: normaliserStatutChapitre(chapitre.statut),
-    contenu: typeof chapitre.contenu === "string" ? chapitre.contenu : fallback.contenu,
+    contenu: normaliserContenuChapitreTome1(chapitre.contenu || fallback.contenu),
     ageApprox:
       typeof chapitre.ageApprox === "string" ? chapitre.ageApprox : metadata.ageApprox || fallback.ageApprox,
     periode: typeof chapitre.periode === "string" ? chapitre.periode : metadata.periode || fallback.periode,
@@ -302,11 +322,15 @@ export function lireChapitresTome1DepuisStorage() {
 }
 
 export function chapitreTome1EstEcrit(chapitre: ChapitreTome1) {
-  return Boolean(chapitre.contenu.trim());
+  return Boolean(normaliserContenuChapitreTome1(chapitre.contenu).trim());
+}
+
+export function chapitreTome1EstVerrouillePourEcriture(chapitre: ChapitreTome1) {
+  return chapitre.statut === "scellé" || chapitre.statut === "gele" || chapitre.statutStructure === "gele";
 }
 
 export function compterMotsChapitreTome1(chapitre: ChapitreTome1) {
-  return chapitre.contenu.trim().split(/\s+/).filter(Boolean).length;
+  return normaliserContenuChapitreTome1(chapitre.contenu).trim().split(/\s+/).filter(Boolean).length;
 }
 
 export function getStatutEditorialChapitreTome1(chapitre: ChapitreTome1): StatutEditorialChapitreTome1 {

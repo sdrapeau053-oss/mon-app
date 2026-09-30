@@ -37,25 +37,16 @@ type StoredChapter = {
   statutStructure?: string;
 };
 
-type RuptureDetectee = {
-  extrait: string;
-  probleme: string;
-  impact: string;
-};
-
 type AuditVoixResult = {
-  niveauCohesionVoix: string;
-  scoreJustesseNue: string;
-  rythme: string;
-  textureCorporelle: string;
-  niveauAbstraction: string;
-  coherenceLexicale: string;
-  coherenceEmotionnelle: string;
-  rupturesDetectees: RuptureDetectee[];
-  chapitresProches: string[];
-  chapitresTresDifferents: string[];
-  recommandationsEditoriales: string[];
-  decision: string;
+  overallStatus: string;
+  continuity: string[];
+  evolution: string[];
+  ruptures: string[];
+  repetitions: string[];
+  overHarmonization: string[];
+  recommendations: string[];
+  uncertainty: string[];
+  traceability?: unknown;
 };
 
 type StoredAuditVoix = {
@@ -64,6 +55,7 @@ type StoredAuditVoix = {
   analyzedAt: string;
   wordCount: number;
   paragraphCount: number;
+  metadata?: unknown;
   result: AuditVoixResult;
 };
 
@@ -309,6 +301,7 @@ export default function AuditVoixPage() {
         analyzedAt: new Date().toISOString(),
         wordCount: nombreMots,
         paragraphCount: nombreParagraphes,
+        metadata: data.metadata,
         result: auditResult,
       }));
     } catch {
@@ -330,7 +323,7 @@ export default function AuditVoixPage() {
             Cohérence de voix
           </h1>
             <p className="internal-subtitle">
-            Comparer le chapitre avec la voix globale du Tome 1.
+            Analyse longitudinale de l’ADN littéraire, sans harmonisation mécanique.
           </p>
         </div>
           <SystemActionRow>
@@ -471,13 +464,7 @@ export default function AuditVoixPage() {
           <section style={{ display: "grid", gap: 10 }}>
             <SystemGrid gap={10} min={260}>
           {[
-            ["1. Niveau de cohésion de voix", result.niveauCohesionVoix],
-            ["2. Score Justesse Nue", result.scoreJustesseNue],
-            ["3. Rythme", result.rythme],
-            ["4. Texture corporelle", result.textureCorporelle],
-            ["5. Niveau d’abstraction", result.niveauAbstraction],
-            ["6. Cohérence lexicale", result.coherenceLexicale],
-            ["7. Cohérence émotionnelle", result.coherenceEmotionnelle],
+            ["1. Statut longitudinal", result.overallStatus],
           ].map(([label, value]) => (
             <div key={label} style={sectionStyle}>
               <p style={labelStyle}>{label}</p>
@@ -487,52 +474,38 @@ export default function AuditVoixPage() {
             </SystemGrid>
 
           <div style={sectionStyle}>
-            <p style={labelStyle}>8. Ruptures détectées</p>
-            {result.rupturesDetectees.length > 0 ? (
-              <div style={{ display: "grid", gap: 12 }}>
-                {result.rupturesDetectees.map((rupture, index) => (
-                  <div key={`${rupture.extrait}-${index}`} style={{ borderTop: index === 0 ? "none" : "1px solid rgba(80, 65, 50, 0.14)", paddingTop: index === 0 ? 0 : 12 }}>
-                    {rupture.extrait && (
-                      <p style={{ ...bodyTextStyle, fontStyle: "italic", marginBottom: 6 }}>
-                        “{rupture.extrait}”
-                      </p>
-                    )}
-                    {rupture.probleme && (
-                      <p style={{ ...bodyTextStyle, fontSize: 14 }}>
-                        Problème : {rupture.probleme}
-                      </p>
-                    )}
-                    {rupture.impact && (
-                      <p style={{ ...bodyTextStyle, color: "#b0a28a", fontSize: 14, marginTop: 4 }}>
-                        Impact : {rupture.impact}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p style={bodyTextStyle}>Aucune rupture claire détectée.</p>
-            )}
+            <p style={labelStyle}>2. Continuité</p>
+            {renderList(result.continuity, "Aucune cohérence longitudinale isolée.")}
           </div>
 
           <div style={sectionStyle}>
-            <p style={labelStyle}>9. Chapitres proches</p>
-            {renderList(result.chapitresProches, "Aucun chapitre proche identifié.")}
+            <p style={labelStyle}>3. Évolution</p>
+            {renderList(result.evolution, "Aucune évolution légitime isolée.")}
           </div>
 
           <div style={sectionStyle}>
-            <p style={labelStyle}>10. Chapitres très différents</p>
-            {renderList(result.chapitresTresDifferents, "Aucun chapitre très différent identifié.")}
+            <p style={labelStyle}>4. Ruptures</p>
+            {renderList(result.ruptures, "Aucune rupture incohérente détectée.")}
           </div>
 
           <div style={sectionStyle}>
-            <p style={labelStyle}>11. Recommandations éditoriales</p>
-            {renderList(result.recommandationsEditoriales, "Aucune recommandation éditoriale.")}
+            <p style={labelStyle}>5. Répétitions</p>
+            {renderList(result.repetitions, "Aucune répétition longitudinale significative.")}
           </div>
 
           <div style={sectionStyle}>
-            <p style={labelStyle}>12. Décision</p>
-            <p style={bodyTextStyle}>{result.decision}</p>
+            <p style={labelStyle}>6. Sur-harmonisation</p>
+            {renderList(result.overHarmonization, "Aucune sur-harmonisation détectée.")}
+          </div>
+
+          <div style={sectionStyle}>
+            <p style={labelStyle}>7. Recommandations</p>
+            {renderList(result.recommendations, "Aucune recommandation éditoriale.")}
+          </div>
+
+          <div style={sectionStyle}>
+            <p style={labelStyle}>8. Incertitudes</p>
+            {renderList(result.uncertainty, "Aucune incertitude signalée.")}
           </div>
         </section>
       )}
