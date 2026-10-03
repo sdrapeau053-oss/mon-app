@@ -462,7 +462,7 @@ Les travaux LIVRE-P0.1/P0.1B (commit `56cbb1be8a18a873e72be2d8daba64ae52504b46`)
 **ID :** LIVRE-P1A-D1
 **Titre :** Suppression de la passe 3 automatique de `/fragments`
 **Date :** 2026-10-01
-**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Statut :** CLÔTURÉE (décision — implémentation P1A terminée au commit `d8cd4a54821a951143fe66082510ee164943a009`, voir Impact)
 **Décision :** La passe 3 de `app/fragments/page.tsx` (retrait automatique de la structure, au chargement de la page, de tout chapitre absent de la liste par défaut et sans fragment manuscrit rattaché) est supprimée. Ouvrir `/fragments` ne retire aucun chapitre existant. L'absence de fragment manuscrit ne constitue jamais une instruction de suppression. Un chapitre créé manuellement reste dans la structure jusqu'à une action explicite de l'utilisatrice. La suppression explicite depuis l'interface Structure reste un comportement distinct, non modifié par cette décision.
 **Justification :** L'audit du 2026-10-01 a établi que cette passe retire déjà aujourd'hui des chapitres créés à la main, au simple affichage d'une page. Avec une identité persistante, conserver ce comportement ferait disparaître l'identifiant du chapitre ; une recréation produirait un nouvel identifiant et rendrait le texte rattaché à l'ancien inaccessible par les chemins normaux. Le comportement ne peut donc pas être adapté mécaniquement sans violer l'invariant d'identité de LIVRE-P1A.
 **Impact :** Modification fonctionnelle de `/fragments` à réaliser pendant l'implémentation de LIVRE-P1A. Les chapitres auparavant retirés par cette passe ne sont pas restaurés automatiquement par cette décision.
@@ -472,7 +472,7 @@ Les travaux LIVRE-P0.1/P0.1B (commit `56cbb1be8a18a873e72be2d8daba64ae52504b46`)
 **ID :** LIVRE-P1A-D2
 **Titre :** Passe 2 de `/fragments` conservée, sans rattachement heuristique
 **Date :** 2026-10-01
-**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Statut :** CLÔTURÉE (décision — implémentation P1A terminée au commit `d8cd4a54821a951143fe66082510ee164943a009`, voir Impact)
 **Décision :** La passe 2 de `/fragments` (ajout à la structure d'un chapitre référencé par un fragment manuscrit) est conservée et adaptée au modèle canonique. Elle passe par les primitives centrales, n'écrit jamais la structure canonique au format legacy, ne modifie jamais l'identifiant d'un chapitre existant et ne recrée jamais un chapitre existant. Le même contrat s'applique à `envoyerAuManuscrit`. Lorsque plusieurs chapitres d'un même tome portent exactement le titre référencé par un fragment, la cible est classée `LEGACY — IDENTITÉ INDÉTERMINABLE` : aucun chapitre n'est choisi arbitrairement.
 **Justification :** La passe 2 n'est pas destructive en elle-même ; son seul risque sous P1A est la création d'identités en double et le choix arbitraire entre homonymes, que cette décision interdit.
 **Impact :** La référence par titre de `fragment.chapitre` est conservée (dette inscrite dans STD-008).
@@ -482,7 +482,7 @@ Les travaux LIVRE-P0.1/P0.1B (commit `56cbb1be8a18a873e72be2d8daba64ae52504b46`)
 **ID :** LIVRE-P1A-D3
 **Titre :** Tome 1 hors migration LIVRE-P1A
 **Date :** 2026-10-01
-**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Statut :** CLÔTURÉE (décision — implémentation P1A terminée au commit `d8cd4a54821a951143fe66082510ee164943a009`, voir Impact)
 **Décision :** LIVRE-P1A concerne uniquement les Tomes 2–4. Ne sont ni migrés, ni réconciliés, ni supprimés : `ChapitreTome1`, `chapitres-tome-1` et son historique LIVRE-P0.1/P0.1B, les entrées Tome 1 de `structure-chapitres`, les clés `ecriture_1_*`. P1A ne détermine pas lequel des deux systèmes Tome 1 est correct et préserve leur état actuel.
 **Justification :** L'audit du 2026-10-01 a révélé deux représentations parallèles du Tome 1. Leur réconciliation est un chantier distinct, qui ne doit pas être réalisé implicitement dans un chantier d'identité.
 **Impact :** Dette inscrite dans STD-008.
@@ -492,7 +492,7 @@ Les travaux LIVRE-P0.1/P0.1B (commit `56cbb1be8a18a873e72be2d8daba64ae52504b46`)
 **ID :** LIVRE-P1A-D4
 **Titre :** Stockage canonique additif des chapitres des Tomes 2–4 (Option B)
 **Date :** 2026-10-01
-**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Statut :** CLÔTURÉE (décision — implémentation P1A terminée au commit `d8cd4a54821a951143fe66082510ee164943a009`, voir Impact)
 **Décision :** La structure des chapitres à identité stable des Tomes 2–4 est stockée sous une nouvelle représentation canonique, distincte de la clé legacy `structure-chapitres`. Migration additive : la clé legacy est conservée, jamais supprimée automatiquement. Après migration, la représentation canonique est la seule source de vérité active des Tomes 2–4 ; les anciens chemins d'écriture ne sont plus utilisés pour les Tomes 2–4 ; tous les écrivains et lecteurs concernés passent par les primitives centrales. Aucune double écriture permanente entre legacy et canonique. La clé legacy sert uniquement à la compatibilité et à la récupération.
 **Justification :** L'Option A (nouveau format sous la même clé) a été écartée : `normaliserChapitres` ne conserve que des chaînes de caractères, `/lecture` et `/tableau` lisent le JSON brut, et `/fragments` écrit la clé directement. Tout chemin non migré aurait réécrit la structure au format legacy, effaçant les identifiants. L'Option B ne présente qu'un risque de divergence si un écrivain est oublié, couvert par un test obligatoire de P1A.
 **Impact :** Migration obligatoire, dans LIVRE-P1A, de tous les écrivains (`/structure`, passe 2 et `envoyerAuManuscrit` de `/fragments`) et de tous les lecteurs de la structure des Tomes 2–4.
