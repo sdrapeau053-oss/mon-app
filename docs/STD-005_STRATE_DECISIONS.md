@@ -1,6 +1,6 @@
 # STRATE_DECISIONS.md
 ### Registre des décisions d'architecture (ADR) — STRATE
-Dernière mise à jour : 2026-10-01
+Dernière mise à jour : 2026-10-03
 
 > Chaque décision structurante est consignée ici, avec sa justification et son impact.
 > Format standard pour chaque entrée :
@@ -506,6 +506,72 @@ Les travaux LIVRE-P0.1/P0.1B (commit `56cbb1be8a18a873e72be2d8daba64ae52504b46`)
 **Décision :** Le modèle de chapitre canonique du Manuscrit/Livre et le modèle `Chapitre` de la Biographie (`app/lib/biographie.ts`) sont des modèles métier distincts. Le chantier LIVRE-P1A ne fusionne, ne remplace ni ne synchronise automatiquement ces modèles. Une homonymie de type ne constitue pas une identité de domaine. Toute éventuelle convergence future exige une décision d'architecture distincte.
 **Justification :** Règle introduite le 2026-10-01. Elle n'existait auparavant dans aucun document STD (vérifié dans STD-001 à STD-008 au commit `4125981`). Elle s'inspire du principe de propriété stricte des types métier (SR-D-001 Décision 1), jusqu'ici appliqué au seul domaine Relation, sans l'étendre formellement aux autres domaines. Elle n'est pas présentée comme une règle historique de STRATE et n'est pas généralisée aux autres domaines : elle est volontairement limitée au chantier LIVRE-P1A. Elle empêche une fusion inter-domaines implicite, sans décider que deux modèles doivent coexister définitivement ; une convergence future reste possible, uniquement par une décision d'architecture distincte. Tension reconnue avec l'objectif de STD-003 (réutiliser les mêmes concepts entre modules) : elle est consignée comme dette dans STD-008 plutôt que résolue ici.
 **Impact :** Aucune modification de `app/lib/biographie.ts`. Les pages Biographie qui lisent le manuscrit (`/biographie/inventaire`, `/biographie/strategie`) peuvent voir leur lecture adaptée par P1A, sans modification de leur propre modèle.
+
+---
+
+Note de périmètre LIVRE-P1B : les entrées ci-dessous sont prises le 2026-10-03, avant toute implémentation de LIVRE-P1B (historique non destructif du contenu canonique des chapitres des Tomes 2–4), à la suite de l'audit de lecture seule effectué au commit `cb4ceb35215cf64409ff826c058f26f9977c8375`. Elles s'appliquent uniquement aux chapitres canoniques des Tomes 2–4 établis par LIVRE-P1A ; le Tome 1 et son historique LIVRE-P0.1/P0.1B ne sont pas concernés (LIVRE-P1A-D3). Le périmètre exact de l'interface de consultation/restauration de l'historique dans `/vue-double` n'est pas décidé par ces entrées.
+
+---
+
+**ID :** LIVRE-P1B-D1
+**Titre :** Granularité de l'historique du contenu canonique des chapitres des Tomes 2–4
+**Date :** 2026-10-03
+**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Décision :** La sauvegarde automatique du contenu courant par l'éditeur (`/vue-double`, environ 600 ms après une pause de frappe) reste distincte de l'historique : une sauvegarde automatique n'implique jamais automatiquement une nouvelle version historique.
+
+Séance d'édition : une séance commence à l'ouverture de l'éditeur sur un chapitre (chargement de la page), à chaque changement de chapitre, et après une restauration. Une simple pause de frappe ne termine pas une séance.
+
+Snapshot de début de séance : avant la première modification réelle d'une séance, l'état courant récupérable du chapitre est archivé comme version historique, si nécessaire.
+
+Checkpoints : pendant une séance active, lors d'une sauvegarde, le contenu courant persisté est archivé avant d'être remplacé si toutes les conditions suivantes sont réunies : au moins 5 minutes se sont écoulées depuis l'horodatage d'archivage de la dernière version persistée de ce chapitre (ou cet écart est négatif, à la suite d'un recul de l'horloge) ; le contenu courant persisté diffère de la dernière version historique ; le nouveau contenu diffère du contenu courant persisté. Le délai de 5 minutes est calculé à partir de la temporalité persistée de l'historique, jamais uniquement à partir d'un minuteur volatil en mémoire. Les checkpoints sont évalués au moment des sauvegardes : aucune écriture historique n'a lieu en l'absence d'écriture du contenu courant.
+
+Archivage hors règle de temps : le contenu courant persisté est également archivé avant remplacement lors d'une restauration, et lorsqu'une écriture constate que le contenu persisté n'est plus celui que la séance avait écrit (écriture concurrente).
+
+Aucune version artificielle : un contenu inchangé ne crée aucune version ; un contenu courant absent ou vide n'est jamais archivé ; une version identique à la dernière version déjà persistée n'est jamais dupliquée ; aucune version n'est inventée pour les données legacy ni lors de la migration LIVRE-P1A.
+
+Identité : l'historique est attaché exclusivement au `chapterId` stable établi par LIVRE-P1A. Le titre n'est jamais une identité d'historique. Un renommage ou un réordonnancement ne modifie pas l'historique. Deux chapitres portant le même titre conservent des historiques indépendants.
+
+Restauration : non destructive. Restaurer une version archive d'abord le contenu courant qu'elle remplace ; aucune version existante n'est supprimée.
+
+Fenêtre de protection : la fenêtre maximale visée de travail intermédiaire non récupérable est d'environ 5 minutes, à laquelle peuvent s'ajouter le délai restant de la sauvegarde automatique et une écriture historique déjà en cours. Il s'agit d'une cible de conception, non d'une garantie absolue dans tous les scénarios navigateur (fermeture brutale, éviction du stockage, horloge système).
+
+Cette granularité est une décision de protection du manuscrit ; elle ne constitue pas une politique de rétention.
+
+Non décidé par cette entrée : le comportement d'un futur appelant qui écrirait le contenu canonique sans séance d'édition (aujourd'hui, seul `/vue-double` écrit ce contenu).
+**Justification :** L'audit P1B du 2026-10-03 a établi que `/vue-double` sauvegarde automatiquement à chaque pause de frappe d'au moins 600 ms (`app/vue-double/page.tsx`), alors que l'historique LIVRE-P0.1/P0.1B du Tome 1 n'a jamais eu à traiter ce cas (sauvegardes par bouton). Une version par sauvegarde saturerait le stockage en une séance ; une version par seule séance laisserait sans protection le travail d'une longue séance. Les fréquences de 2, 5, 10 et 15 minutes ont été comparées : 5 minutes ramène la perte maximale visée à l'échelle d'un paragraphe sans multiplier le stockage de façon disproportionnée (environ 13 versions pour une heure d'écriture continue, 37 pour trois heures). Les snapshots fondés sur les seuls événements navigateur ont été écartés comme mécanisme unique (aucun événement pendant une écriture continue ; `pagehide` non garanti). Le fondement retenu est le temps réel écoulé depuis la dernière version, combiné à un changement réel de contenu, plutôt que le temps d'écriture active (moins protecteur après une pause).
+**Impact :** Aucun code modifié à ce stade. L'implémentation LIVRE-P1B devra porter cette règle dans la primitive centrale d'écriture du contenu canonique (`lib/manuscript-chapters.ts`) et la notion de séance dans `/vue-double`. Stockage de l'historique : voir LIVRE-P1B-D2.
+
+---
+
+**ID :** LIVRE-P1B-D2
+**Titre :** Stockage de l'historique du contenu canonique des chapitres des Tomes 2–4 (IndexedDB)
+**Date :** 2026-10-03
+**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Décision :** Contenu courant : le contenu canonique courant des chapitres des Tomes 2–4 reste dans le mécanisme établi par LIVRE-P1A (`localStorage`, `contenu-chapitre-manuscrit:<chapterId>`), seule source de vérité du contenu courant. L'historique n'est jamais une source de vérité du contenu courant.
+
+Historique : l'historique LIVRE-P1B est stocké séparément dans IndexedDB (base `strate-livre-historique`, version 1 ; magasin `versionsChapitre` ; une entrée par version ; index sur `[chapitreId, archiveLe]`). Format d'une version : `{ id, chapitreId, contenu, archiveLe, motif }`, où `motif` distingue l'origine de la version (`debut-seance`, `checkpoint`, `conflit`, `restauration`, `restauration-complete`). L'identité est fondée sur `chapterId` ; aucun titre n'est stocké ni utilisé comme identité. Aucun snapshot historique n'est stocké dans `localStorage`, et il n'existe aucun repli de l'historique vers `localStorage`.
+
+Ordre d'écriture (invariant) : lorsqu'une archive historique est requise avant le remplacement du contenu courant, la version historique nécessaire est persistée avec succès dans IndexedDB (transaction `readwrite` dont l'achèvement est attendu, avec une durabilité stricte lorsque le navigateur la propose) avant que l'ancien contenu courant protégé soit remplacé. Le contenu courant est relu après cette persistance : s'il a changé entre-temps, la règle d'archivage est réévaluée avant toute écriture. Les écritures d'un même chapitre sont sérialisées. La primitive d'écriture du contenu canonique devient asynchrone.
+
+Échec de l'archivage (IndexedDB indisponible, quota atteint, transaction interrompue) : l'ancien contenu protégé n'est pas écrasé ; l'échec remonte explicitement sous la forme d'une erreur typée ; `/vue-double` affiche un état visible « Non sauvegardé » avec sa cause ; le texte saisi reste dans la zone d'écriture ; aucune réussite n'est simulée.
+
+Échec de l'écriture du contenu courant après un archivage réussi : la version archivée (égale au contenu courant toujours en place) est conservée ; l'erreur remonte explicitement ; une nouvelle tentative ne crée pas de version en double.
+
+Hors ligne : fonctionnement complet ; aucun accès réseau n'intervient dans le chemin d'écriture.
+
+Quota / saturation : la capacité d'IndexedDB est fixée par le navigateur et dépend du disque. Elle est sans commune mesure avec celle de `localStorage`, mais reste finie. À saturation, l'écriture concernée est refusée avec une erreur explicite et visible ; aucune version n'est supprimée.
+
+Rétention : aucune purge automatique, silencieuse ou non, n'est autorisée. Aucune politique du type « garder N versions », « supprimer X % » ou équivalente n'est introduite par LIVRE-P1B. Toute future politique de purge, de rétention ou d'export de l'historique constitue une décision gouvernée séparée.
+
+BackupManager : son format et sa règle actuels sont conservés (export et restauration de `localStorage` uniquement). L'historique IndexedDB n'est pas inclus dans les fichiers de sauvegarde et n'est pas effacé par une restauration (`localStorage.clear()` ne touche pas IndexedDB). Ajout unique : avant `localStorage.clear()`, le contenu courant de chaque chapitre canonique des Tomes 2–4 est archivé dans l'historique (motif `restauration-complete`) ; si cet archivage échoue, la restauration est annulée et l'échec est signalé. Les historiques déjà présents restent attachés à leurs `chapterId`, sans réattribution.
+
+Cloud-sync : aucun. Les Tomes 2–4 restent hors du cloud-sync existant (`lib/cloud-sync.ts`). Une éventuelle réplication cloud de l'historique exigerait au préalable une authentification et des politiques RLS, et constituerait une décision séparée.
+
+Dépendances : aucune nouvelle dépendance de production (API IndexedDB native). Nouvelle dépendance de développement : `fake-indexeddb`, pour tester le code IndexedDB réel sous Vitest (environnement Node, sans `indexedDB`).
+
+Migration : aucune. La base IndexedDB est créée vide à la première utilisation. Aucune donnée LIVRE-P1A n'est déplacée ni modifiée, et aucune version n'est créée à partir du legacy.
+**Justification :** L'audit P1B-D2 du 2026-10-03 a vérifié les mécanismes de persistance réellement présents : `localStorage` (seul stockage du Livre), aucun usage d'IndexedDB, Supabase sans authentification dans le code et sans RLS dans `supabase/schema.sql`, un cloud-sync limité au Tome 1, aux fragments et au daily system, et BackupManager limité à `localStorage`. Cinq options ont été comparées. (A) Un historique dans `localStorage` saturerait le quota partagé par toute l'application en quelques jours avec D1, et bloquerait d'autres modules. (B) Tout placer dans IndexedDB aurait exigé de réécrire les lecteurs synchrones de LIVRE-P1A et aurait retiré le manuscrit courant des sauvegardes BackupManager. (C) Supabase, sans authentification ni RLS, aurait exposé le manuscrit et fait d'une panne réseau une impossibilité d'écrire. (E) Un historique par différences aurait été complexe et fragile à reconstruire. (D) Le contenu courant dans `localStorage` avec l'historique dans IndexedDB est la seule option qui protège avant tout remplacement, sans purge, hors ligne, sans envoi du manuscrit hors de l'appareil et sans modifier le stockage LIVRE-P1A ni ses lecteurs. Avec D1, environ 37 versions par séance de 3 heures pèsent environ 1 million de caractères pour un chapitre de 25 000 caractères (hypothèse de l'audit), ce qui est négligeable au regard de la capacité d'IndexedDB.
+**Impact :** Aucun code modifié à ce stade. L'implémentation LIVRE-P1B concernera notamment `lib/manuscript-chapters.ts` (historique, primitive d'écriture asynchrone, restauration), `app/vue-double/page.tsx` (séances, état d'échec visible), `components/BackupManager.tsx` (archivage avant restauration complète) et `package.json` (`fake-indexeddb` en développement). Risques résiduels et dettes : voir STD-008.
 
 ---
 

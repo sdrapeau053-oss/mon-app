@@ -1,6 +1,6 @@
 # STRATE_TECH_DEBT.md
 ### Registre de la dette technique
-Dernière mise à jour : 2026-10-01
+Dernière mise à jour : 2026-10-03
 
 > Chaque fois qu'une amélioration possible est identifiée mais non réalisée immédiatement, elle est inscrite ici — jamais seulement mentionnée dans le chat.
 
@@ -125,6 +125,38 @@ Dettes identifiées lors de l'audit complémentaire de LIVRE-P1A (commit de base
 **Sujet :** Deux modèles `Chapitre` distincts (Manuscrit/Livre et Biographie)
 **Pourquoi :** Le modèle de chapitre canonique du Manuscrit/Livre et le type `Chapitre` de `app/lib/biographie.ts` coexistent sous le même nom. Cette duplication est intentionnelle pour LIVRE-P1A (frontière de domaine, STD-005 LIVRE-P1A-D5), mais elle est en tension avec l'objectif de STD-003 (réutiliser les mêmes concepts entre modules). Elle doit rester visible comme question d'architecture future (convergence, séparation définitive ou renommage) plutôt qu'être oubliée.
 **Ticket d'origine :** Audit complémentaire LIVRE-P1A du 2026-10-01 ; STD-005 LIVRE-P1A-D5.
+
+---
+
+## Livre / Manuscrit (LIVRE-P1B) — entrées consignées le 2026-10-03
+
+Dettes et risques résiduels confirmés après l'adoption de LIVRE-P1B-D1 et LIVRE-P1B-D2 (STD-005), avant toute implémentation de LIVRE-P1B (commit de base `cb4ceb35215cf64409ff826c058f26f9977c8375`). Aucune n'est résolue par LIVRE-P1B.
+
+---
+
+**Priorité :** Moyenne
+**Sujet :** Aucune politique de rétention, de purge ou d'export de l'historique LIVRE-P1B ; historique absent des sauvegardes BackupManager
+**Pourquoi :** LIVRE-P1B-D2 interdit toute purge automatique : l'historique IndexedDB croît sans plafond (environ 37 versions par séance de 3 heures selon l'hypothèse de l'audit). Sa capacité est sans commune mesure avec celle de `localStorage`, mais elle reste finie ; à saturation, les écritures qui exigent un archivage sont refusées de façon visible, sans aucune suppression. Par ailleurs, BackupManager n'exporte que `localStorage` : l'historique n'est pas inclus dans les fichiers de sauvegarde et ne protège donc pas contre la perte de l'appareil ou l'effacement des données du site. Une politique de rétention, de purge ou d'export de l'historique reste à décider séparément. Aucune purge n'est implémentée en attendant.
+**Ticket d'origine :** Audits LIVRE-P1B-D1 et LIVRE-P1B-D2 du 2026-10-03 ; STD-005 LIVRE-P1B-D2.
+
+---
+
+**Priorité :** Moyenne
+**Sujet :** `/vue-double` ne force pas l'écriture de la sauvegarde en attente lorsque l'on quitte la page
+**Pourquoi :** Fait vérifié dans `app/vue-double/page.tsx` : la sauvegarde automatique est déclenchée par un minuteur d'environ 600 ms après la dernière frappe, et aucun mécanisme ne force l'écriture en attente lors d'un démontage, d'une navigation ou d'une fermeture de la page. Risque résiduel : perte de la frappe non encore sauvegardée, de l'ordre du délai de la sauvegarde automatique. Lorsque LIVRE-P1B rendra l'écriture asynchrone, il faudra y ajouter la durée d'une écriture historique en cours. Ce défaut existait avant LIVRE-P1B et ne relève pas des checkpoints de LIVRE-P1B-D1 : il concerne le contenu courant, pas l'historique.
+**Ticket d'origine :** Audit LIVRE-P1B du 2026-10-03.
+
+---
+
+**Priorité :** Basse
+**Sujet :** Limites résiduelles de l'architecture d'historique IndexedDB (LIVRE-P1B-D2)
+**Pourquoi :** Risques reconnus de l'architecture retenue, sans seuil universel établi :
+- le stockage du navigateur reste « au mieux » : il peut être évincé sous forte pression disque, pour toute l'origine (`localStorage` compris), et la demande de stockage persistant (`navigator.storage.persist()`) n'est pas décidée ;
+- la capacité d'IndexedDB varie selon le navigateur, sa version et le disque ;
+- IndexedDB et `localStorage` ne partagent pas de transaction : entre deux onglets, l'intervalle entre la relecture du contenu courant et son écriture est réduit, sans être atomique ;
+- une fermeture de page pendant une écriture historique en cours fait perdre la sauvegarde concernée ;
+- l'effacement des données du site par l'utilisatrice supprime à la fois le contenu courant et l'historique.
+**Ticket d'origine :** Audit LIVRE-P1B-D2 du 2026-10-03 ; STD-005 LIVRE-P1B-D2.
 
 ---
 
