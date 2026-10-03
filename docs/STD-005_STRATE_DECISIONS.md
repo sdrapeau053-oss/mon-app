@@ -1,6 +1,6 @@
 # STRATE_DECISIONS.md
 ### Registre des décisions d'architecture (ADR) — STRATE
-Dernière mise à jour : 2026-09-19
+Dernière mise à jour : 2026-10-01
 
 > Chaque décision structurante est consignée ici, avec sa justification et son impact.
 > Format standard pour chaque entrée :
@@ -448,6 +448,64 @@ Explicitement hors périmètre de cette décision : représentation TypeScript d
 ---
 
 Points explicitement non décidés à ce stade (SR-ENGINE-001, hors périmètre de D1 à D7, non inscrits comme dette technique — ce sont des décisions de conception futures) : formule de calcul de `confidence` ; type exact portant l'état « indéterminable » ; sort définitif de `overallConfidence` ; sort définitif de `overallConclusionLabel` au-delà de la convention Phase 9E existante ; contrat de projection/forecast ; confiance propre éventuelle de `CompetingHypothesis` ; sémantique numérique définitive de `compatibilityScore` (absolue, relative, ou méthode versionnée future) ; mécanisme structuré de falsification et de filiation inter-rapports d'une hypothèse ; mécanisme de comparaison/filiation inter-rapports (`ReportComparison`) ; bucket structuré distinguant qu'une Observation discrimine entre alternatives ; structure dédiée pour la traçabilité des alternatives d'hypothèses non retenues dans une `Conclusion` ; taxonomie et versioning complet des dimensions analytiques (`Conclusion.dimension`) ; validation référentielle technique des identifiants cités (Observation par une `CompetingHypothesis`, `EvidenceReference` par une `Conclusion`, `EvidenceReference` par un `FlagEntry`) ; représentation des transformations techniques des preuves ; représentation technique (TypeScript) des niveaux corpus disponible / corpus considéré / matériau pertinent pour une affirmation (B/C/D, SR-ENGINE-001-D7) ; algorithme de sélection automatique d'une fenêtre temporelle (SR-ENGINE-001-D7) ; représentation des faits dyadiques/relationnels (`Observation.participantId`, `FlagEntry.participantId`) ; structure TypeScript exacte de `derivation` et de sa méthodologie versionnée ; statut provisoire/canonique éventuel des Observations produites automatiquement ; mécanisme concret de correction/versionnement d'une Observation historique ; filiation technique `FlagEntry` → `Observation`/`CompetingHypothesis` ; migration/dépréciation définitive du legacy `redFlags`/`greenFlags` ; automatisation (NLP) des règles de formulation épistémique ; architecture Multi-Experts ; fournisseurs IA ; registre scientifique ; Relationship GPS.
+
+---
+
+## Décisions actives — Livre / Manuscrit (LIVRE)
+
+Note de périmètre : cette section est ouverte le 2026-10-01 à l'occasion de LIVRE-P1A (identité stable des chapitres des Tomes 2–4). Les entrées ci-dessous sont des décisions prises avant toute implémentation de P1A, à la suite de l'audit complémentaire du 2026-10-01 (commit de base `4125981`). Aucune n'est une consolidation rétroactive. Leur cohérence a été vérifiée uniquement contre les documents STD présents dans le dépôt (STD-001 à STD-008, STRATE_TEST_STRATEGY) ; le Document Fondateur, la Cartographie fonctionnelle et les Backlogs n'étaient pas accessibles lors de cette vérification.
+
+Les travaux LIVRE-P0.1/P0.1B (commit `56cbb1be8a18a873e72be2d8daba64ae52504b46`) et LIVRE-P0.2 (commit `4125981cf21192efd183325febe7637fd199bc0f`) précèdent l'ouverture formelle de la gouvernance LIVRE dans STD-005. Leur absence de la section Décisions ne signifie pas qu'ils ne sont pas implémentés. Toute régularisation documentaire rétrospective devra distinguer faits d'implémentation vérifiés et décisions de gouvernance historiquement documentées.
+
+---
+
+**ID :** LIVRE-P1A-D1
+**Titre :** Suppression de la passe 3 automatique de `/fragments`
+**Date :** 2026-10-01
+**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Décision :** La passe 3 de `app/fragments/page.tsx` (retrait automatique de la structure, au chargement de la page, de tout chapitre absent de la liste par défaut et sans fragment manuscrit rattaché) est supprimée. Ouvrir `/fragments` ne retire aucun chapitre existant. L'absence de fragment manuscrit ne constitue jamais une instruction de suppression. Un chapitre créé manuellement reste dans la structure jusqu'à une action explicite de l'utilisatrice. La suppression explicite depuis l'interface Structure reste un comportement distinct, non modifié par cette décision.
+**Justification :** L'audit du 2026-10-01 a établi que cette passe retire déjà aujourd'hui des chapitres créés à la main, au simple affichage d'une page. Avec une identité persistante, conserver ce comportement ferait disparaître l'identifiant du chapitre ; une recréation produirait un nouvel identifiant et rendrait le texte rattaché à l'ancien inaccessible par les chemins normaux. Le comportement ne peut donc pas être adapté mécaniquement sans violer l'invariant d'identité de LIVRE-P1A.
+**Impact :** Modification fonctionnelle de `/fragments` à réaliser pendant l'implémentation de LIVRE-P1A. Les chapitres auparavant retirés par cette passe ne sont pas restaurés automatiquement par cette décision.
+
+---
+
+**ID :** LIVRE-P1A-D2
+**Titre :** Passe 2 de `/fragments` conservée, sans rattachement heuristique
+**Date :** 2026-10-01
+**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Décision :** La passe 2 de `/fragments` (ajout à la structure d'un chapitre référencé par un fragment manuscrit) est conservée et adaptée au modèle canonique. Elle passe par les primitives centrales, n'écrit jamais la structure canonique au format legacy, ne modifie jamais l'identifiant d'un chapitre existant et ne recrée jamais un chapitre existant. Le même contrat s'applique à `envoyerAuManuscrit`. Lorsque plusieurs chapitres d'un même tome portent exactement le titre référencé par un fragment, la cible est classée `LEGACY — IDENTITÉ INDÉTERMINABLE` : aucun chapitre n'est choisi arbitrairement.
+**Justification :** La passe 2 n'est pas destructive en elle-même ; son seul risque sous P1A est la création d'identités en double et le choix arbitraire entre homonymes, que cette décision interdit.
+**Impact :** La référence par titre de `fragment.chapitre` est conservée (dette inscrite dans STD-008).
+
+---
+
+**ID :** LIVRE-P1A-D3
+**Titre :** Tome 1 hors migration LIVRE-P1A
+**Date :** 2026-10-01
+**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Décision :** LIVRE-P1A concerne uniquement les Tomes 2–4. Ne sont ni migrés, ni réconciliés, ni supprimés : `ChapitreTome1`, `chapitres-tome-1` et son historique LIVRE-P0.1/P0.1B, les entrées Tome 1 de `structure-chapitres`, les clés `ecriture_1_*`. P1A ne détermine pas lequel des deux systèmes Tome 1 est correct et préserve leur état actuel.
+**Justification :** L'audit du 2026-10-01 a révélé deux représentations parallèles du Tome 1. Leur réconciliation est un chantier distinct, qui ne doit pas être réalisé implicitement dans un chantier d'identité.
+**Impact :** Dette inscrite dans STD-008.
+
+---
+
+**ID :** LIVRE-P1A-D4
+**Titre :** Stockage canonique additif des chapitres des Tomes 2–4 (Option B)
+**Date :** 2026-10-01
+**Statut :** CLÔTURÉE (décision — implémentation non commencée, voir Impact)
+**Décision :** La structure des chapitres à identité stable des Tomes 2–4 est stockée sous une nouvelle représentation canonique, distincte de la clé legacy `structure-chapitres`. Migration additive : la clé legacy est conservée, jamais supprimée automatiquement. Après migration, la représentation canonique est la seule source de vérité active des Tomes 2–4 ; les anciens chemins d'écriture ne sont plus utilisés pour les Tomes 2–4 ; tous les écrivains et lecteurs concernés passent par les primitives centrales. Aucune double écriture permanente entre legacy et canonique. La clé legacy sert uniquement à la compatibilité et à la récupération.
+**Justification :** L'Option A (nouveau format sous la même clé) a été écartée : `normaliserChapitres` ne conserve que des chaînes de caractères, `/lecture` et `/tableau` lisent le JSON brut, et `/fragments` écrit la clé directement. Tout chemin non migré aurait réécrit la structure au format legacy, effaçant les identifiants. L'Option B ne présente qu'un risque de divergence si un écrivain est oublié, couvert par un test obligatoire de P1A.
+**Impact :** Migration obligatoire, dans LIVRE-P1A, de tous les écrivains (`/structure`, passe 2 et `envoyerAuManuscrit` de `/fragments`) et de tous les lecteurs de la structure des Tomes 2–4.
+
+---
+
+**ID :** LIVRE-P1A-D5
+**Titre :** Frontière entre le modèle de chapitre Manuscrit/Livre et le modèle `Chapitre` de la Biographie
+**Date :** 2026-10-01
+**Statut :** CLÔTURÉE (décision — aucune implémentation propre requise, voir Impact)
+**Décision :** Le modèle de chapitre canonique du Manuscrit/Livre et le modèle `Chapitre` de la Biographie (`app/lib/biographie.ts`) sont des modèles métier distincts. Le chantier LIVRE-P1A ne fusionne, ne remplace ni ne synchronise automatiquement ces modèles. Une homonymie de type ne constitue pas une identité de domaine. Toute éventuelle convergence future exige une décision d'architecture distincte.
+**Justification :** Règle introduite le 2026-10-01. Elle n'existait auparavant dans aucun document STD (vérifié dans STD-001 à STD-008 au commit `4125981`). Elle s'inspire du principe de propriété stricte des types métier (SR-D-001 Décision 1), jusqu'ici appliqué au seul domaine Relation, sans l'étendre formellement aux autres domaines. Elle n'est pas présentée comme une règle historique de STRATE et n'est pas généralisée aux autres domaines : elle est volontairement limitée au chantier LIVRE-P1A. Elle empêche une fusion inter-domaines implicite, sans décider que deux modèles doivent coexister définitivement ; une convergence future reste possible, uniquement par une décision d'architecture distincte. Tension reconnue avec l'objectif de STD-003 (réutiliser les mêmes concepts entre modules) : elle est consignée comme dette dans STD-008 plutôt que résolue ici.
+**Impact :** Aucune modification de `app/lib/biographie.ts`. Les pages Biographie qui lisent le manuscrit (`/biographie/inventaire`, `/biographie/strategie`) peuvent voir leur lecture adaptée par P1A, sans modification de leur propre modèle.
 
 ---
 

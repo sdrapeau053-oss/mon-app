@@ -1,6 +1,6 @@
 # STRATE_TECH_DEBT.md
 ### Registre de la dette technique
-Dernière mise à jour : 2026-09-11
+Dernière mise à jour : 2026-10-01
 
 > Chaque fois qu'une amélioration possible est identifiée mais non réalisée immédiatement, elle est inscrite ici — jamais seulement mentionnée dans le chat.
 
@@ -91,6 +91,40 @@ Distinction explicite à conserver : (A) le socle Relation / IMP-001 (Phases 0 �
 
 L'audit du contrat réel effectué lors de SR-ENGINE-001-D6 (Contrat canonique `FlagEntry`, voir STD-005) démontre la même divergence structurelle sur un second type canonique : `FlagEntry.confidence` (`lib/autre-rive/types.ts`), lui aussi `number` sans contrainte, porte dans le seul fixture réel actuellement disponible (`lib/autre-rive/rapport-analyse.test.ts`, `flag-1`, `confidence: 0.6`) la même échelle fraction 0-1 déjà observée sur `Conclusion`, alors que SR-ENGINE-001-D2 fixe la même cible ordinale `1|2|3` pour l'ensemble des champs `confidence` du domaine (aucune exception pour `FlagEntry`). Un seul point de donnée suffit à démontrer la divergence code/gouvernance ; il n'est pas nécessaire d'observer trois échelles distinctes sur `FlagEntry` pour que le défaut structurel soit réel. Cette dette est donc élargie à `FlagEntry.confidence` plutôt que dupliquée, les deux champs partageant la même cause racine (absence de contrainte de type reflétant la cible ordinale D2) et le même risque (agrégation ou comparaison silencieusement incorrecte).
 **Ticket d'origine :** Audit du contrat réel effectué lors de SR-ENGINE-001-D5 (Contrat canonique `Conclusion`, voir STD-005) — divergence démontrée entre la gouvernance (SR-ENGINE-001-D2) et le code/tests réels, explicitement reconnue mais non résolue par cette décision conceptuelle (aucun code modifié). Élargie lors de SR-ENGINE-001-D6 (Contrat canonique `FlagEntry`, voir STD-005) à l'occasion de l'audit du contrat réel de `FlagEntry.confidence`, qui a révélé la même divergence structurelle — également non résolue par cette décision conceptuelle (aucun code modifié).
+
+---
+
+## Livre / Manuscrit (LIVRE-P1A) — entrées consignées le 2026-10-01
+
+Dettes identifiées lors de l'audit complémentaire de LIVRE-P1A (commit de base `4125981`). Elles sont explicitement hors périmètre de LIVRE-P1A et ne sont pas résolues par ce chantier.
+
+---
+
+**Priorité :** Moyenne
+**Sujet :** `fragment.chapitre` référence les chapitres par titre, et non par identifiant stable
+**Pourquoi :** Après LIVRE-P1A, les chapitres des Tomes 2–4 auront un identifiant stable, mais les fragments continueront de désigner leur chapitre par son titre. Conséquences : ambiguïté dès que deux chapitres d'un même tome portent le même titre (classée `LEGACY — IDENTITÉ INDÉTERMINABLE` par LIVRE-P1A-D2, jamais devinée) ; dépendance au renommage, qui doit continuer à mettre à jour les fragments par titre ; rattachement impossible à vérifier par identifiant. Un chantier de migration de cette référence vers l'identifiant stable sera nécessaire.
+**Ticket d'origine :** Audit complémentaire LIVRE-P1A du 2026-10-01 ; STD-005 LIVRE-P1A-D2.
+
+---
+
+**Priorité :** Haute
+**Sujet :** Le Tome 1 possède deux systèmes de chapitres et de texte parallèles
+**Pourquoi :** Fait : un second système Tome 1 existe, à côté de `chapitres-tome-1` (`ChapitreTome1`, protégé par l'historique LIVRE-P0.1/P0.1B) : les entrées Tome 1 de `structure-chapitres` et les clés potentielles `ecriture_1_*`, que `app/vue-double/page.tsx` peut écrire. Ce second système n'est pas couvert par les garanties LIVRE-P0.1/P0.1B. Risque : du texte peut y être stocké sans protection P0.1, sans réconciliation avec `chapitres-tome-1`. Inconnu : la présence et la quantité réelles de contenu utilisateur dans ce second système ; son état dans l'environnement de l'utilisatrice n'a pas encore été inventorié. Priorité haute en raison de ce risque sur le texte du manuscrit, et non d'une perte constatée. Aucune réconciliation n'est réalisée par LIVRE-P1A (STD-005 LIVRE-P1A-D3) ; un inventaire réel devra précéder toute décision.
+**Ticket d'origine :** Audit complémentaire LIVRE-P1A du 2026-10-01 ; STD-005 LIVRE-P1A-D3.
+
+---
+
+**Priorité :** Basse
+**Sujet :** `normaliserChapitres` limité aux tomes 1 à 4
+**Pourquoi :** `normaliserChapitres` (`lib/manuscript-structure.ts`) ne conserve que les tomes présents dans `TOMES_DEFAUT` (1 à 4). Un tome supplémentaire créé depuis `/structure` est éliminé de la structure normalisée à la lecture ou à la sauvegarde suivante. Non corrigé par LIVRE-P1A.
+**Ticket d'origine :** Audit complémentaire LIVRE-P1A du 2026-10-01.
+
+---
+
+**Priorité :** Basse
+**Sujet :** Deux modèles `Chapitre` distincts (Manuscrit/Livre et Biographie)
+**Pourquoi :** Le modèle de chapitre canonique du Manuscrit/Livre et le type `Chapitre` de `app/lib/biographie.ts` coexistent sous le même nom. Cette duplication est intentionnelle pour LIVRE-P1A (frontière de domaine, STD-005 LIVRE-P1A-D5), mais elle est en tension avec l'objectif de STD-003 (réutiliser les mêmes concepts entre modules). Elle doit rester visible comme question d'architecture future (convergence, séparation définitive ou renommage) plutôt qu'être oubliée.
+**Ticket d'origine :** Audit complémentaire LIVRE-P1A du 2026-10-01 ; STD-005 LIVRE-P1A-D5.
 
 ---
 
