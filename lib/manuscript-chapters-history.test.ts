@@ -593,6 +593,26 @@ describe("LIVRE-P1B — BackupManager (D2)", () => {
     expect(await archiverContenusCanoniquesAvantRestaurationComplete()).toBe(0);
   });
 
+  it("protège aussi le contenu stocké d'un chapitre retiré de la structure, sans le réinsérer ni le rattacher", async () => {
+    const garde = chapitre("Gardé");
+    const retire = chapitre("Retiré");
+    contenuExistant(garde.id, "texte gardé");
+    contenuExistant(retire.id, "texte du chapitre retiré");
+    supprimerChapitreCanonique(retire.id);
+    const structureAvant = lireChapitresCanoniquesDuTome(2);
+    expect(structureAvant.map((c) => c.id)).not.toContain(retire.id);
+
+    expect(await archiverContenusCanoniquesAvantRestaurationComplete()).toBe(2);
+
+    expect((await lireHistoriqueChapitre(retire.id)).map((v) => [v.chapitreId, v.contenu, v.motif])).toEqual([
+      [retire.id, "texte du chapitre retiré", "restauration-complete"],
+    ]);
+    expect(lireChapitresCanoniquesDuTome(2)).toEqual(structureAvant);
+    expect(lireContenuChapitre(retire.id)).toBe("texte du chapitre retiré");
+    expect(await archiverContenusCanoniquesAvantRestaurationComplete()).toBe(0);
+    expect(await lireHistoriqueChapitre(retire.id)).toHaveLength(1);
+  });
+
   it("échec d'archivage → rejet (BackupManager annule), contenus intacts", async () => {
     const x = chapitre("X");
     contenuExistant(x.id, "x courant");
@@ -656,8 +676,9 @@ describe("LIVRE-P1B — writers applicatifs (22)", () => {
   it("/vue-double écrit via la primitive centrale avec une séance d'édition", () => {
     const vue = source("app/vue-double/page.tsx");
     expect(vue).toContain("ouvrirSeanceEditionChapitre(chapitreActifLu)");
-    expect(vue).toMatch(/sauvegarderTexteChapitre\(chapitre, texte, jetonSeance\)/);
-    expect(vue).toContain("Non sauvegardé");
+    expect(vue).toContain("sauvegarderTexteChapitre(cible, val, jeton)");
+    // États « Non sauvegardé » : prouvés par exécution dans lib/vue-double-sauvegarde.test.ts.
+    expect(vue).toContain("const libelle = libelleSauvegarde(etatSauvegarde);");
   });
 
   it("BackupManager archive avant localStorage.clear() et annule en cas d'échec", () => {

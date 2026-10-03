@@ -478,10 +478,12 @@ describe("READ-FAILURE — règle pure repliLectureHistoriqueAutorise", () => {
 });
 
 describe("READ-FAILURE — /vue-double (sources)", () => {
-  it("la panne n'est jamais masquée : avertissement en repli, « Non sauvegardé » en blocage", () => {
+  // Les états affichés (avertissement en repli, « Non sauvegardé — historique
+  // indisponible » en blocage) sont prouvés par exécution dans
+  // lib/vue-double-sauvegarde.test.ts ; ici, seul le branchement est vérifié.
+  it("la page traduit les issues et affiche l'état via la logique testée", () => {
     const vue = readFileSync(fileURLToPath(new URL("../app/vue-double/page.tsx", import.meta.url)), "utf8");
-    expect(vue).toContain('"Sauvegardé — historique indisponible"');
-    expect(vue).toContain("`Non sauvegardé — ${erreurSauvegarde}`");
-    expect(vue).toContain('if (error instanceof HistoriqueChapitreError) return { erreur: "historique indisponible"');
+    expect(vue).toContain("executerSauvegarde(() => sauvegarderTexteChapitre(cible, val, jeton))");
+    expect(vue).toContain("{libelle.texte}");
   });
 });
