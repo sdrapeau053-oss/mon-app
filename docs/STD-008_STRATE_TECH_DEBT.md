@@ -160,4 +160,11 @@ Dettes et risques résiduels confirmés après l'adoption de LIVRE-P1B-D1 et LIV
 
 ---
 
+**Priorité :** Moyenne (temporaire)
+**Sujet :** Implémenter le repli READ-FAILURE gouverné par `T_confirmé` (STD-005 LIVRE-P1B-D1 et D2)
+**Pourquoi :** STD-005 LIVRE-P1B-D2 (« Échec de lecture de l'historique ») et LIVRE-P1B-D1 (« `T_confirmé` ») gouvernent, depuis le 2026-10-03, un repli limité : lorsque la lecture de l'historique IndexedDB échoue, la sauvegarde peut continuer seulement si un `T_confirmé` de la séance courante prouve que moins de 5 minutes se sont écoulées depuis la dernière version persistée confirmée, et que les autres conditions sont réunies ; sinon l'écriture est bloquée. Fait vérifié : l'implémentation du commit `6d583ffedd5a69c803b4fb4e0d2182d3c4358124` (`archiverPuisEcrire`, `lib/manuscript-chapters.ts`) appelle `listerVersions` à chaque sauvegarde d'un contenu courant non vide et refuse l'écriture au moindre échec de lecture, même lorsqu'aucun archivage ne serait requis. Ce comportement est plus strict que la décision et ne fait perdre aucun état protégé, mais il bloque l'écriture pendant toute la panne. Le texte saisi ne vit alors que dans la zone d'écriture. Dette temporaire, à clôturer après l'implémentation du repli, de son affichage dans `/vue-double` et des tests prévus (lecture en échec à moins de 5 minutes ; à 5 minutes ou plus, écart négatif ou `T_confirmé` absent ; nouvelle séance ou rechargement ; conflit ; retour d'IndexedDB ; aucune version ; restauration et restauration complète en échec ; absence de survie au rechargement). Ne couvre ni l'absence de tampon de secours, ni l'optimisation de lecture de la seule dernière version, ni la question Supabase/RLS.
+**Ticket d'origine :** Contrôle d'alignement LIVRE-P1B du 2026-10-03 et décision READ-FAILURE du même jour ; STD-005 LIVRE-P1B-D1 et D2.
+
+---
+
 *(à compléter au fil des modules)*
