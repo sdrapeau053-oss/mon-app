@@ -12,6 +12,7 @@ import {
 } from "@/components/system-ui";
 import { useLanguage } from "@/lib/LanguageContext";
 import { t } from "@/lib/i18n";
+import { archiverContenusCanoniquesAvantRestaurationComplete } from "@/lib/manuscript-chapters";
 
 type BackupPayload = {
   appName: "L’Héritage des Silences";
@@ -219,6 +220,16 @@ export default function BackupManager({ variant = "floating" }: BackupManagerPro
 
       if (!confirmed) {
         setMessage("Restauration annulée.");
+        return;
+      }
+
+      // LIVRE-P1B-D2 — le contenu courant des chapitres canoniques est archivé
+      // dans l'historique avant d'être remplacé ; en cas d'échec, rien n'est
+      // restauré.
+      try {
+        await archiverContenusCanoniquesAvantRestaurationComplete();
+      } catch {
+        setMessage("Restauration annulée : le contenu actuel des chapitres n'a pas pu être archivé dans l'historique. Rien n'a été modifié.");
         return;
       }
 

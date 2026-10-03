@@ -14,7 +14,8 @@
 // Hors périmètre (D3, D5, STD-008) : Tome 1 (`chapitres-tome-1`, entrées
 // Tome 1 de `structure-chapitres`, clés `ecriture_1_*`), tomes > 4, modèle
 // `Chapitre` de la Biographie, `fragment.chapitre` (reste une référence par
-// titre). Aucun historique de versions (LIVRE-P1B).
+// titre). Historique non destructif du contenu (LIVRE-P1B) : voir plus bas et
+// lib/manuscript-chapters-history.ts.
 
 import {
   CHAPITRES_DEFAUT,
@@ -23,6 +24,14 @@ import {
   sauvegarderChapitres,
   type ManuscriptChapitres,
 } from "@/lib/manuscript-structure";
+import {
+  deciderArchivageAvantEcriture,
+  depotHistorique,
+  doitArchiverEtatCourant,
+  type EtatSeanceEdition,
+  type MotifVersionChapitre,
+  type VersionChapitreManuscrit,
+} from "@/lib/manuscript-chapters-history";
 
 export const CHAPITRES_MANUSCRIT_STORAGE_KEY = "chapitres-manuscrit-tomes-2-4";
 export const CONTENU_CHAPITRE_PREFIX = "contenu-chapitre-manuscrit:";
@@ -367,12 +376,202 @@ export function lireContenuChapitre(id: string): string {
   return localStorage.getItem(cleContenuChapitre(id)) ?? "";
 }
 
-export function sauvegarderContenuChapitre(id: string, texte: string) {
-  if (!storageDisponible()) return;
+// ─── LIVRE-P1B — écriture protégée par l'historique ───────────────────────
+// STD-005 LIVRE-P1B-D1/D2. Toute écriture du contenu canonique passe par
+// `sauvegarderContenuChapitre`, rattachée à une séance d'édition. Lorsqu'une
+// version est requise, elle est persistée dans IndexedDB AVANT que le contenu
+// courant soit remplacé ; en cas d'échec, le contenu courant n'est pas touché
+// et l'erreur remonte (fail-closed).
+
+export class SeanceEditionInvalideError extends Error {
+  constructor() {
+    super("Séance d'édition absente ou ne correspondant pas à ce chapitre : écriture refusée.");
+    this.name = "SeanceEditionInvalideError";
+  }
+}
+
+export class ContenuChapitreEcritureError extends Error {
+  readonly estQuota: boolean;
+
+  constructor(cause: unknown) {
+    super("Écriture du contenu courant du chapitre impossible.", { cause });
+    this.name = "ContenuChapitreEcritureError";
+    this.estQuota = Boolean(
+      cause && typeof cause === "object" && "name" in cause && (cause as { name?: unknown }).name === "QuotaExceededError",
+    );
+  }
+}
+
+export class ContenuChapitreConcurrentError extends Error {
+  constructor() {
+    super("Le contenu du chapitre change en continu (écritures concurrentes) : écriture abandonnée sans rien écraser.");
+    this.name = "ContenuChapitreConcurrentError";
+  }
+}
+
+type SeanceEdition = EtatSeanceEdition & { chapitreId: string };
+
+// État de séance en mémoire uniquement (D1) : il ne porte jamais la
+// temporalité des checkpoints, toujours lue dans l'historique persisté.
+const seancesEdition = new Map<string, SeanceEdition>();
+let compteurSeances = 0;
+
+// D1 — une séance commence à l'ouverture de l'éditeur sur un chapitre et à
+// chaque changement de chapitre (l'éditeur ouvre alors une nouvelle séance).
+export function ouvrirSeanceEdition(chapitreId: string): string {
+  compteurSeances += 1;
+  const jeton = `seance-${compteurSeances}-${genererIdChapitre()}`;
+  seancesEdition.set(jeton, { chapitreId, premiereModificationFaite: false, dernierContenuEcrit: null });
+  return jeton;
+}
+
+// D1 — une séance (re)commence après une restauration.
+function redemarrerSeancesDuChapitre(chapitreId: string) {
+  seancesEdition.forEach((seance) => {
+    if (seance.chapitreId !== chapitreId) return;
+    seance.premiereModificationFaite = false;
+    seance.dernierContenuEcrit = null;
+  });
+}
+
+// Écritures d'un même chapitre sérialisées (D2).
+const filesParChapitre = new Map<string, Promise<unknown>>();
+
+function enFileChapitre<T>(chapitreId: string, operation: () => Promise<T>): Promise<T> {
+  const precedente = filesParChapitre.get(chapitreId) ?? Promise.resolve();
+  const suivante = precedente.catch(() => undefined).then(operation);
+  filesParChapitre.set(chapitreId, suivante);
+  suivante
+    .catch(() => undefined)
+    .then(() => {
+      if (filesParChapitre.get(chapitreId) === suivante) filesParChapitre.delete(chapitreId);
+    });
+  return suivante;
+}
+
+function exigerChapitreCanonique(id: string) {
   const etat = lireEtatStructureCanonique();
   if (etat.invalide) throw new StructureCanoniqueIllisibleError();
   if (!etat.chapitres.some((chapitre) => chapitre.id === id)) throw new Error(`Chapitre introuvable : ${id}`);
-  localStorage.setItem(cleContenuChapitre(id), texte);
+}
+
+function lireContenuPersiste(id: string): string | null {
+  return localStorage.getItem(cleContenuChapitre(id));
+}
+
+function ecrireContenuCourant(id: string, texte: string) {
+  try {
+    localStorage.setItem(cleContenuChapitre(id), texte);
+  } catch (error) {
+    throw new ContenuChapitreEcritureError(error);
+  }
+}
+
+const TENTATIVES_MAX = 3;
+
+// Archive (si la règle l'exige) puis remplace le contenu courant. Après la
+// persistance de l'archive, le contenu courant est relu : s'il a changé
+// entre-temps, la règle est réévaluée avant toute écriture (D2).
+async function archiverPuisEcrire(
+  id: string,
+  texte: string,
+  decider: (contenuCourant: string | null, derniereVersion: VersionChapitreManuscrit | undefined) => MotifVersionChapitre | null,
+): Promise<{ ecrit: boolean; version: VersionChapitreManuscrit | null }> {
+  let versionCreee: VersionChapitreManuscrit | null = null;
+  for (let tentative = 0; tentative < TENTATIVES_MAX; tentative += 1) {
+    const contenuCourant = lireContenuPersiste(id);
+    if ((contenuCourant ?? "") === texte) return { ecrit: false, version: versionCreee };
+    // Rien à protéger : aucune lecture d'historique nécessaire.
+    let motif: MotifVersionChapitre | null = null;
+    if (contenuCourant) {
+      const versions = await depotHistorique().listerVersions(id);
+      motif = decider(contenuCourant, versions.at(-1));
+    }
+    if (motif) versionCreee = await depotHistorique().ajouterVersion(id, contenuCourant as string, motif);
+    if (lireContenuPersiste(id) !== contenuCourant) continue;
+    ecrireContenuCourant(id, texte);
+    return { ecrit: true, version: versionCreee };
+  }
+  throw new ContenuChapitreConcurrentError();
+}
+
+export type ResultatSauvegardeChapitre = {
+  ecrit: boolean;
+  version: VersionChapitreManuscrit | null;
+};
+
+export function sauvegarderContenuChapitre(id: string, texte: string, jetonSeance: string): Promise<ResultatSauvegardeChapitre> {
+  if (!storageDisponible()) return Promise.resolve({ ecrit: false, version: null });
+  try {
+    exigerChapitreCanonique(id);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  const seance = seancesEdition.get(jetonSeance);
+  if (!seance || seance.chapitreId !== id) return Promise.reject(new SeanceEditionInvalideError());
+
+  return enFileChapitre(id, async () => {
+    exigerChapitreCanonique(id);
+    const resultat = await archiverPuisEcrire(id, texte, (contenuCourant, derniereVersion) =>
+      deciderArchivageAvantEcriture({ contenuCourant, nouveauContenu: texte, derniereVersion, seance, maintenant: Date.now() }),
+    );
+    if (resultat.ecrit) {
+      seance.premiereModificationFaite = true;
+      seance.dernierContenuEcrit = texte;
+    }
+    return resultat;
+  });
+}
+
+export function lireHistoriqueChapitre(id: string): Promise<VersionChapitreManuscrit[]> {
+  return depotHistorique().listerVersions(id);
+}
+
+// Restauration non destructive (D1) : le contenu courant remplacé est archivé
+// d'abord (motif `restauration`) ; aucune version n'est supprimée, la version
+// restaurée comprise. Une séance recommence ensuite pour ce chapitre.
+export function restaurerVersionChapitre(id: string, versionId: string): Promise<ResultatSauvegardeChapitre> {
+  if (!storageDisponible()) return Promise.resolve({ ecrit: false, version: null });
+  try {
+    exigerChapitreCanonique(id);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  return enFileChapitre(id, async () => {
+    exigerChapitreCanonique(id);
+    const cible = (await depotHistorique().listerVersions(id)).find((version) => version.id === versionId);
+    if (!cible || cible.chapitreId !== id) throw new Error(`Version introuvable pour ce chapitre : ${versionId}`);
+    const resultat = await archiverPuisEcrire(id, cible.contenu, (contenuCourant, derniereVersion) =>
+      doitArchiverEtatCourant(contenuCourant, derniereVersion) ? "restauration" : null,
+    );
+    redemarrerSeancesDuChapitre(id);
+    return resultat;
+  });
+}
+
+// D2 — BackupManager : avant `localStorage.clear()`, archive le contenu courant
+// de chaque chapitre canonique présent dans le stockage (motif
+// `restauration-complete`). Rejette au premier échec : l'appelant doit alors
+// annuler la restauration complète.
+export async function archiverContenusCanoniquesAvantRestaurationComplete(): Promise<number> {
+  if (!storageDisponible()) return 0;
+  const ids: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(CONTENU_CHAPITRE_PREFIX)) ids.push(key.slice(CONTENU_CHAPITRE_PREFIX.length));
+  }
+  let archives = 0;
+  for (const id of ids.sort()) {
+    await enFileChapitre(id, async () => {
+      const contenuCourant = lireContenuPersiste(id);
+      if (!contenuCourant) return;
+      const derniere = (await depotHistorique().listerVersions(id)).at(-1);
+      if (!doitArchiverEtatCourant(contenuCourant, derniere)) return;
+      await depotHistorique().ajouterVersion(id, contenuCourant, "restauration-complete");
+      archives += 1;
+    });
+  }
+  return archives;
 }
 
 export type TexteLegacyNonAttribue = ImportLegacy & { texte: string };
@@ -436,10 +635,21 @@ export function lireTexteChapitre(chapitre: ChapitreStructureLu): string {
   return localStorage.getItem(cleEcritureLegacy(chapitre.tomeId, chapitre.titre)) ?? "";
 }
 
-export function sauvegarderTexteChapitre(chapitre: ChapitreStructureLu, texte: string) {
+// LIVRE-P1B — séance d'édition pour un chapitre de la vue unifiée : uniquement
+// pour un chapitre canonique (Tome 1 et tomes hors P1A : aucune séance).
+export function ouvrirSeanceEditionChapitre(chapitre: ChapitreStructureLu | null): string | null {
+  return chapitre?.source === "canonique" && chapitre.id ? ouvrirSeanceEdition(chapitre.id) : null;
+}
+
+export async function sauvegarderTexteChapitre(
+  chapitre: ChapitreStructureLu,
+  texte: string,
+  jetonSeance: string | null,
+): Promise<void> {
   if (!storageDisponible()) return;
   if (chapitre.source === "canonique" && chapitre.id) {
-    sauvegarderContenuChapitre(chapitre.id, texte);
+    if (!jetonSeance) throw new SeanceEditionInvalideError();
+    await sauvegarderContenuChapitre(chapitre.id, texte, jetonSeance);
     return;
   }
   if (estTomeP1A(chapitre.tomeId)) throw new Error("Écriture legacy refusée pour un tome canonique.");

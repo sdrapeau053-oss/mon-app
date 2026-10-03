@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -24,6 +25,7 @@ import {
   lireTexteChapitre,
   lireTextesLegacyNonAttribues,
   migrerChapitresLegacyP1A,
+  ouvrirSeanceEdition,
   renommerChapitreCanonique,
   reordonnerChapitresCanoniques,
   sauvegarderChapitresLegacyHorsP1A,
@@ -32,6 +34,7 @@ import {
   supprimerChapitreCanonique,
   synchroniserChapitresDepuisFragments,
 } from "./manuscript-chapters";
+import { __definirDepotHistoriquePourTests } from "./manuscript-chapters-history";
 import { CHAPITRES_DEFAUT, STRUCTURE_CHAPITRES_STORAGE_KEY } from "./manuscript-structure";
 import { CHAPITRES_TOME_1_STORAGE_KEY } from "./tome1-chapters";
 
@@ -74,7 +77,16 @@ const LEGACY_STRUCTURE = {
   4: ["La plainte"],
 };
 
+// LIVRE-P1B : l'écriture du contenu canonique est asynchrone, rattachée à une
+// séance d'édition, et peut archiver dans IndexedDB (simulé sous Node).
+function ecrire(id: string, texte: string) {
+  return sauvegarderContenuChapitre(id, texte, ouvrirSeanceEdition(id));
+}
+
 beforeEach(() => {
+  (globalThis as { indexedDB?: unknown }).indexedDB = new IDBFactory();
+  (globalThis as { IDBKeyRange?: unknown }).IDBKeyRange = IDBKeyRange;
+  __definirDepotHistoriquePourTests(null);
   const memoryLocalStorage = createMemoryLocalStorage();
   (globalThis as { window?: unknown }).window = { localStorage: memoryLocalStorage };
   (globalThis as { localStorage?: unknown }).localStorage = memoryLocalStorage;
@@ -153,10 +165,10 @@ describe("LIVRE-P1A — migration legacy des Tomes 2–4", () => {
 });
 
 describe("LIVRE-P1A — identité stable", () => {
-  it("5/6. renommer conserve l'ID et le contenu", () => {
+  it("5/6. renommer conserve l'ID et le contenu", async () => {
     seedLegacy();
     const [chapitre] = lireChapitresCanoniquesDuTome(2);
-    sauvegarderContenuChapitre(chapitre.id, "Mon texte");
+    await ecrire(chapitre.id, "Mon texte");
     renommerChapitreCanonique(chapitre.id, "Nouveau titre");
     const renomme = lireChapitresCanoniquesDuTome(2)[0];
     expect(renomme.id).toBe(chapitre.id);
@@ -164,10 +176,10 @@ describe("LIVRE-P1A — identité stable", () => {
     expect(lireContenuChapitre(chapitre.id)).toBe("Mon texte");
   });
 
-  it("7/8. réordonner conserve les IDs et le contenu", () => {
+  it("7/8. réordonner conserve les IDs et le contenu", async () => {
     seedLegacy();
     const avant = lireChapitresCanoniquesDuTome(2);
-    avant.forEach((c) => sauvegarderContenuChapitre(c.id, `texte ${c.titre}`));
+    for (const c of avant) await ecrire(c.id, `texte ${c.titre}`);
     const inverse = [...avant].reverse().map((c) => c.id);
     reordonnerChapitresCanoniques(2, inverse);
     const apres = lireChapitresCanoniquesDuTome(2);
@@ -200,10 +212,10 @@ describe("LIVRE-P1A — identité stable", () => {
     expect(() => renommerChapitreCanonique(b.id, a.titre)).toThrow(TitreChapitreDejaUtiliseError);
   });
 
-  it("10. suppression explicite retire le chapitre de la structure sans effacer son contenu", () => {
+  it("10. suppression explicite retire le chapitre de la structure sans effacer son contenu", async () => {
     seedLegacy();
     const [premier, second] = lireChapitresCanoniquesDuTome(2);
-    sauvegarderContenuChapitre(second.id, "à garder");
+    await ecrire(second.id, "à garder");
     supprimerChapitreCanonique(second.id);
     const restants = lireChapitresCanoniquesDuTome(2);
     expect(restants.map((c) => c.id)).not.toContain(second.id);
@@ -212,8 +224,8 @@ describe("LIVRE-P1A — identité stable", () => {
     expect(localStorage.getItem(cleContenuChapitre(second.id))).toBe("à garder");
   });
 
-  it("refuse d'écrire un contenu pour un identifiant inconnu", () => {
-    expect(() => sauvegarderContenuChapitre("chap-inconnu", "x")).toThrow();
+  it("refuse d'écrire un contenu pour un identifiant inconnu", async () => {
+    await expect(ecrire("chap-inconnu", "x")).rejects.toThrow();
     expect(localStorage.getItem(cleContenuChapitre("chap-inconnu"))).toBeNull();
   });
 });
@@ -316,24 +328,24 @@ describe("LIVRE-P1A — textes legacy ecriture_*", () => {
     expect(orphelin).toMatchObject({ statut: STATUT_LEGACY_SANS_CHAPITRE, texte: "Texte orphelin" });
   });
 
-  it("n'écrase jamais un contenu canonique déjà présent à l'import", () => {
+  it("n'écrase jamais un contenu canonique déjà présent à l'import", async () => {
     seedLegacy();
     const etat = migrerChapitresLegacyP1A()!;
     const amis = etat.chapitres.find((c) => c.titre === "Les amis")!;
-    sauvegarderContenuChapitre(amis.id, "édité");
+    await ecrire(amis.id, "édité");
     migrerChapitresLegacyP1A();
     expect(lireContenuChapitre(amis.id)).toBe("édité");
   });
 });
 
 describe("LIVRE-P1A — Tome 1 hors migration", () => {
-  it("23/24. données Tome 1 intactes ; ecriture_1_* ni migrée, ni supprimée, ni réécrite", () => {
+  it("23/24. données Tome 1 intactes ; ecriture_1_* ni migrée, ni supprimée, ni réécrite", async () => {
     seedLegacy();
     const avant = snapshotStorage();
     lireChapitresCanoniques();
     const chapitre = lireChapitresCanoniquesDuTome(2)[0];
     renommerChapitreCanonique(chapitre.id, "Renommé");
-    sauvegarderContenuChapitre(chapitre.id, "texte");
+    await ecrire(chapitre.id, "texte");
     supprimerChapitreCanonique(chapitre.id);
     synchroniserChapitresDepuisFragments([{ manuscrit: true, tomeId: 2, chapitre: "Via fragment" }]);
     expect(localStorage.getItem(cleEcritureLegacy(1, "La maison"))).toBe(avant[cleEcritureLegacy(1, "La maison")]);
@@ -363,7 +375,7 @@ describe("LIVRE-P1A — Tome 1 hors migration", () => {
 });
 
 describe("LIVRE-P1A — consommateurs", () => {
-  it("20. vue unifiée : Tomes 2–4 lus par identifiant, sans clé reconstruite par titre", () => {
+  it("20. vue unifiée : Tomes 2–4 lus par identifiant, sans clé reconstruite par titre", async () => {
     seedLegacy();
     const legacyBase = { 1: ["La maison"], 2: ["Titre legacy obsolète"], 5: ["Tome 5 legacy"] };
     const structure = composerChapitresParTome(legacyBase);
@@ -371,7 +383,7 @@ describe("LIVRE-P1A — consommateurs", () => {
     expect(structure[2].every((c) => c.source === "canonique" && c.id)).toBe(true);
     expect(structure[5]).toEqual([{ tomeId: 5, titre: "Tome 5 legacy", index: 0, id: null, source: "legacy" }]);
     const amis = structure[2][1];
-    sauvegarderTexteChapitre(amis, "écrit via vue unifiée");
+    await sauvegarderTexteChapitre(amis, "écrit via vue unifiée", ouvrirSeanceEdition(amis.id as string));
     renommerChapitreCanonique(amis.id as string, "Renommé");
     const relu = lireChapitresStructureParTome()[2][1];
     expect(relu.titre).toBe("Renommé");
@@ -412,10 +424,10 @@ describe("LIVRE-P1A — consommateurs", () => {
     });
   });
 
-  it("22. compatible BackupManager : export/restauration de toutes les clés → mêmes IDs et contenus", () => {
+  it("22. compatible BackupManager : export/restauration de toutes les clés → mêmes IDs et contenus", async () => {
     seedLegacy();
     const chapitres = lireChapitresCanoniques();
-    chapitres.forEach((c) => sauvegarderContenuChapitre(c.id, `contenu ${c.id}`));
+    for (const c of chapitres) await ecrire(c.id, `contenu ${c.id}`);
     // BackupManager exporte localStorage clé par clé, puis restaure via clear() + setItem().
     const exporte = JSON.parse(JSON.stringify({ data: snapshotStorage() })) as { data: Record<string, string> };
     localStorage.clear();

@@ -14,6 +14,7 @@ import {
   lireChapitresStructureParTome,
   lireTextesLegacyNonAttribues,
   lireTexteChapitre,
+  ouvrirSeanceEditionChapitre,
   sauvegarderTexteChapitre,
   type ChapitreStructureLu,
   type ChapitresStructureParTome,
@@ -31,9 +32,22 @@ function chargerTexte(chapitre: ChapitreStructureLu | null): string {
   catch { return ""; }
 }
 
-function sauvegarderTexte(chapitre: ChapitreStructureLu, texte: string) {
-  try { sauvegarderTexteChapitre(chapitre, texte); return true; }
-  catch { return false; /* quota ou structure canonique illisible */ }
+// LIVRE-P1B — l'historique est géré par la primitive centrale. Un échec
+// (historique ou contenu courant) n'est jamais présenté comme une réussite :
+// la cause est renvoyée pour affichage.
+async function sauvegarderTexte(
+  chapitre: ChapitreStructureLu,
+  texte: string,
+  jetonSeance: string | null,
+): Promise<string | null> {
+  try {
+    await sauvegarderTexteChapitre(chapitre, texte, jetonSeance);
+    return null;
+  } catch (error) {
+    const quota = Boolean(error && typeof error === "object" && "estQuota" in error && (error as { estQuota?: boolean }).estQuota);
+    if (quota) return "stockage plein";
+    return error instanceof Error ? error.message : "erreur inconnue";
+  }
 }
 
 function memeChapitre(a: ChapitreStructureLu | null, b: ChapitreStructureLu | null) {
@@ -57,8 +71,11 @@ export default function VueDouble() {
   const chapitreActif = chapitreActifLu?.titre ?? "";
   const [texte, setTexte] = useState("");
   const [sauvegarde, setSauvegarde] = useState(true);
+  const [erreurSauvegarde, setErreurSauvegarde] = useState<string | null>(null);
 
   const saveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const jetonSeance = useRef<string | null>(null);
+  const saisie      = useRef(0);
   const truthTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [truthOuvert, setTruthOuvert] = useState(false);
   const [truthResult, setTruthResult] = useState<TruthModeResult>(TRUTH_VIDE);
@@ -88,8 +105,14 @@ export default function VueDouble() {
   }, []);
 
   useEffect(() => {
+    // LIVRE-P1B-D1 — nouvelle séance d'édition à l'ouverture et à chaque
+    // changement de chapitre.
+    jetonSeance.current = ouvrirSeanceEditionChapitre(chapitreActifLu);
     setTexte(chargerTexte(chapitreActifLu));
     setSauvegarde(true);
+    setErreurSauvegarde(null);
+    // La séance précédente n'est pas fermée : une sauvegarde encore programmée
+    // pour l'ancien chapitre conserve ainsi un jeton valide.
   }, [chapitreActifLu]);
 
   function changerChapitre(chapitre: ChapitreStructureLu) {
@@ -99,10 +122,23 @@ export default function VueDouble() {
   function onTexteChange(val: string) {
     setTexte(val);
     setSauvegarde(false);
+    saisie.current += 1;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const cible = chapitreActifLu;
-    saveTimer.current = setTimeout(() => {
-      if (cible) setSauvegarde(sauvegarderTexte(cible, val));
+    const jeton = jetonSeance.current;
+    const numeroSaisie = saisie.current;
+    saveTimer.current = setTimeout(async () => {
+      if (!cible) return;
+      const erreur = await sauvegarderTexte(cible, val, jeton);
+      // Un échec reste toujours visible ; une réussite n'est affichée que si
+      // aucune frappe plus récente n'attend sa propre sauvegarde.
+      if (erreur) {
+        setErreurSauvegarde(erreur);
+        setSauvegarde(false);
+      } else if (saisie.current === numeroSaisie) {
+        setErreurSauvegarde(null);
+        setSauvegarde(true);
+      }
     }, 600);
     if (truthOuvert) {
       if (truthTimer.current) clearTimeout(truthTimer.current);
@@ -152,12 +188,13 @@ export default function VueDouble() {
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
             {chapitresEcrits}/{chapitresTotal} chapitres · {totalMots.toLocaleString("fr-CA")} mots au total
           </span>
-          <span style={{
+          <span role="status" style={{
             fontSize: 11,
-            color: sauvegarde ? "var(--text-muted)" : "var(--primary)",
+            color: erreurSauvegarde ? "#b3261e" : sauvegarde ? "var(--text-muted)" : "var(--primary)",
+            fontWeight: erreurSauvegarde ? 600 : undefined,
             transition: "color 0.3s",
           }}>
-            {sauvegarde ? "Sauvegardé" : "…"}
+            {erreurSauvegarde ? `Non sauvegardé — ${erreurSauvegarde}` : sauvegarde ? "Sauvegardé" : "…"}
           </span>
         </div>
       </div>
