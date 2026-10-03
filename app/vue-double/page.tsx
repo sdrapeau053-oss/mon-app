@@ -20,6 +20,7 @@ import {
   type ChapitresStructureParTome,
   type TexteLegacyNonAttribue,
 } from "@/lib/manuscript-chapters";
+import { HistoriqueChapitreError } from "@/lib/manuscript-chapters-history";
 
 type Tome = ManuscriptTome;
 
@@ -34,19 +35,21 @@ function chargerTexte(chapitre: ChapitreStructureLu | null): string {
 
 // LIVRE-P1B — l'historique est géré par la primitive centrale. Un échec
 // (historique ou contenu courant) n'est jamais présenté comme une réussite :
-// la cause est renvoyée pour affichage.
+// la cause est renvoyée pour affichage. Repli D2 (échec de lecture de
+// l'historique) : sauvegarde signalée avec avertissement, jamais masquée.
 async function sauvegarderTexte(
   chapitre: ChapitreStructureLu,
   texte: string,
   jetonSeance: string | null,
-): Promise<string | null> {
+): Promise<{ erreur: string | null; historiqueIndisponible: boolean }> {
   try {
-    await sauvegarderTexteChapitre(chapitre, texte, jetonSeance);
-    return null;
+    const { historiqueIndisponible } = await sauvegarderTexteChapitre(chapitre, texte, jetonSeance);
+    return { erreur: null, historiqueIndisponible };
   } catch (error) {
     const quota = Boolean(error && typeof error === "object" && "estQuota" in error && (error as { estQuota?: boolean }).estQuota);
-    if (quota) return "stockage plein";
-    return error instanceof Error ? error.message : "erreur inconnue";
+    if (quota) return { erreur: "stockage plein", historiqueIndisponible: false };
+    if (error instanceof HistoriqueChapitreError) return { erreur: "historique indisponible", historiqueIndisponible: true };
+    return { erreur: error instanceof Error ? error.message : "erreur inconnue", historiqueIndisponible: false };
   }
 }
 
@@ -72,6 +75,7 @@ export default function VueDouble() {
   const [texte, setTexte] = useState("");
   const [sauvegarde, setSauvegarde] = useState(true);
   const [erreurSauvegarde, setErreurSauvegarde] = useState<string | null>(null);
+  const [historiqueIndisponible, setHistoriqueIndisponible] = useState(false);
 
   const saveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jetonSeance = useRef<string | null>(null);
@@ -111,6 +115,7 @@ export default function VueDouble() {
     setTexte(chargerTexte(chapitreActifLu));
     setSauvegarde(true);
     setErreurSauvegarde(null);
+    setHistoriqueIndisponible(false);
     // La séance précédente n'est pas fermée : une sauvegarde encore programmée
     // pour l'ancien chapitre conserve ainsi un jeton valide.
   }, [chapitreActifLu]);
@@ -129,14 +134,15 @@ export default function VueDouble() {
     const numeroSaisie = saisie.current;
     saveTimer.current = setTimeout(async () => {
       if (!cible) return;
-      const erreur = await sauvegarderTexte(cible, val, jeton);
+      const resultat = await sauvegarderTexte(cible, val, jeton);
       // Un échec reste toujours visible ; une réussite n'est affichée que si
       // aucune frappe plus récente n'attend sa propre sauvegarde.
-      if (erreur) {
-        setErreurSauvegarde(erreur);
+      if (resultat.erreur) {
+        setErreurSauvegarde(resultat.erreur);
         setSauvegarde(false);
       } else if (saisie.current === numeroSaisie) {
         setErreurSauvegarde(null);
+        setHistoriqueIndisponible(resultat.historiqueIndisponible);
         setSauvegarde(true);
       }
     }, 600);
@@ -190,11 +196,15 @@ export default function VueDouble() {
           </span>
           <span role="status" style={{
             fontSize: 11,
-            color: erreurSauvegarde ? "#b3261e" : sauvegarde ? "var(--text-muted)" : "var(--primary)",
-            fontWeight: erreurSauvegarde ? 600 : undefined,
+            color: erreurSauvegarde ? "#b3261e" : sauvegarde ? (historiqueIndisponible ? "#8a5a00" : "var(--text-muted)") : "var(--primary)",
+            fontWeight: erreurSauvegarde || (sauvegarde && historiqueIndisponible) ? 600 : undefined,
             transition: "color 0.3s",
           }}>
-            {erreurSauvegarde ? `Non sauvegardé — ${erreurSauvegarde}` : sauvegarde ? "Sauvegardé" : "…"}
+            {erreurSauvegarde
+              ? `Non sauvegardé — ${erreurSauvegarde}`
+              : sauvegarde
+                ? historiqueIndisponible ? "Sauvegardé — historique indisponible" : "Sauvegardé"
+                : "…"}
           </span>
         </div>
       </div>

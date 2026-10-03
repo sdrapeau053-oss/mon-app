@@ -145,7 +145,7 @@ describe("LIVRE-P1B — versions et séances (D1)", () => {
     const { depot, appels } = depotEspion();
     __definirDepotHistoriquePourTests(depot);
     const resultat = await sauvegarderContenuChapitre(c.id, "A", ouvrirSeanceEdition(c.id));
-    expect(resultat).toEqual({ ecrit: false, version: null });
+    expect(resultat).toEqual({ ecrit: false, version: null, historiqueIndisponible: false });
     expect(appels.ajouter).toBe(0);
     expect(await contenus(c.id)).toEqual([]);
   });
@@ -456,7 +456,7 @@ describe("LIVRE-P1B — restauration non destructive", () => {
     const [versionA, versionB] = await lireHistoriqueChapitre(c.id);
     await restaurerVersionChapitre(c.id, versionA.id); // courant A, archive C
     const sansEffet = await restaurerVersionChapitre(c.id, versionA.id); // déjà courant
-    expect(sansEffet).toEqual({ ecrit: false, version: null });
+    expect(sansEffet).toEqual({ ecrit: false, version: null, historiqueIndisponible: false });
     await restaurerVersionChapitre(c.id, versionB.id); // courant B ; A est déjà la…
     expect(lireContenuChapitre(c.id)).toBe("B");
     const historique = await lireHistoriqueChapitre(c.id);

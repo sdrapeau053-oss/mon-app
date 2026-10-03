@@ -240,6 +240,27 @@ export function deciderArchivageAvantEcriture(params: {
   return null;
 }
 
+// STD-005 LIVRE-P1B-D1 (`T_confirmé`) et D2 (« Échec de lecture de
+// l'historique ») — repli autorisé lorsque la lecture IndexedDB échoue.
+// `tConfirme` : horodatage (ms) de la dernière version persistée confirmée
+// pendant la séance courante (lecture réussie ou archive `complete`), `null`
+// si aucun. Ne sert qu'à prouver qu'un checkpoint n'est PAS ENCORE requis :
+// toute condition manquante ou tout écart non fiable → `false` (blocage).
+export function repliLectureHistoriqueAutorise(params: {
+  contenuCourant: string | null;
+  nouveauContenu: string;
+  seance: EtatSeanceEdition & { tConfirme: number | null };
+  maintenant: number;
+}): boolean {
+  const { contenuCourant, nouveauContenu, seance, maintenant } = params;
+  if (!contenuCourant || contenuCourant === nouveauContenu) return false;
+  if (!seance.premiereModificationFaite) return false;
+  if (seance.dernierContenuEcrit !== contenuCourant) return false;
+  if (seance.tConfirme === null) return false;
+  const ecart = maintenant - seance.tConfirme;
+  return Number.isFinite(ecart) && ecart >= 0 && ecart < DELAI_CHECKPOINT_MS;
+}
+
 // Archivage hors règle de temps (restauration, restauration complète) :
 // uniquement un contenu non vide, jamais en double de la dernière version.
 export function doitArchiverEtatCourant(
