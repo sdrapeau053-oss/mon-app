@@ -16,9 +16,28 @@ import {
   calculerProgression,
   calculerStatsScore,
 } from "@/app/lib/biographie";
+import {
+  PARCOURS_ECRITURE_TOME_1,
+  PARCOURS_STRUCTURE_TOME_1,
+  lireVueTome1Biographie,
+  peutAjouterChapitreDansTomeBiographie,
+  titreDesigneTome1,
+  tomesBiographieAffiches,
+  type VueTome1Biographie,
+} from "@/lib/biographie/tome1-vue";
+
+// LIVRE-V1 (STD-005 LIVRE-V1-D1) — le Tome 1 est présenté en consultation
+// depuis `chapitres-tome-1`, sa seule source de vérité ; il s'édite par les
+// parcours protégés existants, jamais depuis cette page.
+function lireStockageNavigateur(): Storage | null {
+  try { return window.localStorage; }
+  catch { return null; }
+}
 
 export default function BiographiePage() {
   const [projet, setProjet] = useState<ProjetNarratif | null>(null);
+  const [vueTome1, setVueTome1] = useState<VueTome1Biographie | null>(null);
+  const [erreurTitreTome, setErreurTitreTome] = useState("");
   const [tomesOuverts, setTomesOuverts] = useState<Set<string>>(new Set(["tome-1"]));
   const [nouveauTitreTome, setNouveauTitreTome] = useState("");
   const [ajoutTomeOuvert, setAjoutTomeOuvert] = useState(false);
@@ -30,6 +49,7 @@ export default function BiographiePage() {
     const p = chargerProjet();
     setProjet(p);
     setTomesOuverts(new Set(p.tomes.map(t => t.id)));
+    setVueTome1(lireVueTome1Biographie(lireStockageNavigateur()));
   }, []);
 
   function maj(p: ProjetNarratif) {
@@ -37,9 +57,11 @@ export default function BiographiePage() {
     sauvegarderProjet(p);
   }
 
-  if (!projet) return null;
+  if (!projet || !vueTome1) return null;
 
   const prog = calculerProgression(projet);
+  const chapitresTome1 = vueTome1.chapitres.length;
+  const tomesAffiches = tomesBiographieAffiches(projet.tomes);
 
   function toggleTome(id: string) {
     setTomesOuverts(prev => {
@@ -51,13 +73,20 @@ export default function BiographiePage() {
 
   function ajouterNouveauTome() {
     if (!projet || !nouveauTitreTome.trim()) return;
+    if (titreDesigneTome1(nouveauTitreTome)) {
+      setErreurTitreTome("Le Tome 1 existe déjà : il s'écrit dans « Écrire maintenant » ou « Structure du Tome 1 ».");
+      return;
+    }
     maj(ajouterTome(projet, nouveauTitreTome.trim()));
     setNouveauTitreTome("");
+    setErreurTitreTome("");
     setAjoutTomeOuvert(false);
   }
 
   function ajouterNouveauChapitre(tomeId: string) {
     if (!projet || !nouveauTitreChapitre.trim()) return;
+    const tome = projet.tomes.find(t => t.id === tomeId);
+    if (!tome || !peutAjouterChapitreDansTomeBiographie(tome)) return;
     const updated = ajouterChapitre(projet, tomeId, nouveauTitreChapitre.trim());
     maj(updated);
     setNouveauTitreChapitre("");
@@ -93,9 +122,13 @@ export default function BiographiePage() {
             </h1>
           )}
           <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            {prog.total === 0
+            {vueTome1.etat !== "illisible" && chapitresTome1 === 0 && prog.total === 0
               ? "Aucun chapitre pour l'instant"
-              : `${prog.total} chapitre${prog.total > 1 ? "s" : ""} · ${prog.analyses} analysé${prog.analyses > 1 ? "s" : ""}`}
+              : [
+                  vueTome1.etat === "illisible" && "Tome I : données illisibles",
+                  chapitresTome1 > 0 &&`${chapitresTome1} chapitre${chapitresTome1 > 1 ? "s" : ""} écrit${chapitresTome1 > 1 ? "s" : ""} au Tome I`,
+                  prog.total > 0 && `${prog.total} chapitre${prog.total > 1 ? "s" : ""} Biographie · ${prog.analyses} analysé${prog.analyses > 1 ? "s" : ""}`,
+                ].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div style={{ maxWidth: 320, textAlign: "right" }}>
@@ -155,11 +188,12 @@ export default function BiographiePage() {
 
       {/* Tomes */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {projet.tomes.map((tome, idx) => (
+        <Tome1Consultation vue={vueTome1} couleur={COULEURS_TOME[0]} />
+        {tomesAffiches.map((tome, idx) => (
           <TomeSection
             key={tome.id}
             tome={tome}
-            couleur={COULEURS_TOME[idx % COULEURS_TOME.length]}
+            couleur={COULEURS_TOME[(idx + 1) % COULEURS_TOME.length]}
             ouvert={tomesOuverts.has(tome.id)}
             onToggle={() => toggleTome(tome.id)}
             stats={calculerStatsScore(tome)}
@@ -169,6 +203,7 @@ export default function BiographiePage() {
               }
             }}
             onSupprimerChapitre={chapId => maj(supprimerChapitre(projet, tome.id, chapId))}
+            peutAjouterChapitre={peutAjouterChapitreDansTomeBiographie(tome)}
             ajoutOuvert={ajoutChapitreId === tome.id}
             nouveauTitre={nouveauTitreChapitre}
             onOuvrirAjout={() => { setAjoutChapitreId(tome.id); setNouveauTitreChapitre(""); }}
@@ -182,12 +217,13 @@ export default function BiographiePage() {
       {/* Ajouter un tome */}
       <div style={{ marginTop: 24 }}>
         {ajoutTomeOuvert ? (
+          <>
           <div className="chapter-card" style={{ padding: 18, display: "flex", gap: 10, alignItems: "center" }}>
             <input
               autoFocus
               className="search-input"
               value={nouveauTitreTome}
-              onChange={e => setNouveauTitreTome(e.target.value)}
+              onChange={e => { setNouveauTitreTome(e.target.value); setErreurTitreTome(""); }}
               onKeyDown={e => { if (e.key === "Enter") ajouterNouveauTome(); if (e.key === "Escape") setAjoutTomeOuvert(false); }}
               placeholder="Ex : Tome 2 — La construction"
               style={{ flex: 1, marginBottom: 0 }}
@@ -195,6 +231,10 @@ export default function BiographiePage() {
             <button onClick={ajouterNouveauTome} className="btn-primary" style={{ fontSize: 12 }}>Ajouter</button>
             <button onClick={() => setAjoutTomeOuvert(false)} className="btn-ghost" style={{ fontSize: 12 }}>Annuler</button>
           </div>
+          {erreurTitreTome && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "8px 0 0" }}>{erreurTitreTome}</p>
+          )}
+          </>
         ) : (
           <button
             onClick={() => setAjoutTomeOuvert(true)}
@@ -225,6 +265,7 @@ function TomeSection({
   stats,
   onSupprimerTome,
   onSupprimerChapitre,
+  peutAjouterChapitre,
   ajoutOuvert,
   nouveauTitre,
   onOuvrirAjout,
@@ -239,6 +280,7 @@ function TomeSection({
   stats: { meilleurScore: number; plusFaible: number; moyenne: number } | null;
   onSupprimerTome: () => void;
   onSupprimerChapitre: (id: string) => void;
+  peutAjouterChapitre: boolean;
   ajoutOuvert: boolean;
   nouveauTitre: string;
   onOuvrirAjout: () => void;
@@ -359,9 +401,15 @@ function TomeSection({
             );
           })}
 
-          {/* Ajouter un chapitre */}
+          {/* Ajouter un chapitre — jamais pour un tome qui désigne le Tome 1 (LIVRE-V1-D1) */}
           <div style={{ marginTop: 12 }}>
-            {ajoutOuvert ? (
+            {!peutAjouterChapitre ? (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                Le Tome 1 s&apos;écrit dans{" "}
+                <Link href={PARCOURS_ECRITURE_TOME_1}>Écrire maintenant</Link> ou{" "}
+                <Link href={PARCOURS_STRUCTURE_TOME_1}>Structure du Tome 1</Link>.
+              </p>
+            ) : ajoutOuvert ? (
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input
                   autoFocus
@@ -381,6 +429,87 @@ function TomeSection({
               </button>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// LIVRE-V1-D1 — consultation du Tome 1 existant : aucune écriture, aucune
+// action de création ; l'édition passe par les parcours protégés.
+function Tome1Consultation({ vue, couleur }: { vue: VueTome1Biographie; couleur: string }) {
+  const [ouvert, setOuvert] = useState(true);
+  const n = vue.chapitres.length;
+
+  return (
+    <div className="chapter-card" style={{ overflow: "hidden" }}>
+      <div
+        onClick={() => setOuvert(o => !o)}
+        style={{
+          padding: "16px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          cursor: "pointer",
+          borderLeft: `3px solid ${couleur}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 11, color: couleur, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
+            {ouvert ? "▼" : "▶"}
+          </span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-main)" }}>{vue.titre}</span>
+        </div>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+          {vue.etat === "illisible"
+            ? "données illisibles"
+            : `${n} chap. écrit${n > 1 ? "s" : ""} · ${vue.totalMots} mots`}
+        </span>
+      </div>
+
+      {ouvert && (
+        <div style={{ padding: "8px 20px 16px", borderTop: "1px solid var(--border-soft)" }}>
+          {vue.etat === "illisible" && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 0", margin: 0 }}>
+              Les chapitres du Tome 1 sont présents mais illisibles ici. Rien n&apos;a été modifié ; n&apos;écris pas
+              ailleurs avant d&apos;avoir vérifié l&apos;Audit migration.
+            </p>
+          )}
+          {vue.etat !== "illisible" && n === 0 && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic", padding: "8px 0", margin: 0 }}>
+              Aucun chapitre écrit au Tome 1.
+            </p>
+          )}
+
+          {vue.chapitres.map(chapitre => (
+            <Link
+              key={chapitre.id}
+              href={chapitre.lienEdition}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 0",
+                borderBottom: "1px solid var(--border-soft)",
+                textDecoration: "none",
+              }}
+            >
+              <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 22 }}>{chapitre.numero}</span>
+              <span style={{ fontSize: 13, color: "var(--text-main)", flex: 1 }}>{chapitre.titre}</span>
+              <span style={{ fontSize: 10, color: couleur, border: `1px solid ${couleur}`, borderRadius: 4, padding: "1px 5px", lineHeight: 1.4 }}>
+                {chapitre.verrouille ? (chapitre.statut === "scellé" ? "scellé" : "gelé") : chapitre.statutEditorial}
+              </span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 64, textAlign: "right" }}>
+                {chapitre.mots} mots
+              </span>
+            </Link>
+          ))}
+
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "12px 0 0" }}>
+            Consultation seule. Écrire :{" "}
+            <Link href={PARCOURS_ECRITURE_TOME_1}>Écrire maintenant</Link> ·{" "}
+            <Link href={PARCOURS_STRUCTURE_TOME_1}>Structure du Tome 1</Link>
+          </p>
         </div>
       )}
     </div>

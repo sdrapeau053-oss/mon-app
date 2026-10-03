@@ -596,6 +596,24 @@ Migration : aucune. La base IndexedDB est créée vide à la première utilisati
 
 ---
 
+**ID :** LIVRE-V1-D1
+**Titre :** `/biographie` présente le Tome 1 existant en consultation, sans devenir une source de vérité
+**Date :** 2026-10-03
+**Statut :** CLÔTURÉE (décision — implémentée dans le commit « LIVRE-V1: raccorde Biographie au Tome 1 existant », voir Impact)
+**Décision :**
+- La source de vérité du Tome 1 reste `ChapitreTome1` / `chapitres-tome-1` (`lib/tome1-chapters.ts`). `/biographie` ne devient pas une nouvelle source de vérité du Tome 1.
+- Pour le Tome 1, `/biographie` présente une vue de consultation construite avec l'accès public canonique du Tome 1 : la clé `CHAPITRES_TOME_1_STORAGE_KEY` et la normalisation `normaliserChapitresTome1`, soit le même chemin que `lireChapitresTome1DepuisStorage()`. Un stockage absent est présenté comme vide. Un stockage illisible est signalé comme tel, sans être réparé ni présenté comme vide.
+- Seuls sont présentés comme chapitres les emplacements dont le contenu est réellement écrit (`chapitreTome1EstEcrit`). Les 30 emplacements fixes ne sont jamais comptés comme 30 chapitres.
+- `/biographie` ne crée, ne modifie, ne migre, ne fusionne et ne synchronise aucune donnée du Tome 1. Son affichage n'écrit rien.
+- Aucun `ProjetNarratif` Tome 1 n'est créé pour faire fonctionner cette vue. Aucune double écriture. Aucun transfert automatique `ChapitreTome1` → `ProjetNarratif` ni `ProjetNarratif` → `ChapitreTome1`. Les deux modèles restent distincts.
+- Dans `/biographie`, les actions qui créeraient une représentation parallèle du Tome 1 sont masquées ou refusées. Un tome du `ProjetNarratif` désigne le Tome 1 si son identifiant est `tome-1` ou si son titre commence par « Tome 1 » ou « Tome I ». Pour un tel tome, « Nouveau chapitre » n'est pas proposé, et le tome n'est pas affiché s'il est vide. « Ajouter un tome » reste disponible, mais refuse un titre qui désigne le Tome 1.
+- L'édition du Tome 1 continue par les parcours protégés existants : `/ecrire-maintenant` et `/structure-tome-1` (lien direct `#chapitre-N`). `/biographie` fournit des liens explicites vers ces parcours.
+- LIVRE-P1A-D3 et LIVRE-P1A-D5 restent pleinement applicables.
+**Justification :** Le diagnostic Livre V1 du 2026-10-03, confirmé dans le navigateur de l'autrice, a établi trois faits : `chapitres-tome-1` est présent (30 emplacements) ; `biographie-projet` est absent ; `/biographie` affichait le tome par défaut de `creerProjetVide()` (« Tome 1 — Les origines — 0 chap. »). Ce faux Tome 1 vide invitait à écrire hors du système protégé par LIVRE-P0.1/P0.1B.
+**Impact :** Correction de présentation et de navigation, pas une migration architecturale. Fichiers touchés : `app/biographie/page.tsx` et la logique de consultation `lib/biographie/tome1-vue.ts`. `app/lib/biographie.ts` n'est pas modifié. Les dettes STD-008 (deux systèmes Tome 1, deux modèles `Chapitre`) restent ouvertes.
+
+---
+
 ## Décisions historiques (référence)
 
 - ARCH-001 — *(à réintégrer ici depuis le document 10 existant si applicable)*
