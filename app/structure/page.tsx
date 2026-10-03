@@ -5,14 +5,23 @@ import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
 import { lireTousLesFragments, sauvegarderFragments, type Fragment } from "@/lib/fragments";
 import {
-  CHAPITRES_DEFAUT,
   TOMES_DEFAUT,
-  lireChapitres,
   lireTomes,
-  sauvegarderChapitres as persisterChapitres,
   sauvegarderTomes as persisterTomes,
   type ManuscriptTome,
 } from "@/lib/manuscript-structure";
+import {
+  ajouterChapitreCanonique,
+  estTomeP1A,
+  lireChapitresStructureParTome,
+  renommerChapitreCanonique,
+  retirerTomeLegacyHorsP1A,
+  sauvegarderChapitresLegacyHorsP1A,
+  supprimerChapitreCanonique,
+  titresParTome,
+  type ChapitreStructureLu,
+  type ChapitresStructureParTome,
+} from "@/lib/manuscript-chapters";
 
 const COULEURS_DISPONIBLES = [
   "#8B7355", "#6B7A8B", "#8B6B6B", "#7B8B6B",
@@ -51,14 +60,17 @@ export default function Structure() {
   // fragments soft-deleted, sans jamais les exclure des sauvegardes.
   const fragmentsActifs = fragments.filter((f) => !f.deletedAt);
   const [tomes, setTomes] = useState<Tome[]>(TOMES_DEFAUT);
-  const [chapitresParTome, setChapitresParTome] = useState<Record<number, string[]>>(CHAPITRES_DEFAUT);
+  // LIVRE-P1A — Tomes 2–4 : structure canonique (identifiant stable) ;
+  // Tome 1 et tomes > 4 : structure legacy inchangée.
+  const [structureParTome, setStructureParTome] = useState<ChapitresStructureParTome>({});
+  const chapitresParTome = titresParTome(structureParTome);
   const [nouveauChapitreInput, setNouveauChapitreInput] = useState<{ tomeId: number; nom: string } | null>(null);
   const [tomeOuverts, setTomeOuverts] = useState<number[]>([1, 2, 3, 4]);
   const [chapitreOuverts, setChapitreOuverts] = useState<string[]>([]);
   const [fragmentOuvert, setFragmentOuvert] = useState<Fragment["id"] | null>(null);
   const [deplacerOuvert, setDeplacerOuvert] = useState<Fragment["id"] | null>(null);
-  const [renommerInput, setRenommerInput] = useState<{ tomeId: number; ancienNom: string; nouveauNom: string } | null>(null);
-  const [supprimerConfirm, setSupprimerConfirm] = useState<{ tomeId: number; chapitre: string } | null>(null);
+  const [renommerInput, setRenommerInput] = useState<{ tomeId: number; index: number; ancienNom: string; nouveauNom: string } | null>(null);
+  const [supprimerConfirm, setSupprimerConfirm] = useState<{ tomeId: number; index: number; chapitre: string } | null>(null);
   const [draggingId, setDraggingId] = useState<Fragment["id"] | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [renommerTomeInput, setRenommerTomeInput] = useState<{ id: number; titre: string } | null>(null);
@@ -74,10 +86,9 @@ export default function Structure() {
     // sinon chaque déplacement/renommage effacerait silencieusement les
     // fragments soft-deleted qu'il ne touche pas.
     setFragments(lireTousLesFragments());
-    const chapitres = lireChapitres();
     const tomesLus = lireTomes() as Tome[];
 
-    setChapitresParTome(chapitres);
+    setStructureParTome(lireChapitresStructureParTome());
     setTomes(tomesLus);
     setTomeOuverts(tomesLus.map((tome) => tome.id));
   }, []);
@@ -86,8 +97,18 @@ export default function Structure() {
     setTomes(persisterTomes(updated) as Tome[]);
   }
 
-  function sauvegarderChapitres(updated: Record<number, string[]>) {
-    setChapitresParTome(persisterChapitres(updated));
+  // Chaque action passe par les primitives centrales puis relit la structure.
+  function appliquerChapitres(action: () => void) {
+    try {
+      action();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+    setStructureParTome(lireChapitresStructureParTome());
+  }
+
+  function chapitreLu(tomeId: number, index: number): ChapitreStructureLu | undefined {
+    return structureParTome[tomeId]?.[index];
   }
 
   function toggleTome(id: number) {
@@ -109,28 +130,42 @@ export default function Structure() {
   function ajouterChapitre(tomeId: number, nom: string) {
     const trimmed = nom.trim();
     if (!trimmed) return;
-    sauvegarderChapitres({ ...chapitresParTome, [tomeId]: [...(chapitresParTome[tomeId] || []), trimmed] });
+    appliquerChapitres(() => {
+      if (estTomeP1A(tomeId)) ajouterChapitreCanonique(tomeId, trimmed);
+      else sauvegarderChapitresLegacyHorsP1A(tomeId, [...(chapitresParTome[tomeId] || []), trimmed]);
+    });
     setNouveauChapitreInput(null);
   }
 
-  function renommerChapitre(tomeId: number, ancienNom: string, nouveauNom: string) {
+  function renommerChapitre(tomeId: number, index: number, ancienNom: string, nouveauNom: string) {
     const trimmed = nouveauNom.trim();
     if (!trimmed || trimmed === ancienNom) { setRenommerInput(null); return; }
-    sauvegarderChapitres({
-      ...chapitresParTome,
-      [tomeId]: chapitresParTome[tomeId].map((c) => (c === ancienNom ? trimmed : c)),
+    const chapitre = chapitreLu(tomeId, index);
+    if (!chapitre) { setRenommerInput(null); return; }
+    let renomme = false;
+    appliquerChapitres(() => {
+      if (chapitre.id) renommerChapitreCanonique(chapitre.id, trimmed);
+      else sauvegarderChapitresLegacyHorsP1A(tomeId, (chapitresParTome[tomeId] || []).map((c) => (c === ancienNom ? trimmed : c)));
+      renomme = true;
     });
-    const updatedFragments = fragments.map((f) =>
-      f.tomeId === tomeId && f.chapitre === ancienNom ? { ...f, chapitre: trimmed } : f
-    );
-    setFragments(sauvegarderFragments(updatedFragments));
+    // fragment.chapitre reste une référence par titre (STD-008) : si l'ancien
+    // titre est porté par plusieurs chapitres du tome, les fragments ne sont
+    // pas réattribués (identité indéterminable, LIVRE-P1A-D2).
+    const ancienTitreUnique = (chapitresParTome[tomeId] || []).filter((c) => c === ancienNom).length === 1;
+    if (renomme && ancienTitreUnique) {
+      const updatedFragments = fragments.map((f) =>
+        f.tomeId === tomeId && f.chapitre === ancienNom ? { ...f, chapitre: trimmed } : f
+      );
+      setFragments(sauvegarderFragments(updatedFragments));
+    }
     setRenommerInput(null);
   }
 
-  function supprimerChapitre(tomeId: number, nom: string) {
-    sauvegarderChapitres({
-      ...chapitresParTome,
-      [tomeId]: chapitresParTome[tomeId].filter((c) => c !== nom),
+  function supprimerChapitre(tomeId: number, index: number, nom: string) {
+    const chapitre = chapitreLu(tomeId, index);
+    appliquerChapitres(() => {
+      if (chapitre?.id) supprimerChapitreCanonique(chapitre.id);
+      else sauvegarderChapitresLegacyHorsP1A(tomeId, (chapitresParTome[tomeId] || []).filter((c) => c !== nom));
     });
     setSupprimerConfirm(null);
   }
@@ -155,7 +190,7 @@ export default function Structure() {
     const newId = Math.max(0, ...tomes.map((t) => t.id)) + 1;
     const newTome: Tome = { id: newId, titre: trimmed, color: nouveauTomeInput.color };
     sauvegarderTomes([...tomes, newTome]);
-    sauvegarderChapitres({ ...chapitresParTome, [newId]: [] });
+    if (!estTomeP1A(newId)) appliquerChapitres(() => sauvegarderChapitresLegacyHorsP1A(newId, []));
     setTomeOuverts((prev) => [...prev, newId]);
     setNouveauTomeInput(null);
   }
@@ -202,10 +237,9 @@ export default function Structure() {
   function supprimerTome(id: number) {
     const updated = tomes.filter((t) => t.id !== id);
     sauvegarderTomes(updated);
-    const updatedChapitres = Object.fromEntries(
-      Object.entries(chapitresParTome).filter(([k]) => Number(k) !== id)
-    ) as Record<number, string[]>;
-    sauvegarderChapitres(updatedChapitres);
+    // LIVRE-P1A : les chapitres canoniques d'un tome 2–4 retiré ne sont pas
+    // supprimés (non destructif) ; seul le legacy hors P1A est réécrit.
+    if (!estTomeP1A(id)) appliquerChapitres(() => retirerTomeLegacyHorsP1A(id));
     setSupprimerTomeConfirm(null);
     setTomeOuverts((prev) => prev.filter((t) => t !== id));
   }
@@ -332,8 +366,9 @@ export default function Structure() {
 
             {ouvert && (
               <div style={{ paddingLeft: 12 }}>
-                {chapitresDuTome.map((chapitre) => {
+                {chapitresDuTome.map((chapitre, chapitreIndex) => {
                   const key = `${tome.id}-${chapitre}`;
+                  const reactKey = structureParTome[tome.id]?.[chapitreIndex]?.id ?? `${key}-${chapitreIndex}`;
                   const fragsduChapitre = fragsduTome.filter((f) => f.chapitre === chapitre);
                   const vide = fragsduChapitre.length === 0;
                   const chapOuvert = chapitreOuverts.includes(key);
@@ -341,7 +376,7 @@ export default function Structure() {
 
                   return (
                     <div
-                      key={key}
+                      key={reactKey}
                       style={{
                         marginBottom: 2,
                         borderLeft: isDragOver ? `3px solid ${tome.color}` : "3px solid transparent",
@@ -357,20 +392,20 @@ export default function Structure() {
                       }}
                     >
                       {/* En-tête du chapitre */}
-                      {renommerInput?.tomeId === tome.id && renommerInput.ancienNom === chapitre ? (
+                      {renommerInput?.tomeId === tome.id && renommerInput.index === chapitreIndex ? (
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <input
                             autoFocus
                             value={renommerInput.nouveauNom}
                             onChange={(e) => setRenommerInput({ ...renommerInput, nouveauNom: e.target.value })}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") renommerChapitre(tome.id, chapitre, renommerInput.nouveauNom);
+                              if (e.key === "Enter") renommerChapitre(tome.id, chapitreIndex, chapitre, renommerInput.nouveauNom);
                               if (e.key === "Escape") setRenommerInput(null);
                             }}
                             style={{ flex: 1, padding: "6px 10px", fontSize: 13, fontFamily: "Georgia, serif", border: `1px solid ${tome.color}88`, borderRadius: 6, outline: "none" }}
                           />
                           <button
-                            onClick={() => renommerChapitre(tome.id, chapitre, renommerInput.nouveauNom)}
+                            onClick={() => renommerChapitre(tome.id, chapitreIndex, chapitre, renommerInput.nouveauNom)}
                             style={{ padding: "6px 14px", background: tome.color, color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontFamily: "Georgia, serif" }}
                           >
                             Enregistrer
@@ -404,11 +439,11 @@ export default function Structure() {
                             </span>
                           </button>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            {supprimerConfirm?.tomeId === tome.id && supprimerConfirm.chapitre === chapitre ? (
+                            {supprimerConfirm?.tomeId === tome.id && supprimerConfirm.index === chapitreIndex ? (
                               <>
                                 <span style={{ fontSize: 11, color: "#c0392b" }}>Supprimer ce chapitre ?</span>
                                 <button
-                                  onClick={() => supprimerChapitre(tome.id, chapitre)}
+                                  onClick={() => supprimerChapitre(tome.id, chapitreIndex, chapitre)}
                                   style={{ fontSize: 11, padding: "2px 10px", background: "#c0392b", color: "white", border: "none", borderRadius: 4, cursor: "pointer" }}
                                 >
                                   Confirmer
@@ -424,7 +459,7 @@ export default function Structure() {
                             ) : (
                               <>
                                 <button
-                                  onClick={() => setRenommerInput({ tomeId: tome.id, ancienNom: chapitre, nouveauNom: chapitre })}
+                                  onClick={() => setRenommerInput({ tomeId: tome.id, index: chapitreIndex, ancienNom: chapitre, nouveauNom: chapitre })}
                                   className="soft-button"
                                   style={{ fontSize: 11, color: "rgba(80, 65, 50, 0.7)" }}
                                 >
@@ -432,7 +467,7 @@ export default function Structure() {
                                 </button>
                                 {vide && (
                                   <button
-                                    onClick={() => setSupprimerConfirm({ tomeId: tome.id, chapitre })}
+                                    onClick={() => setSupprimerConfirm({ tomeId: tome.id, index: chapitreIndex, chapitre })}
                                     style={{ fontSize: 11, color: "#c0392b", background: "none", border: "none", cursor: "pointer", fontFamily: "Georgia, serif" }}
                                   >
                                     Supprimer

@@ -16,6 +16,11 @@ import {
   normaliserChapitres,
   normaliserTomes,
 } from "@/lib/manuscript-structure";
+import {
+  CHAPITRES_MANUSCRIT_STORAGE_KEY,
+  composerChapitresParTome,
+  lireEtatStructureCanonique,
+} from "@/lib/manuscript-chapters";
 import { SCENES_STORAGE_KEY } from "@/lib/narrative-relations";
 import type { Scene } from "@/lib/scenes";
 
@@ -242,10 +247,14 @@ function buildSnapshot(): DashboardSnapshot {
   const scenesRead = readJson<unknown>(SCENES_STORAGE_KEY);
 
   const tomes = tomesRead.exists && !tomesRead.invalid ? normaliserTomes(tomesRead.value) : [];
-  const structureChapters =
+  // LIVRE-P1A — Tomes 2–4 : structure canonique.
+  const canonique = lireEtatStructureCanonique();
+  const structureChapters = composerChapitresParTome(
     structureChaptersRead.exists && !structureChaptersRead.invalid
       ? normaliserChapitres(structureChaptersRead.value)
-      : {};
+      : {},
+    canonique.chapitres,
+  );
   const structureChapterCount = Object.values(structureChapters).reduce(
     (total, chapters) => total + chapters.length,
     0,
@@ -269,6 +278,7 @@ function buildSnapshot(): DashboardSnapshot {
   const invalidKeys = [
     tomesRead.invalid ? STRUCTURE_TOMES_STORAGE_KEY : "",
     structureChaptersRead.invalid ? STRUCTURE_CHAPITRES_STORAGE_KEY : "",
+    canonique.invalide ? CHAPITRES_MANUSCRIT_STORAGE_KEY : "",
     tome1Read.invalid ? CHAPITRES_TOME_1_STORAGE_KEY : "",
     fragmentsRead.invalid ? FRAGMENTS_STORAGE_KEY : "",
     scenesRead.invalid ? SCENES_STORAGE_KEY : "",

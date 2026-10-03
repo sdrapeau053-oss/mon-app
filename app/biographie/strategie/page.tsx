@@ -9,7 +9,14 @@ import {
 } from "@/lib/biographie/migration-audit";
 import { lireFragments } from "@/lib/fragments";
 import { lireMemoiresNarratives } from "@/lib/memoire-narrative";
-import { lireChapitres, lireTomes } from "@/lib/manuscript-structure";
+import { lireTomes } from "@/lib/manuscript-structure";
+import {
+  CHAPITRES_MANUSCRIT_STORAGE_KEY,
+  CONTENU_CHAPITRE_PREFIX,
+  lireChapitresCanoniques,
+  lireChapitresStructureParTome,
+  lireContenuChapitre,
+} from "@/lib/manuscript-chapters";
 import { TITRE_TOME_1, compterMotsChapitreTome1, lireChapitresTome1DepuisStorage } from "@/lib/tome1-chapters";
 
 type Confidence = "ÉLEVÉ" | "MOYEN" | "FAIBLE";
@@ -130,7 +137,10 @@ function buildStrategyReport(): StrategyReport {
   const fragments = lireFragments();
   const memoires = lireMemoiresNarratives();
   const structureTomes = lireTomes();
-  const structureChapitres = lireChapitres();
+  // LIVRE-P1A — lecture du manuscrit via les primitives Manuscrit (Tomes 2–4 canoniques).
+  const structureChapitres = lireChapitresStructureParTome();
+  const chapitresCanoniques = lireChapitresCanoniques();
+  const canoniqueWordCount = chapitresCanoniques.reduce((sum, chapter) => sum + countWords(lireContenuChapitre(chapter.id)), 0);
   const legacyEntries = readLegacyEntries();
 
   const persistedPhaseKeys = keys.filter((key) => key.startsWith("biographie-") && key !== "biographie-projet");
@@ -139,7 +149,7 @@ function buildStrategyReport(): StrategyReport {
     ? `Des résultats intermédiaires persistés ont été détectés : ${persistedPhaseKeys.join(", ")}.`
     : "Les résultats des phases 1A à 1D ne sont pas persistés : ils sont recalculés à la volée depuis les sources brutes et les pages diagnostic.";
 
-  const structuredChapterCount = Object.values(structureChapitres).reduce((sum, titles) => sum + titles.length, 0);
+  const structuredChapterCount = Object.values(structureChapitres).reduce((sum, chapters) => sum + chapters.length, 0);
   const tome1WordCount = tome1.reduce((sum, chapter) => sum + compterMotsChapitreTome1(chapter), 0);
   const fragmentsWordCount = fragments.reduce((sum, fragment) => sum + countWords(fragment.texte || ""), 0);
   const memoiresWordCount = memoires.reduce((sum, memoire) => sum + countWords(memoire.texte || ""), 0);
@@ -216,6 +226,16 @@ function buildStrategyReport(): StrategyReport {
       justification: legacyWordCount > 0
         ? "Des textes existent encore hors du canon structuré et doivent être relus avant consolidation."
         : "Aucun texte libre legacy détecté.",
+    },
+    {
+      name: `${CHAPITRES_MANUSCRIT_STORAGE_KEY} + ${CONTENU_CHAPITRE_PREFIX}*`,
+      type: "localStorage",
+      provenance: "/structure, /vue-double, lib/manuscript-chapters.ts (LIVRE-P1A)",
+      itemCount: chapitresCanoniques.length,
+      wordCount: canoniqueWordCount,
+      confidence: confidenceFromFlags(true, true, true),
+      recommendedStatus: "CANONIQUE",
+      justification: "Structure et textes des Tomes 2–4 à identité stable (LIVRE-P1A) ; les clés ecriture_* d'origine sont conservées sans être modifiées.",
     },
     {
       name: "structure-tomes + structure-chapitres",

@@ -21,6 +21,13 @@ import {
   normaliserTomes,
   type ManuscriptTome,
 } from "@/lib/manuscript-structure";
+import {
+  CHAPITRES_MANUSCRIT_STORAGE_KEY,
+  composerChapitresParTome,
+  lireEtatStructureCanonique,
+  lireTexteChapitre,
+  type ChapitresStructureParTome,
+} from "@/lib/manuscript-chapters";
 
 type JsonReadResult<T> = {
   exists: boolean;
@@ -263,10 +270,6 @@ function splitSentences(text: string) {
     .filter(Boolean);
 }
 
-function ecritureKey(tomeId: number, chapterTitle: string) {
-  return `ecriture_${tomeId}_${encodeURIComponent(chapterTitle)}`;
-}
-
 function formatDateTime(value: string | null) {
   if (!value) return "non disponible";
   const date = new Date(value);
@@ -302,7 +305,7 @@ function getBackupStatus(lastExportAt: string | null): Pick<ControlSnapshot, "ba
 
 function buildChapterSources(
   tomes: ManuscriptTome[],
-  chaptersByTome: Record<number, string[]>,
+  chaptersByTome: ChapitresStructureParTome,
   tome1Chapters: ChapitreTome1[],
   hasTome1Storage: boolean,
 ) {
@@ -325,14 +328,14 @@ function buildChapterSources(
   tomes
     .filter((tome) => tome.id !== 1 || !hasTome1Storage)
     .forEach((tome) => {
-      (chaptersByTome[tome.id] || []).forEach((chapterTitle, index) => {
+      (chaptersByTome[tome.id] || []).forEach((chapter, index) => {
         sources.push({
           id: `tome-${tome.id}-chapitre-${index + 1}`,
           index: index + 1,
-          title: chapterTitle,
+          title: chapter.titre,
           tomeId: tome.id,
           tomeTitle: tome.titre,
-          text: localStorage.getItem(ecritureKey(tome.id, chapterTitle)) || "",
+          text: lireTexteChapitre(chapter),
         });
       });
     });
@@ -473,8 +476,12 @@ function buildSnapshot(): ControlSnapshot {
   const chaptersRead = readJson<unknown>(STRUCTURE_CHAPITRES_STORAGE_KEY);
   const tome1Read = readJson<unknown>(CHAPITRES_TOME_1_STORAGE_KEY);
   const tomes = tomesRead.exists && !tomesRead.invalid ? normaliserTomes(tomesRead.value) : TOMES_DEFAUT;
-  const chaptersByTome =
-    chaptersRead.exists && !chaptersRead.invalid ? normaliserChapitres(chaptersRead.value) : CHAPITRES_DEFAUT;
+  // LIVRE-P1A — Tomes 2–4 : structure et contenu canoniques.
+  const canonique = lireEtatStructureCanonique();
+  const chaptersByTome = composerChapitresParTome(
+    chaptersRead.exists && !chaptersRead.invalid ? normaliserChapitres(chaptersRead.value) : CHAPITRES_DEFAUT,
+    canonique.chapitres,
+  );
   const tome1Chapters =
     tome1Read.exists && !tome1Read.invalid ? normaliserChapitresTome1(tome1Read.value) : [];
   const totalChapters = Object.values(chaptersByTome).reduce((sum, chapters) => sum + chapters.length, 0) || tome1Chapters.length;
@@ -493,6 +500,7 @@ function buildSnapshot(): ControlSnapshot {
   const invalidKeys = [
     tomesRead.invalid ? STRUCTURE_TOMES_STORAGE_KEY : "",
     chaptersRead.invalid ? STRUCTURE_CHAPITRES_STORAGE_KEY : "",
+    canonique.invalide ? CHAPITRES_MANUSCRIT_STORAGE_KEY : "",
     tome1Read.invalid ? CHAPITRES_TOME_1_STORAGE_KEY : "",
   ].filter(Boolean);
   const priorities = buildPriorities({

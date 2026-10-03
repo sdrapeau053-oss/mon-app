@@ -80,6 +80,9 @@ export function sauvegarderTomes(tomes: ManuscriptTome[]) {
   return normalized;
 }
 
+// LIVRE-P1A — lecture/écriture LEGACY de `structure-chapitres`. Pour les
+// Tomes 2–4, la source de vérité est lib/manuscript-chapters.ts (STD-005
+// LIVRE-P1A-D4) : ne pas utiliser ces fonctions pour ces tomes.
 export function lireChapitres(): ManuscriptChapitres {
   if (typeof window === "undefined") return CHAPITRES_DEFAUT;
 

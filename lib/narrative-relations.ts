@@ -2,11 +2,14 @@ import type { Fragment } from "@/lib/fragments";
 import { lireFragments } from "@/lib/fragments";
 import { lireMemoiresNarratives, type MemoireNarrative } from "@/lib/memoire-narrative";
 import {
-  CHAPITRES_DEFAUT,
-  lireChapitres,
   lireTomes,
   type ManuscriptTome,
 } from "@/lib/manuscript-structure";
+import {
+  lireChapitresStructureParTome,
+  lireTexteChapitre,
+  type ChapitreStructureLu,
+} from "@/lib/manuscript-chapters";
 import type { Scene } from "@/lib/scenes";
 import {
   getNumeroChapitreTome1,
@@ -431,10 +434,6 @@ export function supprimerNarrativeRelation(id: string) {
   return sauvegarderRelationsNarratives(lireRelationsNarratives().filter((relation) => relation.id !== id));
 }
 
-function ecritureKey(tomeId: number, chapterTitle: string) {
-  return `ecriture_${tomeId}_${encodeURIComponent(chapterTitle)}`;
-}
-
 function chapterEntityFromTome1(chapter: ChapitreTome1): NarrativeEntity {
   const chapterIndex = getNumeroChapitreTome1(chapter.id);
   const text = [chapter.titre, chapter.description, chapter.contenu, chapter.imageCentrale, chapter.fonctionNarrative]
@@ -455,8 +454,11 @@ function chapterEntityFromTome1(chapter: ChapitreTome1): NarrativeEntity {
   };
 }
 
-function chapterEntityFromStructure(tome: ManuscriptTome, chapterTitle: string, index: number): NarrativeEntity {
-  const text = typeof window === "undefined" ? "" : localStorage.getItem(ecritureKey(tome.id, chapterTitle)) || "";
+// LIVRE-P1A — texte lu via les primitives centrales (par identifiant stable
+// pour les Tomes 2–4). L'identifiant d'entité reste positionnel (inchangé).
+function chapterEntityFromStructure(tome: ManuscriptTome, chapter: ChapitreStructureLu, index: number): NarrativeEntity {
+  const chapterTitle = chapter.titre;
+  const text = lireTexteChapitre(chapter);
   const combinedText = [chapterTitle, text].join("\n");
 
   return {
@@ -556,10 +558,10 @@ export function collectNarrativeEntities(): NarrativeEntity[] {
     .filter((chapter) => chapter.contenu.trim() || chapter.titre.trim())
     .map(chapterEntityFromTome1);
   const tomes = lireTomes();
-  const chaptersByTome = lireChapitres();
+  const chaptersByTome = lireChapitresStructureParTome();
   const structureChapters = tomes.flatMap((tome) =>
-    (chaptersByTome[tome.id] || CHAPITRES_DEFAUT[tome.id] || [])
-      .map((chapterTitle, index) => chapterEntityFromStructure(tome, chapterTitle, index))
+    (chaptersByTome[tome.id] || [])
+      .map((chapter, index) => chapterEntityFromStructure(tome, chapter, index))
       .filter((chapter) => chapter.text.trim() && !tome1Chapters.some((item) => item.id === chapter.id)),
   );
 

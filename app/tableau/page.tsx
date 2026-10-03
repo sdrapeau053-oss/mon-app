@@ -15,6 +15,7 @@ import {
 } from "@/components/system-ui";
 import { BackLink } from "@/components/ui/back-link";
 import { lireFragments, type Fragment } from "@/lib/fragments";
+import { composerChapitresParTome, titresParTome } from "@/lib/manuscript-chapters";
 
 const TOMES_DEFAUT = [
   { id: 1, titre: "Tome 1 — Enfance", color: "#8B7355" },
@@ -115,8 +116,11 @@ export default function Tableau() {
     setFragments(lireFragments());
     const savedTomes = localStorage.getItem("structure-tomes");
     if (savedTomes) setTomes(JSON.parse(savedTomes));
+    // LIVRE-P1A — Tomes 2–4 depuis la structure canonique ; Tome 1 et tomes
+    // hors P1A : lecture legacy inchangée.
     const savedChapitres = localStorage.getItem("structure-chapitres");
-    if (savedChapitres) setChapitresParTome(JSON.parse(savedChapitres));
+    const chapitresLegacy: Record<number, string[]> = savedChapitres ? JSON.parse(savedChapitres) : CHAPITRES_DEFAUT;
+    setChapitresParTome(titresParTome(composerChapitresParTome(chapitresLegacy)));
   }, []);
 
   // Stats globales

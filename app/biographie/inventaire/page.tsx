@@ -10,7 +10,15 @@ import {
 } from "@/lib/biographie/migration-audit";
 import { type Fragment, lireFragments } from "@/lib/fragments";
 import { lireMemoiresNarratives } from "@/lib/memoire-narrative";
-import { type ManuscriptChapitres, lireChapitres, lireTomes } from "@/lib/manuscript-structure";
+import { lireTomes } from "@/lib/manuscript-structure";
+import {
+  STATUT_LEGACY_IMPORTE,
+  estTomeP1A,
+  lireChapitresStructureParTome,
+  lireContenuChapitre,
+  lireEtatStructureCanonique,
+  lireTexteChapitre,
+} from "@/lib/manuscript-chapters";
 import { createChapitreId, lireNarrativeRelationsAvecAutomatiques } from "@/lib/narrative-relations";
 import { TITRE_TOME_1, compterMotsChapitreTome1, lireChapitresTome1DepuisStorage } from "@/lib/tome1-chapters";
 import { getCompleteChapters } from "@/lib/manuscript-source";
@@ -121,7 +129,10 @@ function buildInventory(): InventoryView {
   const fragments = lireFragments();
   const memoires = lireMemoiresNarratives();
   const structureTomes = lireTomes();
-  const structureChapters = lireChapitres();
+  // LIVRE-P1A — lecture du manuscrit via les primitives Manuscrit (Tomes 2–4
+  // canoniques) ; le modèle Biographie n'est pas concerné.
+  const structureChapters = lireChapitresStructureParTome();
+  const structureCanonique = lireEtatStructureCanonique();
   const relations = lireNarrativeRelationsAvecAutomatiques();
   const tome1Chapters = lireChapitresTome1DepuisStorage();
   const completeTome1 = getCompleteChapters({ chapters: tome1Chapters, fragments, relations, tomeId: 1 });
@@ -131,7 +142,6 @@ function buildInventory(): InventoryView {
   const legacyWritingEntries = readLegacyWritingEntries();
 
   const tomeTitles = new Map<number, string>(structureTomes.map((tome) => [tome.id, tome.id === 1 ? TITRE_TOME_1 : tome.titre]));
-  const legacyByKey = new Map(legacyWritingEntries.map((entry) => [entry.key, entry]));
 
   const chapterRows: ChapterRow[] = completeTome1.map((chapter) => ({
     id: chapter.id,
@@ -145,14 +155,14 @@ function buildInventory(): InventoryView {
   structureTomes
     .filter((tome) => tome.id !== 1)
     .forEach((tome) => {
-      const titles = structureChapters[tome.id] || [];
-      titles.forEach((title, index) => {
+      const chapters = structureChapters[tome.id] || [];
+      chapters.forEach((chapter, index) => {
+        const title = chapter.titre;
         const fragmentsLies = fragments.filter((fragment) => fragmentMatchesStructuredChapter(fragment, tome.id, title, index + 1));
         const memoiresLiees = memoires.filter(
           (memoire) => memoire.tomeProbable === tome.id && memoire.chapitreProbable === index + 1,
         );
-        const legacyKey = `ecriture_${tome.id}_${encodeURIComponent(title)}`;
-        const legacyText = legacyByKey.get(legacyKey)?.text || "";
+        const legacyText = lireTexteChapitre(chapter).trim();
         const relatedText = [
           legacyText,
           ...fragmentsLies.map((fragment) => fragment.texte || ""),
@@ -195,7 +205,8 @@ function buildInventory(): InventoryView {
 
   const sources: SourceRow[] = [
     { name: "Tome 1 canonique", contentType: "chapitres rédigés", itemCount: tome1Chapters.length, wordCount: tome1Chapters.reduce((sum, chapter) => sum + compterMotsChapitreTome1(chapter), 0), status: "CANONIQUE" },
-    { name: "Structure", contentType: "architecture des tomes et chapitres", itemCount: Object.values(structureChapters).reduce((sum, titles) => sum + titles.length, 0), wordCount: 0, status: "SECONDAIRE" },
+    { name: "Structure", contentType: "architecture des tomes et chapitres", itemCount: Object.values(structureChapters).reduce((sum, chapters) => sum + chapters.length, 0), wordCount: 0, status: "SECONDAIRE" },
+    { name: "Chapitres Tomes 2–4 (canonique)", contentType: "textes des chapitres par identifiant stable", itemCount: structureCanonique.chapitres.filter((chapter) => countWords(lireContenuChapitre(chapter.id)) > 0).length, wordCount: structureCanonique.chapitres.reduce((sum, chapter) => sum + countWords(lireContenuChapitre(chapter.id)), 0), status: "CANONIQUE" },
     { name: "Écriture legacy", contentType: "textes libres liés à la structure", itemCount: legacyWritingEntries.filter((entry) => entry.wordCount > 0).length, wordCount: legacyWritingEntries.reduce((sum, entry) => sum + entry.wordCount, 0), status: "INCONNU" },
     { name: "Coffre / Fragments", contentType: "fragments narratifs", itemCount: fragments.length, wordCount: fragments.reduce((sum, fragment) => sum + countWords(fragment.texte || ""), 0), status: "SECONDAIRE" },
     { name: "Mémoires narratives", contentType: "souvenirs structurés", itemCount: memoires.length, wordCount: memoires.reduce((sum, memoire) => sum + countWords(memoire.texte || ""), 0), status: "SECONDAIRE" },
@@ -213,8 +224,14 @@ function buildInventory(): InventoryView {
   const orphanHistoricalChapters = biographieInventory.chapitres.filter((chapter) =>
     migrationAudit.comparison.orphanHistoricalChapterIds.includes(chapter.chapitreId),
   );
+  // Tomes 2–4 : seul le constat de migration LIVRE-P1A fait foi (une clé
+  // legacy importée reste présente mais est rattachée) ; autres tomes : inchangé.
+  const legacyImportes = new Set(
+    structureCanonique.importsLegacy.filter((entry) => entry.statut === STATUT_LEGACY_IMPORTE).map((entry) => entry.cleLegacy),
+  );
   const unmatchedLegacyWriting = legacyWritingEntries.filter((entry) => {
-    const knownTitles = ((structureChapters as ManuscriptChapitres)[entry.tomeId] || []).map((title) => normalizeLabel(title));
+    if (estTomeP1A(entry.tomeId)) return !legacyImportes.has(entry.key);
+    const knownTitles = (structureChapters[entry.tomeId] || []).map((chapter) => normalizeLabel(chapter.titre));
     return !knownTitles.includes(normalizeLabel(entry.chapterTitle));
   });
 

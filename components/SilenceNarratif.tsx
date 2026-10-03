@@ -24,6 +24,12 @@ import {
   normaliserTomes,
   type ManuscriptTome,
 } from "@/lib/manuscript-structure";
+import {
+  CHAPITRES_MANUSCRIT_STORAGE_KEY,
+  composerChapitresParTome,
+  lireEtatStructureCanonique,
+  lireTexteChapitre,
+} from "@/lib/manuscript-chapters";
 
 type JsonReadResult<T> = {
   exists: boolean;
@@ -198,21 +204,22 @@ function splitParagraphs(text: string) {
     .filter(Boolean);
 }
 
-function ecritureKey(tomeId: number, chapterTitle: string) {
-  return `ecriture_${tomeId}_${encodeURIComponent(chapterTitle)}`;
-}
-
 function buildChapterSources(): { chapters: ChapterSource[]; invalidKeys: string[] } {
   const tomesRead = readJson<unknown>(STRUCTURE_TOMES_STORAGE_KEY);
   const chaptersRead = readJson<unknown>(STRUCTURE_CHAPITRES_STORAGE_KEY);
   const tome1Read = readJson<unknown>(CHAPITRES_TOME_1_STORAGE_KEY);
   const tomes = tomesRead.exists && !tomesRead.invalid ? normaliserTomes(tomesRead.value) : TOMES_DEFAUT;
-  const chaptersByTome =
-    chaptersRead.exists && !chaptersRead.invalid ? normaliserChapitres(chaptersRead.value) : CHAPITRES_DEFAUT;
+  // LIVRE-P1A — Tomes 2–4 : structure et contenu canoniques.
+  const canonique = lireEtatStructureCanonique();
+  const chaptersByTome = composerChapitresParTome(
+    chaptersRead.exists && !chaptersRead.invalid ? normaliserChapitres(chaptersRead.value) : CHAPITRES_DEFAUT,
+    canonique.chapitres,
+  );
   const tomeById = new Map<number, ManuscriptTome>(tomes.map((tome) => [tome.id, tome]));
   const invalidKeys = [
     tomesRead.invalid ? STRUCTURE_TOMES_STORAGE_KEY : "",
     chaptersRead.invalid ? STRUCTURE_CHAPITRES_STORAGE_KEY : "",
+    canonique.invalide ? CHAPITRES_MANUSCRIT_STORAGE_KEY : "",
     tome1Read.invalid ? CHAPITRES_TOME_1_STORAGE_KEY : "",
   ].filter(Boolean);
   const sources: ChapterSource[] = [];
@@ -233,14 +240,14 @@ function buildChapterSources(): { chapters: ChapterSource[]; invalidKeys: string
   tomes
     .filter((tome) => tome.id !== 1 || !tome1Read.exists || tome1Read.invalid)
     .forEach((tome) => {
-      (chaptersByTome[tome.id] || []).forEach((chapterTitle, index) => {
+      (chaptersByTome[tome.id] || []).forEach((chapter, index) => {
         sources.push({
           id: `tome-${tome.id}-chapitre-${index + 1}`,
           index: index + 1,
-          title: chapterTitle,
+          title: chapter.titre,
           tomeId: tome.id,
           tomeTitle: tome.titre,
-          text: localStorage.getItem(ecritureKey(tome.id, chapterTitle)) || "",
+          text: lireTexteChapitre(chapter),
         });
       });
     });

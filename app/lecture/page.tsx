@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { SystemPageShell, SystemPanel } from "@/components/system-ui";
 import { lireFragments, type Fragment } from "@/lib/fragments";
+import { composerChapitresParTome, titresParTome } from "@/lib/manuscript-chapters";
 
 const TOMES_DEFAUT = [
   { id: 1, titre: "Tome 1 — Enfance" },
@@ -90,8 +91,11 @@ export default function Lecture() {
     const savedTomes = localStorage.getItem("structure-tomes");
     if (savedTomes) setTomes(JSON.parse(savedTomes));
 
+    // LIVRE-P1A — Tomes 2–4 depuis la structure canonique ; Tome 1 et tomes
+    // hors P1A : lecture legacy inchangée.
     const savedChapitres = localStorage.getItem("structure-chapitres");
-    if (savedChapitres) setChapitresParTome(JSON.parse(savedChapitres));
+    const chapitresLegacy: Record<number, string[]> = savedChapitres ? JSON.parse(savedChapitres) : CHAPITRES_DEFAUT;
+    setChapitresParTome(titresParTome(composerChapitresParTome(chapitresLegacy)));
   }, []);
 
   const totalMots = fragments.reduce((acc, f) => {

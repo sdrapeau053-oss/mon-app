@@ -17,6 +17,10 @@ import {
   lireScenesRelationnelles,
 } from "@/lib/narrative-relations";
 import type { Scene } from "@/lib/scenes";
+import {
+  assurerChapitrePourFragment,
+  synchroniserChapitresDepuisFragments,
+} from "@/lib/manuscript-chapters";
 
 const TOMES = [
   { id: 1, titre: "Tome 1 — Enfance", chapitres: ["La maison", "Les adultes", "L'école", "La nature", "Les silences", "Les punitions", "Les jeux"] },
@@ -117,35 +121,13 @@ export default function Fragments() {
       });
       if (fragmentsChanges) sauvegarderFragments(migres);
 
-      // Passe 2 — créer les chapitres manquants uniquement pour les fragments dans le manuscrit
-      const defaultChapitres = Object.fromEntries(TOMES.map((t) => [t.id, [...t.chapitres]]));
-      const chapitres: Record<number, string[]> = JSON.parse(
-        localStorage.getItem("structure-chapitres") || JSON.stringify(defaultChapitres)
-      );
-      let structureChangee = false;
-      migres.forEach((f) => {
-        if (!f.manuscrit || !f.tomeId || !f.chapitre) return;
-        if (!(chapitres[f.tomeId] || []).includes(f.chapitre)) {
-          chapitres[f.tomeId] = [...(chapitres[f.tomeId] || []), f.chapitre];
-          structureChangee = true;
-        }
-      });
-      if (structureChangee) localStorage.setItem("structure-chapitres", JSON.stringify(chapitres));
-
-      // Passe 3 — nettoyer les chapitres IA sans fragment manuscrit
-      const chapitresApresNettoyage: Record<number, string[]> = {};
-      let nettoyageEffectue = false;
-      TOMES.forEach((t) => {
-        const defaut = t.chapitres;
-        const actuels = chapitres[t.id] || [];
-        const filtres = actuels.filter((c) => {
-          if (defaut.includes(c)) return true;
-          return migres.some((f) => f.manuscrit && f.tomeId === t.id && f.chapitre === c);
-        });
-        chapitresApresNettoyage[t.id] = filtres;
-        if (filtres.length !== actuels.length) nettoyageEffectue = true;
-      });
-      if (nettoyageEffectue) localStorage.setItem("structure-chapitres", JSON.stringify(chapitresApresNettoyage));
+      // Passe 2 — créer les chapitres manquants uniquement pour les fragments dans le manuscrit.
+      // LIVRE-P1A-D2 : via les primitives centrales (Tomes 2–4 canoniques, un
+      // chapitre existant garde son identifiant, homonymes → aucun choix).
+      // LIVRE-P1A-D1 : l'ancienne passe 3 (retrait automatique des chapitres
+      // sans fragment manuscrit) est supprimée — ouvrir cette page ne retire
+      // jamais un chapitre de la structure.
+      synchroniserChapitresDepuisFragments(migres);
 
       if (cancelled) return;
 
@@ -256,23 +238,8 @@ export default function Fragments() {
 
     const tomeId = fragment.tomeId ?? (fragment.tome ? parseTomeId(fragment.tome) : null);
 
-    // 1. Charger la structure
-    const defaultChapitres = Object.fromEntries(TOMES.map((t) => [t.id, [...t.chapitres]]));
-    const structure: Record<number, string[]> = JSON.parse(
-      localStorage.getItem("structure-chapitres") || JSON.stringify(defaultChapitres)
-    );
-
-    // 2. Trouver les chapitres du tome correspondant
-    const chapitresDuTome = tomeId ? (structure[tomeId] ?? []) : [];
-
-    // 3. Vérifier si le chapitre existe
-    const existe = fragment.chapitre ? chapitresDuTome.includes(fragment.chapitre) : false;
-
-    // 4. Si non → l'ajouter
-    if (!existe && tomeId && fragment.chapitre) {
-      structure[tomeId] = [...chapitresDuTome, fragment.chapitre];
-      localStorage.setItem("structure-chapitres", JSON.stringify(structure));
-    }
+    // LIVRE-P1A-D2 : même contrat que la passe 2 (primitives centrales).
+    assurerChapitrePourFragment(tomeId, fragment.chapitre);
 
     const updated = fragments.map((f) =>
       sameFragmentId(f.id, id) ? { ...f, manuscrit: true, tomeId: tomeId ?? f.tomeId } : f

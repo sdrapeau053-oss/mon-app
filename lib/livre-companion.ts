@@ -21,6 +21,7 @@ import {
   normaliserChapitres,
   normaliserTomes,
 } from "@/lib/manuscript-structure";
+import { composerChapitresParTome, lireTexteChapitre } from "@/lib/manuscript-chapters";
 import type { DiagnosticEditorialStrategique } from "@/lib/editorial-director";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -286,8 +287,9 @@ export function buildChapterSources(): {
   const chaptersRaw = readLocalJson<unknown>(STRUCTURE_CHAPITRES_STORAGE_KEY);
   const tome1Raw = readLocalJson<unknown>(CHAPITRES_TOME_1_STORAGE_KEY);
   const tomes = normaliserTomes(tomesRaw ?? TOMES_DEFAUT);
-  const chaptersByTome = normaliserChapitres(
-    chaptersRaw ?? CHAPITRES_DEFAUT,
+  // LIVRE-P1A — Tomes 2–4 : structure et contenu canoniques.
+  const chaptersByTome = composerChapitresParTome(
+    normaliserChapitres(chaptersRaw ?? CHAPITRES_DEFAUT),
   );
   const tomeById = new Map(tomes.map((t) => [t.id, t]));
   const sources: ChapterSource[] = [];
@@ -309,11 +311,9 @@ export function buildChapterSources(): {
   tomes
     .filter((t) => t.id !== 1 || !tome1Raw)
     .forEach((tome) => {
-      (chaptersByTome[tome.id] || []).forEach((title, i) => {
-        const text =
-          localStorage.getItem(
-            `ecriture_${tome.id}_${encodeURIComponent(title)}`,
-          ) || "";
+      (chaptersByTome[tome.id] || []).forEach((chapter, i) => {
+        const title = chapter.titre;
+        const text = lireTexteChapitre(chapter);
         if (!text.trim()) return;
         sources.push({
           id: `tome-${tome.id}-chapitre-${i + 1}`,

@@ -6,27 +6,40 @@ import { BackLink } from "@/components/ui/back-link";
 import { analyserTruthMode, type TruthModeResult, TRUTH_VIDE } from "@/app/lib/truth-mode";
 import { lireFragments, type Fragment } from "@/lib/fragments";
 import {
-  CHAPITRES_DEFAUT,
   TOMES_DEFAUT,
-  lireChapitres,
   lireTomes,
   type ManuscriptTome,
 } from "@/lib/manuscript-structure";
+import {
+  lireChapitresStructureParTome,
+  lireTextesLegacyNonAttribues,
+  lireTexteChapitre,
+  sauvegarderTexteChapitre,
+  type ChapitreStructureLu,
+  type ChapitresStructureParTome,
+  type TexteLegacyNonAttribue,
+} from "@/lib/manuscript-chapters";
 
 type Tome = ManuscriptTome;
 
-function cleEcriture(tomeId: number, chapitre: string) {
-  return `ecriture_${tomeId}_${encodeURIComponent(chapitre)}`;
-}
-
-function chargerTexte(tomeId: number, chapitre: string): string {
-  try { return localStorage.getItem(cleEcriture(tomeId, chapitre)) ?? ""; }
+// LIVRE-P1A — le texte est lu/écrit via les primitives centrales : par
+// identifiant stable pour les Tomes 2–4, par la clé legacy inchangée pour le
+// Tome 1 et les tomes hors P1A. Aucune clé n'est reconstruite ici.
+function chargerTexte(chapitre: ChapitreStructureLu | null): string {
+  if (!chapitre) return "";
+  try { return lireTexteChapitre(chapitre); }
   catch { return ""; }
 }
 
-function sauvegarderTexte(tomeId: number, chapitre: string, texte: string) {
-  try { localStorage.setItem(cleEcriture(tomeId, chapitre), texte); }
-  catch { /* quota */ }
+function sauvegarderTexte(chapitre: ChapitreStructureLu, texte: string) {
+  try { sauvegarderTexteChapitre(chapitre, texte); return true; }
+  catch { return false; /* quota ou structure canonique illisible */ }
+}
+
+function memeChapitre(a: ChapitreStructureLu | null, b: ChapitreStructureLu | null) {
+  if (!a || !b) return false;
+  if (a.id || b.id) return a.id === b.id;
+  return a.tomeId === b.tomeId && a.index === b.index;
 }
 
 function compterMots(texte: string): number {
@@ -35,11 +48,13 @@ function compterMots(texte: string): number {
 
 export default function VueDouble() {
   const [tomes, setTomes] = useState<Tome[]>(TOMES_DEFAUT);
-  const [chapitresParTome, setChapitresParTome] = useState<Record<number, string[]>>(CHAPITRES_DEFAUT);
+  const [chapitresParTome, setChapitresParTome] = useState<ChapitresStructureParTome>({});
+  const [textesLegacy, setTextesLegacy] = useState<TexteLegacyNonAttribue[]>([]);
   const [fragmentsParChapitre, setFragmentsParChapitre] = useState<Record<string, number>>({});
 
-  const [tomeActif, setTomeActif] = useState<number>(1);
-  const [chapitreActif, setChapitreActif] = useState<string>("La maison");
+  const [chapitreActifLu, setChapitreActifLu] = useState<ChapitreStructureLu | null>(null);
+  const tomeActif = chapitreActifLu?.tomeId ?? 1;
+  const chapitreActif = chapitreActifLu?.titre ?? "";
   const [texte, setTexte] = useState("");
   const [sauvegarde, setSauvegarde] = useState(true);
 
@@ -50,8 +65,16 @@ export default function VueDouble() {
 
   useEffect(() => {
     try {
-      setTomes(lireTomes());
-      setChapitresParTome(lireChapitres());
+      const tomesLus = lireTomes();
+      const structure = lireChapitresStructureParTome();
+      setTomes(tomesLus);
+      setChapitresParTome(structure);
+      setTextesLegacy(lireTextesLegacyNonAttribues());
+      setChapitreActifLu(
+        structure[1]?.find((ch) => ch.titre === "La maison")
+          ?? tomesLus.map((t) => structure[t.id]?.[0]).find(Boolean)
+          ?? null,
+      );
 
       const fragments: Fragment[] = lireFragments();
       const compte: Record<string, number> = {};
@@ -65,22 +88,21 @@ export default function VueDouble() {
   }, []);
 
   useEffect(() => {
-    setTexte(chargerTexte(tomeActif, chapitreActif));
+    setTexte(chargerTexte(chapitreActifLu));
     setSauvegarde(true);
-  }, [tomeActif, chapitreActif]);
+  }, [chapitreActifLu]);
 
-  function changerChapitre(tomeId: number, chapitre: string) {
-    setTomeActif(tomeId);
-    setChapitreActif(chapitre);
+  function changerChapitre(chapitre: ChapitreStructureLu) {
+    setChapitreActifLu(chapitre);
   }
 
   function onTexteChange(val: string) {
     setTexte(val);
     setSauvegarde(false);
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    const cible = chapitreActifLu;
     saveTimer.current = setTimeout(() => {
-      sauvegarderTexte(tomeActif, chapitreActif, val);
-      setSauvegarde(true);
+      if (cible) setSauvegarde(sauvegarderTexte(cible, val));
     }, 600);
     if (truthOuvert) {
       if (truthTimer.current) clearTimeout(truthTimer.current);
@@ -98,12 +120,12 @@ export default function VueDouble() {
   const motCount = compterMots(texte);
 
   const totalMots = tomes.flatMap(t =>
-    (chapitresParTome[t.id] ?? []).map(ch => compterMots(chargerTexte(t.id, ch)))
+    (chapitresParTome[t.id] ?? []).map(ch => compterMots(chargerTexte(ch)))
   ).reduce((a, b) => a + b, 0);
 
   const chapitresTotal = tomes.reduce((n, t) => n + (chapitresParTome[t.id]?.length ?? 0), 0);
   const chapitresEcrits = tomes.reduce((n, t) =>
-    n + (chapitresParTome[t.id] ?? []).filter(ch => compterMots(chargerTexte(t.id, ch)) > 0).length, 0
+    n + (chapitresParTome[t.id] ?? []).filter(ch => compterMots(chargerTexte(ch)) > 0).length, 0
   );
 
   return (
@@ -152,6 +174,7 @@ export default function VueDouble() {
           </div>
           <textarea
             value={texte}
+            disabled={!chapitreActifLu}
             onChange={(e) => onTexteChange(e.target.value)}
             placeholder={`Écrire ici — ${chapitreActif}…`}
             style={{
@@ -179,7 +202,7 @@ export default function VueDouble() {
 
           {tomes.map(tome => {
             const chapitres = chapitresParTome[tome.id] ?? [];
-            const motsTotal = chapitres.reduce((n, ch) => n + compterMots(chargerTexte(tome.id, ch)), 0);
+            const motsTotal = chapitres.reduce((n, ch) => n + compterMots(chargerTexte(ch)), 0);
 
             return (
               <div key={tome.id} style={{ marginBottom: 4 }}>
@@ -201,14 +224,14 @@ export default function VueDouble() {
 
                 {/* Liste chapitres */}
                 {chapitres.map(ch => {
-                  const actif = tome.id === tomeActif && ch === chapitreActif;
-                  const nbFragments = fragmentsParChapitre[`${tome.id}__${ch}`] ?? 0;
-                  const nbMots = compterMots(chargerTexte(tome.id, ch));
+                  const actif = memeChapitre(ch, chapitreActifLu);
+                  const nbFragments = fragmentsParChapitre[`${tome.id}__${ch.titre}`] ?? 0;
+                  const nbMots = compterMots(chargerTexte(ch));
 
                   return (
                     <button
-                      key={ch}
-                      onClick={() => changerChapitre(tome.id, ch)}
+                      key={ch.id ?? `${tome.id}-${ch.index}`}
+                      onClick={() => changerChapitre(ch)}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
@@ -228,7 +251,7 @@ export default function VueDouble() {
                         color: actif ? "var(--text-main)" : "var(--text-soft)",
                         fontWeight: actif ? 600 : 400,
                       }}>
-                        {ch}
+                        {ch.titre}
                       </span>
                       <span style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                         {nbMots > 0 && (
@@ -252,6 +275,31 @@ export default function VueDouble() {
               </div>
             );
           })}
+
+          {/* LIVRE-P1A — textes legacy Tomes 2–4 non attribués : conservés, lisibles, jamais rattachés automatiquement */}
+          {textesLegacy.length > 0 && (
+            <details style={{ padding: "12px 20px", borderTop: "1px solid var(--border-soft)" }}>
+              <summary style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1, cursor: "pointer" }}>
+                Textes legacy non attribués ({textesLegacy.length})
+              </summary>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "8px 0" }}>
+                Conservés tels quels. Leur chapitre n&apos;a pas pu être déterminé sans ambiguïté : ils ne sont rattachés à aucun chapitre.
+              </p>
+              {textesLegacy.map((entree) => (
+                <div key={entree.cleLegacy} style={{ marginBottom: 10 }}>
+                  <p style={{ fontSize: 11, color: "var(--text-soft)", margin: "0 0 4px" }}>
+                    Tome {entree.tomeId} · « {entree.titreLegacy} » — {entree.statut}
+                  </p>
+                  <textarea
+                    readOnly
+                    value={entree.texte}
+                    rows={4}
+                    style={{ width: "100%", fontSize: 12, fontFamily: "Georgia, serif", resize: "vertical", background: "var(--bg-main)", color: "var(--text-main)", border: "1px solid var(--border-soft)", borderRadius: 4 }}
+                  />
+                </div>
+              ))}
+            </details>
+          )}
 
           {/* Progression globale */}
           <div style={{ padding: "16px 20px", marginTop: 8, borderTop: "1px solid var(--border-soft)" }}>
