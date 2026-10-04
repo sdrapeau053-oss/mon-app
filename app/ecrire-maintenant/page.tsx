@@ -31,6 +31,7 @@ import {
   normaliserChapitresTome1,
   type ChapitreTome1,
 } from "@/lib/tome1-chapters";
+import { MemoireLieeConsultable } from "./memoire-liee-consultable";
 
 type WritingData = {
   chapters: ChapitreTome1[];
@@ -466,21 +467,7 @@ export default function EcrireMaintenantPage() {
           {context.linkedMemoires.length > 0 ? (
             <div style={{ display: "grid", gap: 8 }}>
               {context.linkedMemoires.slice(0, focusMode ? 5 : 8).map((memoire) => (
-                <article
-                  key={memoire.id}
-                  style={{
-                    background: "rgba(255, 250, 238, 0.035)",
-                    border: "1px solid rgba(201, 168, 92, 0.12)",
-                    borderRadius: 10,
-                    minWidth: 0,
-                    padding: "10px 12px",
-                  }}
-                >
-                  <p style={{ color: "#f1e7d5", fontSize: 14, fontWeight: 650, margin: "0 0 5px" }}>{memoire.titre}</p>
-                  <p className="editorial-body" style={{ fontSize: 12.5, margin: 0 }}>
-                    {memoire.ageApprox || memoire.periode} · intensité {memoire.intensite || "n/r"} · {memoire.statut}
-                  </p>
-                </article>
+                <MemoireLieeConsultable key={memoire.id} memoire={memoire} />
               ))}
             </div>
           ) : (
